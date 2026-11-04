@@ -2,17 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, ArrowLeft, Check, Copy, ExternalLink, Loader2, LogOut, Repeat, Smartphone, Wallet as WalletIcon, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Copy, ExternalLink, Loader2, LogOut, Mail, Repeat, Smartphone, Wallet as WalletIcon, X } from "lucide-react";
 import { renderSVG } from "uqr";
 import { CHAINS, type Chain, type TokenInfo } from "@/lib/spec";
-import { autoConnect, connect, connectWalletConnect, disconnect, ensureChain, EVM_CHAIN, keyOf, listSolana, loadNear, short, switchAccount, useWallets, type Connected, type Wallet } from "./wallet";
+import { autoConnect, connect, connectPrivy, connectWalletConnect, disconnect, ensureChain, EVM_CHAIN, familyOf, keyOf, listSolana, loadNear, privyApp, privyMethods, short, switchAccount, useWallets, type Connected, type Wallet } from "./wallet";
 import { num } from "../format";
 
 // The Connect button and wallet picker on a generated site. Wallets the browser already has come first, with the
 // logo they announce; popular ones that aren't installed follow with their own logo and an install link, or on a
-// phone a link that opens this page inside the wallet app's browser. WalletConnect shows when the site has a project ID.
-// TODO(privy): Privy sign-in isn't offered yet. Its SDK (@privy-io/react-auth) needs a provider around the whole
-// app and adds well over 1 MB to every site, so a saved Privy App ID is not used on generated sites for now.
+// phone a link that opens this page inside the wallet app's browser. WalletConnect shows when the site has a project ID;
+// email and social sign-in (Privy's embedded wallet) when it has a Privy App ID, except on NEAR.
 
 type Known = { name: string; logo: string; match: RegExp; install: string; app?: (u: URL) => string };
 const enc = encodeURIComponent;
@@ -74,15 +73,15 @@ function useBalance(c: Connected | null, chain: Chain): number | null {
 
 const fmtBal = (n: number) => (n === 0 ? "0" : n < 0.0001 ? "<0.0001" : n < 1 ? n.toFixed(4).replace(/0+$/, "") : num(n));
 
-export function WalletButton({ chain, walletconnect, block }: { chain: Chain; token?: TokenInfo | null; walletconnect?: string | null; block?: boolean }) {
+export function WalletButton({ chain, walletconnect, privy, block }: { chain: Chain; token?: TokenInfo | null; walletconnect?: string | null; privy?: string | null; block?: boolean }) {
   const { evm, sol, near, authorised, connected } = useWallets();
   const [open, setOpen] = useState<null | "pick" | "account">(null);
   const kind = chain === "solana" ? "solana" : chain === "near" ? "near" : "evm";
-  const mine = connected && connected.wallet.kind === kind ? connected : null;
+  const mine = connected && familyOf(connected.wallet) === kind ? connected : null;
   const bal = useBalance(mine, chain);
-  const wrongNet = mine?.wallet.kind === "evm" && !!EVM_CHAIN[chain] && !!mine.chainId && mine.chainId !== EVM_CHAIN[chain]!.id;
+  const wrongNet = kind === "evm" && !!mine && !!EVM_CHAIN[chain] && !!mine.chainId && mine.chainId !== EVM_CHAIN[chain]!.id;
 
-  useEffect(() => { autoConnect(chain, walletconnect); }, [chain, walletconnect]);
+  useEffect(() => { autoConnect(chain, walletconnect, privy); }, [chain, walletconnect, privy]);
 
   if (mine) {
     return (
@@ -136,6 +135,10 @@ function Picker({ chain, walletconnect, evm, sol, near, authorised, connected, o
   const [wc, setWc] = useState<null | { uri: string | null }>(null);
   const [phone, setPhone] = useState(false);
   const [here, setHere] = useState<URL | null>(null);
+  // Privy: undefined while its sign-in methods load, null when Privy didn't say; hidden while Privy's own modal is up.
+  const privy = chain !== "near" ? privyApp() : null;
+  const [methods, setMethods] = useState<string[] | null | undefined>(undefined);
+  const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
     setPhone(isPhone());
@@ -143,6 +146,7 @@ function Picker({ chain, walletconnect, evm, sol, near, authorised, connected, o
     if (chain === "solana") listSolana();
     if (chain === "near") void loadNear().catch(() => setErr("NEAR wallets didn't load. Try again."));
   }, [chain]);
+  useEffect(() => { if (privy) void privyMethods(privy).then((m) => setMethods(m && m.map((x) => x.label))); }, [privy]);
 
   const pool = chain === "solana" ? sol : chain === "near" ? near ?? [] : evm;
   const rows = useMemo<Row[]>(() => {
@@ -171,6 +175,21 @@ function Picker({ chain, walletconnect, evm, sol, near, authorised, connected, o
     }
   }
 
+  async function pickPrivy() {
+    setErr(null);
+    setBusy("privy");
+    try {
+      if (connected) await disconnect();
+      await connectPrivy(chain, { onOpen: () => setHidden(true) });
+      onClose();
+    } catch (e) {
+      setHidden(false);
+      setErr(walletError(e, "Privy"));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function pickWc() {
     if (!walletconnect) return;
     setErr(null);
@@ -189,6 +208,7 @@ function Picker({ chain, walletconnect, evm, sol, near, authorised, connected, o
     }
   }
 
+  if (hidden) return null;
   if (wc) return <Modal label="Connect with WalletConnect" onClose={onClose}><WcView uri={wc.uri} phone={phone} onBack={() => { setWc(null); setErr(null); }} err={err} /></Modal>;
 
   return (
@@ -196,6 +216,12 @@ function Picker({ chain, walletconnect, evm, sol, near, authorised, connected, o
       <h3>Connect a wallet</h3>
       <div className="ss-muted" style={{ fontSize: 14 }}>{CHAINS[chain].name}</div>
       {chain === "near" && !near && <div className="ss-wallet" style={{ cursor: "default" }}><Loader2 size={18} className="ss-spin" />Loading NEAR wallets…</div>}
+      {privy && methods?.length !== 0 && (
+        <button type="button" className="ss-wallet" data-wallet="privy" disabled={!!busy} onClick={() => void pickPrivy()}>
+          <span className="ss-wi"><Mail size={16} /></span>Continue with {methods ? methods.slice(0, 3).join(" / ") : "email or social"}
+          {busy === "privy" ? <small><Loader2 size={13} className="ss-spin" style={{ display: "inline", verticalAlign: -2 }} /> Loading</small> : <small>No wallet needed</small>}
+        </button>
+      )}
       {rows.map((r) => (
         <button key={r.key} type="button" className="ss-wallet" data-wallet={r.key} disabled={!!busy} onClick={() => void pick(r)}>
           <Logo src={r.logo} />{r.name}

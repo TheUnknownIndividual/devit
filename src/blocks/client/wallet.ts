@@ -8,6 +8,7 @@ import type { Chain } from "@/lib/spec";
 // Wallet Standard (Phantom, Solflare, Backpack, Glow…), which lets them sign raw transaction bytes
 // without pulling @solana/web3.js into every site; older injected objects are the fallback for connecting.
 // NEAR wallets come through NEAR Connect. Phone wallets on EVM come through WalletConnect when the site has a project ID.
+// Email and social sign-in come through Privy when the site has an App ID: its embedded wallet is a Wallet like the rest.
 //
 // A wallet that already trusts this site (eth_accounts non-empty, Wallet Standard accounts, Phantom's onlyIfTrusted)
 // is marked as authorised and, unless the visitor pressed Disconnect, reconnected silently on load.
@@ -41,7 +42,9 @@ type StdEvents = { on(event: "change", fn: (p: { accounts?: readonly StdAccount[
 type StdSignAndSend = { signAndSendTransaction(...inputs: Array<{ account: StdAccount; transaction: Uint8Array; chain: string }>): Promise<Array<{ signature: Uint8Array }>> };
 export interface SolWallet { kind: "solana"; id: string; name: string; icon: string | null; provider?: SolProvider; std?: StdWallet }
 export interface NearWallet { kind: "near"; id: string; name: string; icon: string | null; injected?: boolean }
-export type Wallet = EvmWallet | SolWallet | NearWallet;
+/** Privy's embedded wallet; id is the chain family it signs for. */
+export interface PrivyWallet { kind: "privy"; id: "evm" | "solana"; name: string; icon: string | null; provider?: Eip1193 }
+export type Wallet = EvmWallet | SolWallet | NearWallet | PrivyWallet;
 
 export interface Connected { wallet: Wallet; address: string; /** EVM only: the wallet's current chain, 0x-hex. */ chainId?: string }
 
@@ -54,6 +57,10 @@ export const EVM_CHAIN: Partial<Record<Chain, { id: string; name: string; rpc: s
 };
 
 export const keyOf = (w: Wallet): string => (w.kind === "evm" ? `evm:${w.rdns}` : `${w.kind}:${w.id}`);
+/** The chain family a wallet signs for. */
+export const familyOf = (w: Wallet): "evm" | "solana" | "near" => (w.kind === "privy" ? w.id : w.kind);
+/** The EIP-1193 provider behind an EVM wallet, Privy's embedded one included. */
+const eip1193 = (w: Wallet | undefined): Eip1193 | null => (w?.kind === "evm" || w?.kind === "privy" ? w.provider ?? null : null);
 
 let evm: EvmWallet[] = [];
 let std: StdWallet[] = [];
@@ -125,7 +132,7 @@ function solanaWallets(): SolWallet[] {
   if (typeof window === "undefined") return [];
   start();
   const out: SolWallet[] = std
-    .filter((w) => w.features["standard:connect"] && w.features["solana:signAndSendTransaction"])
+    .filter((w) => w.features["standard:connect"] && w.features["solana:signAndSendTransaction"] && !/^privy/i.test(w.name))
     .map((w) => ({ kind: "solana", id: stdId(w), name: w.name, icon: w.icon, std: w }));
   const w = window as unknown as { phantom?: { solana?: SolProvider }; solflare?: SolProvider & { isSolflare?: boolean }; backpack?: SolProvider };
   const has = (n: string) => out.some((o) => o.name.toLowerCase().startsWith(n));
@@ -196,10 +203,14 @@ export function listSolana(): SolWallet[] {
 
 let resumeChain: Chain | null = null;
 let wcProjectId: string | null = null;
+let privyId: string | null = null;
 
 /** Called once by the site: reconnects the wallet the visitor used last (or one that already trusts the site). */
-export function autoConnect(chain: Chain, walletconnectProjectId?: string | null) {
-  if (typeof window === "undefined" || resumeChain) return;
+export function autoConnect(chain: Chain, walletconnectProjectId?: string | null, privyAppId?: string | null) {
+  if (typeof window === "undefined") return;
+  // The buy box's button can run first; the nav's carries the IDs.
+  if (privyAppId && !privyId && chain !== "near") { privyId = privyAppId; resumePrivy(chain); }
+  if (resumeChain) return;
   start();
   resumeChain = chain;
   wcProjectId = walletconnectProjectId || null;
@@ -280,6 +291,7 @@ const hexChain = (id: unknown): string => (typeof id === "number" ? `0x${id.toSt
  */
 export async function connect(w: Wallet, chain: Chain, opts: { silent?: boolean } = {}): Promise<Connected> {
   if (w.kind === "near") return connectNear(w.id, opts);
+  if (w.kind === "privy") return connectPrivy(chain, opts);
   if (w.kind === "solana") {
     if (w.std) {
       const accts = opts.silent && w.std.accounts.length ? w.std.accounts : (await (w.std.features["standard:connect"] as StdConnect).connect(opts.silent ? { silent: true } : undefined)).accounts;
@@ -310,16 +322,17 @@ export async function connect(w: Wallet, chain: Chain, opts: { silent?: boolean 
 export async function ensureChain(chain: Chain): Promise<void> {
   const w = connected?.wallet;
   const c = EVM_CHAIN[chain];
-  if (w?.kind !== "evm" || !c || !connected) return;
-  const now = hexChain(await w.provider.request({ method: "eth_chainId" }).catch(() => connected?.chainId ?? ""));
+  const p = eip1193(w);
+  if (!p || !c || !connected) return;
+  const now = hexChain(await p.request({ method: "eth_chainId" }).catch(() => connected?.chainId ?? ""));
   if (now === c.id) { if (connected.chainId !== now) { connected = { ...connected, chainId: now }; emit(); } return; }
   try {
-    await w.provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: c.id }] });
+    await p.request({ method: "wallet_switchEthereumChain", params: [{ chainId: c.id }] });
   } catch (e) {
     // 4902: the wallet doesn't know this chain yet (MetaMask Mobile reports it inside data.originalError).
     const code = (e as { code?: number; data?: { originalError?: { code?: number } } }).code ?? (e as { data?: { originalError?: { code?: number } } }).data?.originalError?.code;
     if (code !== 4902) throw e;
-    await w.provider.request({ method: "wallet_addEthereumChain", params: [{ chainId: c.id, chainName: c.name, rpcUrls: c.rpc, blockExplorerUrls: [c.explorer], nativeCurrency: c.native ? { name: c.native, symbol: c.native, decimals: 18 } : { name: "Ether", symbol: "ETH", decimals: 18 } }] });
+    await p.request({ method: "wallet_addEthereumChain", params: [{ chainId: c.id, chainName: c.name, rpcUrls: c.rpc, blockExplorerUrls: [c.explorer], nativeCurrency: c.native ? { name: c.native, symbol: c.native, decimals: 18 } : { name: "Ether", symbol: "ETH", decimals: 18 } }] });
   }
   if (connected?.wallet === w) { connected = { ...connected, chainId: c.id }; emit(); }
 }
@@ -492,6 +505,77 @@ export async function connectWalletConnect(projectId: string, chain: Chain, onUr
   return wcFinish(p, chain);
 }
 
+// ---------- Privy ----------
+
+// Email and social sign-in with Privy's embedded wallet. The SDK is well over 1 MB, so ./privy (and Privy with it)
+// loads only when the visitor picks it, or on load when they signed in with it last time or are coming back from
+// Privy's OAuth redirect. NEAR sites don't offer it: Privy has no wallet that signs NEAR transactions.
+type Bridge = import("./privy").Bridge;
+let privyB: Promise<Bridge> | null = null;
+const OAUTH_BACK = /[?&]privy_oauth_/;
+
+/** The site's Privy App ID, once the nav's button has passed it in. */
+export const privyApp = (): string | null => privyId;
+
+const METHODS: Array<[string, string, string]> = [
+  ["email_auth", "email", "email"], ["sms_auth", "sms", "phone"], ["google_oauth", "google", "Google"], ["twitter_oauth", "twitter", "X"],
+  ["apple_oauth", "apple", "Apple"], ["discord_oauth", "discord", "Discord"], ["github_oauth", "github", "GitHub"], ["telegram_auth", "telegram", "Telegram"],
+  ["farcaster_auth", "farcaster", "Farcaster"], ["passkey_auth", "passkey", "passkey"], ["linkedin_oauth", "linkedin", "LinkedIn"], ["tiktok_oauth", "tiktok", "TikTok"],
+  ["twitch_oauth", "twitch", "Twitch"], ["spotify_oauth", "spotify", "Spotify"], ["instagram_oauth", "instagram", "Instagram"], ["line_oauth", "line", "LINE"],
+];
+let methodsP: Promise<Array<{ id: string; label: string }> | null> | null = null;
+/** The sign-in methods the Privy app has on, from its public config (no SDK). Wallet login is left to the picker. Null when Privy didn't answer. */
+export function privyMethods(appId: string): Promise<Array<{ id: string; label: string }> | null> {
+  methodsP ??= fetch(`https://auth.privy.io/api/v1/apps/${appId}`, { headers: { "privy-app-id": appId } })
+    .then((r) => (r.ok ? (r.json() as Promise<Record<string, unknown>>) : null))
+    .then((j) => (j ? METHODS.filter(([k]) => j[k] === true).map(([, id, label]) => ({ id, label })) : null))
+    .catch(() => null);
+  return methodsP;
+}
+
+function loadPrivy(chain: Chain): Promise<Bridge> {
+  const appId = privyId;
+  if (!appId) return Promise.reject(new Error("This site has no Privy App ID."));
+  privyB ??= Promise.all([import("./privy"), privyMethods(appId)]).then(([m, methods]) =>
+    m.mount({ appId, chain, methods: methods?.map((x) => x.id) ?? null, onChange: onPrivy }));
+  privyB.catch(() => { privyB = null; });
+  return privyB;
+}
+const privyLoaded = (): Promise<Bridge | null> => privyB?.catch(() => null) ?? Promise.resolve(null);
+
+/** Privy signed the visitor out (or changed wallet) on its own. */
+function onPrivy({ address }: { address: string | null }) {
+  if (connected?.wallet.kind !== "privy") return;
+  connected = address ? { ...connected, address } : null;
+  emit();
+}
+
+function resumePrivy(chain: Chain) {
+  if (!lastWallet()?.startsWith("privy:") && !OAUTH_BACK.test(location.search)) return;
+  void connectPrivy(chain, { silent: true }).catch(() => {
+    // Signed out since: forget the choice so later visits don't download Privy for nothing.
+    if (lastWallet()?.startsWith("privy:")) try { localStorage.removeItem(LAST); } catch { /* private mode */ }
+  });
+}
+
+/** Signs in with Privy (its modal; onOpen fires when it shows) and connects its embedded wallet. With silent, only an existing session. */
+export async function connectPrivy(chain: Chain, opts: { silent?: boolean; onOpen?: () => void } = {}): Promise<Connected> {
+  const b = await loadPrivy(chain);
+  const r = await b.connect(opts).catch((e: Error & { fatal?: boolean }) => {
+    // A bad App ID or domain stays bad: drop this mount so a later try starts clean.
+    if (e.fatal && privyB) { b.destroy(); privyB = null; }
+    throw e;
+  });
+  const w: PrivyWallet = { kind: "privy", id: chain === "solana" ? "solana" : "evm", name: r.label, icon: "/wallets/privy.png", provider: r.provider };
+  unwatch?.();
+  unwatch = null;
+  connected = { wallet: w, address: r.address, chainId: r.provider ? hexChain(await r.provider.request({ method: "eth_chainId" }).catch(() => "")) : undefined };
+  remember(keyOf(w));
+  setAuthorised(keyOf(w), r.address);
+  emit();
+  return connected;
+}
+
 // ---------- disconnect + sending ----------
 
 export async function disconnect() {
@@ -499,6 +583,7 @@ export async function disconnect() {
   unwatch?.();
   unwatch = null;
   if (w?.kind === "near") { await (await connector()).disconnect().catch(() => undefined); nearApi = null; }
+  if (w?.kind === "privy") await (await privyLoaded())?.logout().catch(() => undefined);
   if (w?.kind === "solana") {
     if (w.std) await (w.std.features["standard:disconnect"] as StdDisconnect | undefined)?.disconnect().catch(() => undefined);
     else await w.provider?.disconnect?.().catch(() => undefined);
@@ -532,6 +617,11 @@ function b58(b: Uint8Array): string {
 /** Signs and sends a serialized Solana transaction (base64) with the connected wallet; returns the signature. */
 export async function sendSolana(txBase64: string): Promise<string> {
   const w = connected?.wallet;
+  if (w?.kind === "privy" && w.id === "solana") {
+    const b = await privyLoaded();
+    if (!b) throw new Error("Sign in again to send.");
+    return b58(await b.sendSolana(Uint8Array.from(atob(txBase64), (c) => c.charCodeAt(0))));
+  }
   if (w?.kind !== "solana") throw new Error("Connect a Solana wallet first.");
   const feature = w.std?.features["solana:signAndSendTransaction"] as StdSignAndSend | undefined;
   if (!feature || !solAccount) throw new Error(`${w.name} needs an update to sign here. Use the Jupiter link instead.`);
@@ -542,10 +632,10 @@ export async function sendSolana(txBase64: string): Promise<string> {
 
 /** Sends an EVM transaction from the connected wallet, switching to the site's chain first; returns the hash. */
 export async function sendEvm(chain: Chain, tx: { to: string; data: string; value: string; gas: string | null }): Promise<string> {
-  const w = connected?.wallet;
-  if (w?.kind !== "evm" || !connected) throw new Error("Connect an Ethereum wallet first.");
+  const p = eip1193(connected?.wallet);
+  if (!p || !connected) throw new Error("Connect an Ethereum wallet first.");
   await ensureChain(chain);
-  return (await w.provider.request({
+  return (await p.request({
     method: "eth_sendTransaction",
     params: [{ from: connected.address, to: tx.to, data: tx.data, value: tx.value, ...(tx.gas ? { gas: tx.gas } : {}) }],
   })) as string;

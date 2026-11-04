@@ -9,5 +9,5 @@ export default async function Live({ params }: { params: Promise<{ id: string }>
   const { id } = await params;
   const p = await getProject(id).catch(() => null);
   if (!p?.spec) notFound();
-  return <Site spec={p.spec} mode="live" walletconnect={p.integrations.walletconnectProjectId ?? null} />;
+  return <Site spec={p.spec} mode="live" walletconnect={p.integrations.walletconnectProjectId ?? null} privy={p.integrations.privyAppId ?? null} />;
 }
