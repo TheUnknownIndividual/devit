@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowRightLeft, Check, Copy, ExternalLink, Globe2, Loader2, LogOut, Wallet as WalletIcon } from "lucide-react";
+import { ArrowRightLeft, ArrowUp, Check, Copy, ExternalLink, Globe2, Loader2, LogOut, Wallet as WalletIcon } from "lucide-react";
 import { CHAINS, type Chain, type TokenInfo } from "@/lib/spec";
 import { connect, connectNear, disconnect, explorerTx, listSolana, sendEvm, sendNear, sendSolana, short, useWallets, type Wallet } from "./wallet";
 import type { BuiltTx } from "@/lib/swap";
@@ -133,19 +133,19 @@ function useFlash(v: number | null | undefined): string {
   return f.dir ? ` ss-flash-${f.dir}` : "";
 }
 
-export function LiveStats({ token, items, mode }: { token: TokenInfo | null; items: string[]; mode: Mode }) {
+export function LiveStats({ token, items, mode, count = false }: { token: TokenInfo | null; items: string[]; mode: Mode; count?: boolean }) {
   const t = useLiveToken(token, mode);
   const flash = useFlash(t?.priceUsd);
   const val = (k: string): React.ReactNode => {
     if (!t) return "[ADD CA]";
     switch (k) {
       case "price": return <><SmallPrice text={usd(t.priceUsd)} /> {t.change24h != null && <span className={t.change24h >= 0 ? "ss-up" : "ss-down"} style={{ fontSize: 14 }}>{pct(t.change24h)}</span>}</>;
-      case "marketCap": return usd(t.marketCap);
-      case "holders": return num(t.holders);
-      case "liquidity": return usd(t.liquidityUsd);
-      case "volume24h": return usd(t.volume24h);
+      case "marketCap": return <Count text={usd(t.marketCap)} on={count} />;
+      case "holders": return <Count text={num(t.holders)} on={count} />;
+      case "liquidity": return <Count text={usd(t.liquidityUsd)} on={count} />;
+      case "volume24h": return <Count text={usd(t.volume24h)} on={count} />;
       case "change24h": return pct(t.change24h);
-      case "supply": return num(t.supply);
+      case "supply": return <Count text={num(t.supply)} on={count} />;
       default: return "—";
     }
   };
@@ -185,30 +185,106 @@ export function Ticker({ token, ticker, tagline, chain, mode }: { token: TokenIn
   );
 }
 
-/** Live pages only: sections rise in as they scroll into view. Without script nothing is hidden. */
-export function MotionFx({ mode }: { mode: Mode }) {
+/** A formatted number ("$1.2M", "4,210") that counts up from zero the first time it scrolls into view. Static when `on` is off. */
+export function Count({ text, on }: { text: string; on: boolean }) {
+  const [shown, setShown] = useState(text);
+  const ref = useRef<HTMLSpanElement>(null);
+  const latest = useRef(text);
+  const done = useRef(false);
+  latest.current = text;
   useEffect(() => {
-    if (mode !== "live" || matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window)) return;
+    const m = on && !done.current ? text.match(/^([^\d]*)(\d[\d,]*(?:\.(\d+))?)(.*)$/s) : null;
+    if (!m || !ref.current || matchMedia("(prefers-reduced-motion: reduce)").matches) { done.current = true; setShown(text); return; }
+    const [, pre, num, frac, post] = m;
+    const dec = frac?.length ?? 0, commas = num.includes(","), end = parseFloat(num.replace(/,/g, ""));
+    const fmt = (v: number) => pre + (commas ? v.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec }) : v.toFixed(dec)) + post;
+    let raf = 0;
+    const el = ref.current;
+    if (el.getBoundingClientRect().top > innerHeight) setShown(fmt(0));
+    const io = new IntersectionObserver(([e]) => {
+      if (!e.isIntersecting) return;
+      io.disconnect();
+      const t0 = performance.now();
+      const tick = (now: number) => {
+        const k = Math.min(1, (now - t0) / 1100);
+        if (k >= 1) { done.current = true; setShown(latest.current); return; }
+        setShown(fmt(end * (1 - Math.pow(1 - k, 3))));
+        raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    }, { threshold: 0.4 });
+    io.observe(el);
+    return () => { io.disconnect(); cancelAnimationFrame(raf); };
+  }, [on]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (done.current) setShown(text); }, [text]);
+  return <span ref={ref} className="ss-count">{shown}</span>;
+}
+
+/** Live pages only: sections rise in as they scroll into view, plus the scroll-driven bits (nav, progress, active link, back-to-top). Without script nothing is hidden. */
+export function MotionFx({ mode, toTop = true, progress = false, nav = true }: { mode: Mode; toTop?: boolean; progress?: boolean; nav?: boolean }) {
+  const [top, setTop] = useState(false);
+  useEffect(() => {
+    if (mode !== "live") return;
     const root = document.querySelector<HTMLElement>(".ss");
     if (!root) return;
-    // Parallax: the page's scroll as a number the CSS moves the hero art by.
+    const html = document.documentElement;
+    // Anchor links land below the sticky nav (the ticker included).
+    const header = root.querySelector<HTMLElement>(".ss-nav");
+    const pad = () => { html.style.scrollPaddingTop = `${(header?.offsetHeight ?? 0) + 8}px`; };
+    pad();
+    addEventListener("resize", pad);
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const longPage = () => document.documentElement.scrollHeight > innerHeight * 3;
+    if (!still) html.style.scrollBehavior = "smooth";
+    // One rAF-throttled scroll handler: parallax number, progress bar, compact nav, back-to-top.
     let raf = 0;
-    const onScroll = () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; root.style.setProperty("--scroll", String(Math.round(scrollY))); }); };
-    const parallax = root.hasAttribute("data-parallax");
-    if (parallax) { onScroll(); addEventListener("scroll", onScroll, { passive: true }); }
-    const unscroll = () => { if (parallax) removeEventListener("scroll", onScroll); cancelAnimationFrame(raf); };
-    if (root.dataset.reveal === "none") return unscroll;
+    const parallax = !still && root.hasAttribute("data-parallax");
+    const native = progress && CSS.supports("animation-timeline: scroll()");
+    const frame = () => {
+      raf = 0;
+      const y = scrollY;
+      if (parallax) root.style.setProperty("--scroll", String(Math.round(y)));
+      if (progress && !native) root.style.setProperty("--prog", String(Math.min(1, y / Math.max(1, html.scrollHeight - innerHeight))));
+      if (nav && !still) root.toggleAttribute("data-stuck", y > 24);
+      if (toTop) setTop(y > innerHeight * 1.2 && longPage());
+    };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(frame); };
+    frame();
+    addEventListener("scroll", onScroll, { passive: true });
+    const cleanup = () => {
+      removeEventListener("scroll", onScroll); removeEventListener("resize", pad); cancelAnimationFrame(raf);
+      html.style.scrollBehavior = ""; html.style.scrollPaddingTop = ""; root.removeAttribute("data-stuck");
+    };
+    if (still || !("IntersectionObserver" in window)) return cleanup;
+    // Active section in the nav: the one crossing the upper-middle band of the screen.
+    const links = new Map<string, HTMLElement>();
+    root.querySelectorAll<HTMLElement>(".ss-links a[href^='#']").forEach((a) => links.set(a.getAttribute("href")!.slice(1), a));
+    const spy = new IntersectionObserver((es) => {
+      for (const e of es) if (e.isIntersecting) links.forEach((a, id) => { if (id === e.target.id) a.setAttribute("aria-current", "true"); else a.removeAttribute("aria-current"); });
+    }, { rootMargin: "-35% 0px -60% 0px" });
+    links.forEach((_, id) => { const el = document.getElementById(id); if (el) spy.observe(el); });
+    if (root.dataset.reveal === "none") return () => { spy.disconnect(); cleanup(); };
+    // Grid children get an index the CSS turns into a stagger delay.
+    root.querySelectorAll<HTMLElement>(".ss-sec").forEach((sec) => {
+      sec.querySelectorAll<HTMLElement>(".ss-grid>*,.ss-points>li,.ss-faq>details,.ss-socials>*").forEach((c, i) => c.style.setProperty("--i", String(Math.min(i, 9))));
+    });
     const secs = [...root.querySelectorAll<HTMLElement>(".ss-sec")];
     // Anything already on screen shows at once; only what's below the fold waits for the scroll.
     const below = secs.filter((el) => el.getBoundingClientRect().top > innerHeight * 0.9);
+    secs.filter((el) => !below.includes(el)).forEach((el) => el.classList.add("ss-in"));
     below.forEach((el) => el.classList.add("ss-wait"));
     const io = new IntersectionObserver((es) => {
       for (const e of es) if (e.isIntersecting) { e.target.classList.add("ss-in"); e.target.classList.remove("ss-wait"); io.unobserve(e.target); }
     }, { rootMargin: "0px 0px -12% 0px" });
     below.forEach((el) => io.observe(el));
-    return () => { io.disconnect(); below.forEach((el) => el.classList.remove("ss-wait")); unscroll(); };
-  }, [mode]);
-  return null;
+    return () => { io.disconnect(); spy.disconnect(); below.forEach((el) => el.classList.remove("ss-wait")); cleanup(); };
+  }, [mode, toTop, progress, nav]);
+  if (mode !== "live" || !top) return null;
+  return (
+    <button type="button" className="ss-top" aria-label="Back to top" onClick={() => scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })}>
+      <ArrowUp size={18} />
+    </button>
+  );
 }
 
 // ---------- trades ----------

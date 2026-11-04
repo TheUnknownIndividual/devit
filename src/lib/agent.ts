@@ -8,7 +8,7 @@ import { withoutRefs as withoutRefsText } from "./reference-urls";
 import { orderLike, refBlockOrder, refLine, themeFromRef, themeForRef } from "./ref-style";
 import { THEMES, THEME_LABELS, THEME_NOTES, colorFromText, fitAccent, fxOf, readableOn, referenceIn, restyle, themeNamed } from "./themes";
 import { updateProject } from "./store";
-import { BLOCK_LABELS, CHAINS, THEME_IDS, newId, type Asset, type Block, type BlockType, type Chain, type PendingComment, type Project, type RefRead, type Research, type SiteSpec, type ThemeFx, type ThemeId, type TokenInfo, type TokenLink } from "./spec";
+import { BLOCK_LABELS, CHAINS, THEME_IDS, newId, type Asset, type Block, type BlockType, type Chain, type PendingComment, type Project, type RefRead, type Research, type SiteSpec, type ThemeFx, type Theme, type ThemeId, type TokenInfo, type TokenLink } from "./spec";
 
 // The build pipeline: prompt → intent → chain data → style → copy → blocks.
 // Each step is written to the project as it runs so the builder can animate it.
@@ -70,7 +70,28 @@ const CopySchema = z.object({
   faq: z.array(z.object({ q: z.string().max(120), a: z.string().max(400) })).min(2).max(5),
   roadmap: z.array(z.object({ when: z.string().max(16), title: z.string().max(48), body: z.string().max(160) })).min(2).max(4),
   story: z.object({ title: z.string().max(40), body: z.string().max(700), points: z.array(z.string().max(180)).max(4) }).nullable().optional(),
+  fx: z.object({
+    motion: z.enum(["snappy", "calm", "bouncy"]), reveal: z.enum(["rise", "fade", "scale", "blur", "slide", "none"]), transition: z.enum(["none", "fade", "stack", "wave", "angle"]),
+    stagger: z.boolean(), intro: z.boolean(), nav: z.enum(["plain", "compact"]), progress: z.boolean(), count: z.boolean(), toTop: z.boolean(), parallax: z.boolean(),
+  }).partial().optional(),
 });
+
+const SCROLL_KEYS = ["transition", "stagger", "intro", "nav", "progress", "count", "toTop"] as const;
+const MOTION_KEYS = ["motion", "reveal", "parallax", ...SCROLL_KEYS] as const;
+
+/**
+ * How the page moves, decided per site: the style's defaults, then the writer's pick for the vibe, then words in the
+ * prompt ("minimal", "no animations", "add a progress bar"). A reference site's own motion (reveal, hover, speed) is kept.
+ */
+export function autoFx(theme: Theme, pick: Partial<ThemeFx> | undefined, prompt: string, ref: boolean): ThemeFx {
+  const cur = fxOf(theme);
+  const out: ThemeFx = { ...cur };
+  const o = out as unknown as Record<string, unknown>;
+  for (const k of ref ? SCROLL_KEYS : MOTION_KEYS) if (pick?.[k] !== undefined) o[k] = pick[k];
+  const said = fxEdit(prompt, out);
+  if (said) for (const k of MOTION_KEYS) if (said[k] !== out[k]) o[k] = said[k];
+  return out;
+}
 
 function walletWord(chain: Chain): string {
   return chain === "solana" ? "Phantom, Solflare or Backpack" : chain === "near" ? "HOT, Meteor or Intear" : "MetaMask, Rabby or any WalletConnect wallet";
@@ -163,7 +184,7 @@ function offlineCopy(intent: Intent, token: TokenInfo | null, chain: Chain, r: R
   };
 }
 
-async function writeCopy(prompt: string, intent: Intent, token: TokenInfo | null, chain: Chain, r: Research | null, refs: RefRead[] = []): Promise<{ copy: Copy; via: string; theme: ThemeId; accent: string | null }> {
+async function writeCopy(prompt: string, intent: Intent, token: TokenInfo | null, chain: Chain, r: Research | null, refs: RefRead[] = []): Promise<{ copy: Copy; via: string; theme: ThemeId; accent: string | null; fx?: Partial<ThemeFx> }> {
   const fallback = offlineCopy(intent, token, chain, r);
   if (!llmAvailable()) return { copy: fallback, via: "offline writer", theme: intent.theme, accent: intent.accent };
   const system = [
@@ -176,6 +197,7 @@ async function writeCopy(prompt: string, intent: Intent, token: TokenInfo | null
     "Never invent partnerships, listings, numbers or utility the research doesn't state.",
     "how: buying happens in the buy box on this site (Buy section, it also takes other coins from any chain). Never send people to another DEX or app, and never put the contract address in the text (the site shows it with a copy button).",
     "You may get reference sites the team likes: match their mood and how much they say per section (punchy or wordy, jokey or serious), never their words, names or claims.",
+    "fx (optional, how the page moves; pick for the vibe of the request and any reference site, send only what you'd change): motion snappy|calm|bouncy, reveal rise|fade|scale|blur|slide|none, transition none|fade|stack|wave|angle (how sections cross into each other), stagger, intro, nav plain|compact, progress (scroll bar), count (stat numbers count up), toTop, parallax. Loud meme/degen/brutal: snappy or bouncy, angle or stack, progress on. Calm glass/DeFi/app/premium: calm, fade or blur, transition fade or wave. Terminal/trading/serious/minimal: snappy, reveal fade, transition none, intro off. Playful/cozy: bouncy, wave. If the request asks for no animation, reveal none and everything else off.",
     "JSON keys: name, ticker, tagline, theme, accent (#rrggbb, optional), headline (<=8 words), subhead, cta (<=3 words), how[3]{title,body}, faq[3]{q,a}, roadmap[3]{when,title,body}, story{title,body,points[]}|null.",
   ].join("\n");
   const user = JSON.stringify({
@@ -196,8 +218,8 @@ async function writeCopy(prompt: string, intent: Intent, token: TokenInfo | null
     return p.success ? p.data : null;
   });
   if (!res) return { copy: fallback, via: "offline writer", theme: intent.theme, accent: intent.accent };
-  const { theme, accent, ...copy } = res.value;
-  return { copy: { ...copy, story: copy.story ?? null, ticker: copy.ticker.replace(/^\$/, "").toUpperCase() }, via: res.via, theme: theme ?? intent.theme, accent: intent.accent ?? accent ?? null };
+  const { theme, accent, fx, ...copy } = res.value;
+  return { copy: { ...copy, story: copy.story ?? null, ticker: copy.ticker.replace(/^\$/, "").toUpperCase() }, via: res.via, theme: theme ?? intent.theme, accent: intent.accent ?? accent ?? null, fx };
 }
 
 // ---------- layout ----------
@@ -355,6 +377,7 @@ export async function runBuild(id: string): Promise<void> {
       theme = await themeFromRef(refs[0], theme, brand);
       blocks = orderLike(blocks, refBlockOrder(refs[0]));
     }
+    theme = { ...theme, fx: autoFx(theme, c.fx, prompt, refs.length > 0) };
     spec = {
       name: c.copy.name, ticker: c.copy.ticker, tagline: c.copy.tagline, chain, theme, token, blocks,
       links: r ? siteLinks(r) : undefined,
@@ -438,6 +461,36 @@ function fxClause(t: string, fx: ThemeFx): void {
     else if (/\b(calm|calmer|subtle|less|slower|gentle)\b/i.test(t)) fx.motion = "calm";
     else if (/\b(snappy|snappier|faster|quick|sharp)\b/i.test(t)) fx.motion = "snappy";
   }
+  // Scroll effects. "less motion" / "no animations" turns everything off, "make it smoother" turns the good bits on.
+  if (/\b(progress|scroll) ?bar\b|\bprogress (indicator|line)\b/i.test(t)) fx.progress = !off;
+  if (/\b(back to top|to-top|scroll to top|top button)\b/i.test(t)) fx.toTop = !off;
+  if (/\b(count(ing)?[- ]?up|counter|animated (numbers|stats))\b/i.test(t)) fx.count = !off;
+  if (/\b(stagger(ed)?|one by one|cascade|cascading|sequence)\b/i.test(t)) fx.stagger = !off;
+  if (/\b(intro|page[- ]?(load|enter|entrance)|entrance|hero animation|load animation)\b/i.test(t)) fx.intro = !off;
+  if (/\b(sticky|floating|shrinking|compact|blur(ry)?) (nav|navbar|header|menu)\b|\b(nav|navbar|header|menu) (shrink|blur|compact)/i.test(t)) fx.nav = off ? "plain" : "compact";
+  if (/\b(section transitions?|cross-?overs?|dividers?|seams?|overlap(ping)?|stack(ed|ing)? sections?|waves?|wavy|diagonal|angled|slanted)\b/i.test(t) || /\b(sections?)\b.*\b(blend|flow|overlap|stack)/i.test(t)) {
+    if (off) fx.transition = "none";
+    else if (/\b(wave|wavy|curve|curved|curvy)\b/i.test(t)) fx.transition = "wave";
+    else if (/\b(angle|angled|diagonal|slant|slanted|skew)/i.test(t)) fx.transition = "angle";
+    else if (/\b(stack|stacked|stacking|overlap|overlapping|layered|sheets?|cards? over)\b/i.test(t)) fx.transition = "stack";
+    else if (/\b(fade|blend|smooth|soft|gradient|flow)/i.test(t)) fx.transition = "fade";
+  }
+  // Broad asks: "add scroll animations", "make it smoother", "more polish" switch the whole scroll kit on; "less motion" strips it.
+  if (/\b(scroll|scrolling)\b.*\b(animations?|effects?|motion|reveals?)\b|\b(animations?|effects?|reveals?)\b.*\bon scroll\b|\bsmoother\b|\bsmooth(ly)? (scroll|scrolling|feel)\b|\bmore (polish|polished|motion|animated|dynamic|alive|premium)\b|\bfeel (alive|premium|modern|polished)\b/i.test(t) && !off) {
+    if (fx.reveal === "none" || !fx.reveal) fx.reveal = "rise";
+    fx.stagger = true; fx.intro = true; fx.count = true; fx.nav = "compact";
+    if (!fx.transition || fx.transition === "none") fx.transition = fx.surface === "glass" ? "fade" : fx.surface === "offset" ? "angle" : "stack";
+    if (/\bsmoother\b/i.test(t) && fx.motion === "snappy") fx.motion = "calm";
+  }
+  if (/\b(less|reduce|reduced|minimal|minimum|no|fewer|tone down|turn off|disable|stop|kill)\b.*\b(motion|animations?|animated|movement|effects?)\b|\b(make it|fully|totally) static\b|\bcalm(er)? (it )?down\b/i.test(t)) {
+    if (/\b(no|turn off|disable|stop|kill|static|remove)\b/i.test(t)) {
+      fx.reveal = "none"; fx.transition = "none"; fx.stagger = false; fx.intro = false; fx.count = false; fx.progress = false; fx.parallax = false; fx.nav = "plain";
+    } else {
+      fx.motion = "calm"; fx.parallax = false; fx.stagger = false; fx.count = false; fx.progress = false;
+      if (fx.reveal && fx.reveal !== "none") fx.reveal = "fade";
+      if (fx.transition === "angle" || fx.transition === "stack" || fx.transition === "wave") fx.transition = "fade";
+    }
+  }
   if (/\bbuttons?\b/i.test(t)) {
     if (/\b(pill|rounded|round)\b/i.test(t)) fx.pill = !off;
     else if (/\b(square|sharp|boxy)\b/i.test(t)) fx.pill = false;
@@ -453,6 +506,7 @@ const EditSchema = z.object({
       bg: z.enum(["none", "grid", "dots", "glow", "orbs", "stripes"]), surface: z.enum(["outline", "soft", "glass", "offset"]),
       motion: z.enum(["snappy", "calm", "bouncy"]), density: z.enum(["compact", "regular", "airy"]), ticker: z.boolean(), pill: z.boolean(),
       reveal: z.enum(["rise", "fade", "scale", "blur", "slide", "none"]), hover: z.enum(["lift", "scale", "glow", "none"]), parallax: z.boolean(),
+      transition: z.enum(["none", "fade", "stack", "wave", "angle"]), stagger: z.boolean(), intro: z.boolean(), nav: z.enum(["plain", "compact"]), progress: z.boolean(), count: z.boolean(), toTop: z.boolean(),
     }).partial().optional(),
     radius: z.number().min(0).max(40).optional(),
   }).optional(),
@@ -572,7 +626,7 @@ export async function applyComments(project: Project, comments: PendingComment[]
       "Return {blocks:[{id, props?, remove?}], theme?:{accent?, id?, fx?}, summary}. props replaces that block's props entirely, so include every field.",
       `theme.id restyles the whole site: ${THEME_IDS.map((t) => `${t} (${THEME_NOTES[t]})`).join(", ")}.`,
       "theme.radius is the corner radius of cards and blocks in px (0 square, 8 subtle, 20 rounded, 32 very rounded); the site shares one radius.",
-      "theme.fx changes effects only: bg none|grid|dots|glow|orbs|stripes, surface outline|soft|glass|offset, motion snappy|calm|bouncy, density compact|regular|airy, ticker (slogan strip under the nav), pill (pill buttons), reveal rise|fade|scale|blur|slide|none (how sections come in on scroll), hover lift|scale|glow|none (cards and buttons under the cursor), parallax (hero art drifts as the page scrolls). Send only the keys that change.",
+      "theme.fx changes effects only: bg none|grid|dots|glow|orbs|stripes, surface outline|soft|glass|offset, motion snappy|calm|bouncy, density compact|regular|airy, ticker (slogan strip under the nav), pill (pill buttons), reveal rise|fade|scale|blur|slide|none (how sections come in on scroll), hover lift|scale|glow|none (cards and buttons under the cursor), parallax (hero art drifts as the page scrolls), transition none|fade|stack|wave|angle (how one section crosses into the next: colour blend, overlapping rounded sheets, wave edge, slanted seam), stagger (cards/steps/stats come in one by one), intro (hero text enters in sequence on load), nav plain|compact (nav blurs and tightens on scroll), progress (scroll progress bar), count (stat numbers count up), toTop (back-to-top button). \"Add scroll animations\" = reveal rise + stagger + transition + intro + count; \"less motion\" = motion calm, reveal fade, transition none/fade, stagger/parallax/progress off; \"no animations\" = reveal none and every motion key off. Send only the keys that change.",
       "Comments can come with images the team uploaded (id, url, size). Use one by its url: props.image on a hero or story block shows it as that block's art; logo (top level) sets the site's logo. Never invent image urls.",
       "Never invent prices, holder counts or tokenomics numbers; use [PLACEHOLDER] text for facts you don't have.",
     ].join("\n");

@@ -35,6 +35,20 @@ export interface ThemeFx {
   hover?: "lift" | "scale" | "glow" | "none";
   /** The hero's art drifts slower than the page as it scrolls. */
   parallax?: boolean;
+  /** How one section crosses into the next: nothing, a colour blend, overlapping rounded sheets, a wave or a slanted seam (missing: the style's own). */
+  transition?: "none" | "fade" | "stack" | "wave" | "angle";
+  /** Grid children (cards, steps, stats) come in one after another rather than together (missing: on). */
+  stagger?: boolean;
+  /** The hero's kicker, headline, subhead and buttons come in as a sequence on first load (missing: on). */
+  intro?: boolean;
+  /** "compact": the nav blurs, tightens and gains a shadow once the page scrolls (missing: compact). */
+  nav?: "plain" | "compact";
+  /** A thin accent bar at the top that fills as the page scrolls (missing: off). */
+  progress?: boolean;
+  /** Stat numbers count up when they scroll into view (missing: on). */
+  count?: boolean;
+  /** A back-to-top button on long pages (missing: on). */
+  toTop?: boolean;
 }
 
 export interface Theme {

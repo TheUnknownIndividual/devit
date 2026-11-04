@@ -4,7 +4,7 @@ import { BrandIcon, BRANDS, ChainIcon } from "@/components/brand";
 import { BLOCK_LABELS, CHAINS, type Block, type SiteSpec, type TokenInfo } from "@/lib/spec";
 import { SITE_CSS, themeVars } from "./css";
 import { usd, num, ago } from "./format";
-import { BuyBox, Chart, CopyCA, LiveStats, LiveTrades, MotionFx, Ticker, WalletButton, type Mode } from "./client/parts";
+import { BuyBox, Chart, Count, CopyCA, LiveStats, LiveTrades, MotionFx, Ticker, WalletButton, type Mode } from "./client/parts";
 import { fxOf } from "@/lib/themes";
 
 // Renders a SiteSpec. Each block carries data-block-id so the builder's select tool maps a click to one block,
@@ -63,15 +63,15 @@ function Hero({ b, spec }: { b: Block; spec: SiteSpec }) {
     <Section b={b} className="ss-hero" attrs={{ "data-layout": s(p.layout, "split"), "data-size": s(p.size, "lg") }}>
         <div className="ss-wrap ss-hero-in">
           <div className="ss-rise">
-            <div className="ss-kicker" data-el="kicker"><ChainIcon chain={spec.chain} size={14} mono="currentColor" /> ${spec.ticker} on {CHAINS[spec.chain].name}</div>
-            <h1 className="ss-h1" data-el="headline">{s(p.headline, spec.name)}</h1>
-            <p className="ss-sub" data-el="subhead">{s(p.subhead, spec.tagline)}</p>
-            <div className="ss-hero-ctas">
+            <div className="ss-kicker ss-i1" data-el="kicker"><ChainIcon chain={spec.chain} size={14} mono="currentColor" /> ${spec.ticker} on {CHAINS[spec.chain].name}</div>
+            <h1 className="ss-h1 ss-i2" data-el="headline">{s(p.headline, spec.name)}</h1>
+            <p className="ss-sub ss-i3" data-el="subhead">{s(p.subhead, spec.tagline)}</p>
+            <div className="ss-hero-ctas ss-i4">
               <a href="#buy" className={`ss-btn${s(p.ctaSize) === "xl" ? " ss-btn-xl" : s(p.ctaSize) === "md" ? " ss-btn-sm" : ""}`} data-el="cta">{s(p.cta, `Buy $${spec.ticker}`)} <ArrowDown size={16} /></a>
               {spec.token && <CopyCA address={spec.token.address} />}
             </div>
           </div>
-          <div className="ss-hero-art" data-el="art">
+          <div className="ss-hero-art ss-i5" data-el="art">
             {s(p.image) ? <img src={s(p.image)} alt="" /> : logoOf(spec) ? <img src={logoOf(spec)!} alt="" /> : spec.token?.header ? <img src={spec.token.header} alt="" /> : <span className="ss-monogram">${spec.ticker.slice(0, 1)}</span>}
           </div>
         </div>
@@ -194,11 +194,12 @@ function Socials({ b, spec }: { b: Block; spec: SiteSpec }) {
 
 function BlockView({ b, spec, mode, walletconnect }: { b: Block; spec: SiteSpec; mode: Mode; walletconnect: boolean }) {
   const p = b.props as P;
+  const count = mode === "live" && fxOf(spec.theme).count !== false;
   switch (b.type) {
     case "nav": return <Nav b={b} spec={spec} mode={mode} walletconnect={walletconnect} />;
     case "hero": return <Hero b={b} spec={spec} />;
     case "stats":
-      return <Section b={b}><div className="ss-wrap"><LiveStats token={spec.token} items={arr<string>(p.items).length ? arr<string>(p.items) : ["price", "marketCap", "liquidity", "volume24h"]} mode={mode} /></div></Section>;
+      return <Section b={b}><div className="ss-wrap"><LiveStats count={count} token={spec.token} items={arr<string>(p.items).length ? arr<string>(p.items) : ["price", "marketCap", "liquidity", "volume24h"]} mode={mode} /></div></Section>;
     case "buy":
       return (
         <Section b={b}>
@@ -233,8 +234,8 @@ function BlockView({ b, spec, mode, walletconnect }: { b: Block; spec: SiteSpec;
           <div className="ss-wrap">
             <Title text={s(p.title, "Holders")} />
             <div className="ss-grid ss-g3">
-              <div className="ss-card ss-stat"><div className="k">Holders</div><div className="v">{spec.token?.holders != null ? num(spec.token.holders) : <span className="ss-muted" style={{ fontSize: 16 }}>Shown on the explorer</span>}</div></div>
-              <div className="ss-card ss-stat"><div className="k">Liquidity</div><div className="v">{usd(spec.token?.liquidityUsd)}</div></div>
+              <div className="ss-card ss-stat"><div className="k">Holders</div><div className="v">{spec.token?.holders != null ? <Count text={num(spec.token.holders)} on={count} /> : <span className="ss-muted" style={{ fontSize: 16 }}>Shown on the explorer</span>}</div></div>
+              <div className="ss-card ss-stat"><div className="k">Liquidity</div><div className="v"><Count text={usd(spec.token?.liquidityUsd)} on={count} /></div></div>
               <a className="ss-card ss-stat" href={spec.token ? `${CHAINS[spec.chain].explorer}${spec.token.address}` : undefined} target="_blank" rel="noreferrer">
                 <div className="k">Every holder</div><div className="v" style={{ fontSize: 18 }}>See on the explorer ↗</div>
               </a>
@@ -308,9 +309,11 @@ export function Site({ spec, mode, walletconnect = false }: { spec: SiteSpec; mo
         className={`ss${t.uppercase ? " ss-upper" : ""}`} data-ss-theme={t.id} data-ss-mode={mode} style={themeVars(t) as CSSProperties}
         data-bg={fx.bg} data-surface={fx.surface} data-motion={fx.motion} data-density={fx.density} data-pill={fx.pill ? "" : undefined} data-dark={t.dark ? "" : undefined}
         data-reveal={fx.reveal ?? "rise"} data-hover={fx.hover} data-parallax={fx.parallax ? "" : undefined}
+        data-transition={fx.transition ?? "none"} data-stagger={fx.stagger === false ? undefined : ""} data-intro={fx.intro === false ? undefined : ""} data-nav={fx.nav ?? "compact"}
       >
+        {mode === "live" && fx.progress && <div className="ss-progress" aria-hidden="true" />}
         {spec.blocks.map((b) => <BlockView key={b.id} b={b} spec={spec} mode={mode} walletconnect={walletconnect} />)}
-        <MotionFx mode={mode} />
+        <MotionFx mode={mode} toTop={fx.toTop !== false} progress={!!fx.progress} nav={(fx.nav ?? "compact") === "compact"} />
       </div>
     </>
   );

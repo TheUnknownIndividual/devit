@@ -16,7 +16,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     fontsHref: gf("family=Anton&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500"),
     uppercase: true,
     // Meme sites: a slogan marquee (Mog, Blackdragon, Bonk), a glow behind the mascot, a floating hero.
-    fx: { bg: "glow", surface: "outline", motion: "bouncy", density: "regular", ticker: true, pill: false },
+    fx: { bg: "glow", surface: "outline", motion: "bouncy", density: "regular", ticker: true, pill: false, transition: "angle", reveal: "scale", progress: true },
   },
   clean: {
     id: "clean", dark: false,
@@ -25,7 +25,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     fontDisplay: "'Manrope', system-ui, sans-serif", fontBody: "'Manrope', system-ui, sans-serif", fontMono: "'IBM Plex Mono', monospace",
     fontsHref: gf("family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500"),
     uppercase: false,
-    fx: { bg: "none", surface: "soft", motion: "calm", density: "airy", ticker: false, pill: false },
+    fx: { bg: "none", surface: "soft", motion: "calm", density: "airy", ticker: false, pill: false, transition: "fade", reveal: "fade" },
   },
   retro: {
     id: "retro", dark: true,
@@ -34,7 +34,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     fontDisplay: "'Press Start 2P', monospace", fontBody: "'VT323', monospace", fontMono: "'VT323', monospace",
     fontsHref: gf("family=Press+Start+2P&family=VT323"),
     uppercase: true,
-    fx: { bg: "grid", surface: "offset", motion: "snappy", density: "regular", ticker: true, pill: false },
+    fx: { bg: "grid", surface: "offset", motion: "snappy", density: "regular", ticker: true, pill: false, transition: "angle", reveal: "slide", progress: true },
   },
   cozy: {
     id: "cozy", dark: false,
@@ -43,7 +43,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     fontDisplay: "'Fredoka', system-ui, sans-serif", fontBody: "'Fredoka', system-ui, sans-serif", fontMono: "'IBM Plex Mono', monospace",
     fontsHref: gf("family=Fredoka:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500"),
     uppercase: false,
-    fx: { bg: "dots", surface: "offset", motion: "bouncy", density: "regular", ticker: false, pill: false },
+    fx: { bg: "dots", surface: "offset", motion: "bouncy", density: "regular", ticker: false, pill: false, transition: "wave", reveal: "rise" },
   },
   // Axiom #06070B, GMGN #121212, pump.fun #0B0B0E: near-black, Geist, 12-14px text, 4-6px radii, no shadows.
   terminal: {
@@ -53,7 +53,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     fontDisplay: "'Geist', system-ui, sans-serif", fontBody: "'Geist', system-ui, sans-serif", fontMono: "'Geist Mono', monospace",
     fontsHref: gf("family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500"),
     uppercase: false,
-    fx: { bg: "glow", surface: "outline", motion: "snappy", density: "compact", ticker: true, pill: false },
+    fx: { bg: "glow", surface: "outline", motion: "snappy", density: "compact", ticker: true, pill: false, transition: "none", reveal: "fade", intro: false },
   },
   // MetaMask 180px condensed headline, Phantom lavender #F5F2FF, 24-32px cards, 100px pill buttons, soft shadows.
   app: {
@@ -63,7 +63,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     fontDisplay: "'Bricolage Grotesque', system-ui, sans-serif", fontBody: "'Inter', system-ui, sans-serif", fontMono: "'Geist Mono', monospace",
     fontsHref: gf("family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500"),
     uppercase: false,
-    fx: { bg: "orbs", surface: "soft", motion: "bouncy", density: "airy", ticker: false, pill: true },
+    fx: { bg: "orbs", surface: "soft", motion: "bouncy", density: "airy", ticker: false, pill: true, transition: "stack", reveal: "rise" },
   },
   // SPX6900: Space Mono, 0 radius, 5.6px hard offset shadows in #0A0A0A, a dot grid, highlighter yellow.
   brutal: {
@@ -73,7 +73,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     fontDisplay: "'Barlow Condensed', sans-serif", fontBody: "'Space Mono', monospace", fontMono: "'Space Mono', monospace",
     fontsHref: gf("family=Barlow+Condensed:wght@700;800;900&family=Space+Mono:wght@400;700"),
     uppercase: true,
-    fx: { bg: "dots", surface: "offset", motion: "snappy", density: "regular", ticker: true, pill: false },
+    fx: { bg: "dots", surface: "offset", motion: "snappy", density: "regular", ticker: true, pill: false, transition: "stack", reveal: "slide", progress: true },
   },
   // Uniswap's floating orbs, Raydium/Shib frosted panels (backdrop blur 12-25px, white at 3-8%), 20px radii.
   glass: {
@@ -83,7 +83,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     fontDisplay: "'Sora', system-ui, sans-serif", fontBody: "'Inter', system-ui, sans-serif", fontMono: "'Geist Mono', monospace",
     fontsHref: gf("family=Sora:wght@500;600;700&family=Inter:wght@400;500;600&family=Geist+Mono:wght@400;500"),
     uppercase: false,
-    fx: { bg: "orbs", surface: "glass", motion: "calm", density: "regular", ticker: false, pill: true },
+    fx: { bg: "orbs", surface: "glass", motion: "calm", density: "regular", ticker: false, pill: true, transition: "fade", reveal: "blur", progress: true },
   },
 };
 
@@ -106,7 +106,8 @@ export const THEME_NOTES: Record<ThemeId, string> = {
 
 /** The style's effects, for specs saved before effects existed. */
 export function fxOf(t: Theme): ThemeFx {
-  return t.fx ?? THEMES[t.id]?.fx ?? THEMES.degen.fx!;
+  const own = THEMES[t.id]?.fx ?? THEMES.degen.fx!;
+  return t.fx ? { ...own, ...t.fx } : own;
 }
 
 // Words that name a look win over words that only say what the project is ("a loud site for a trading bot" is degen).
