@@ -1,4 +1,4 @@
-import { siBitcoin, siCloudflare, siCoinbase, siDiscord, siEthereum, siFigma, siGithub, siNear, siRobinhood, siSolana, siTelegram, siWalletconnect, siX } from "simple-icons";
+import { siBitcoin, siBnbchain, siCloudflare, siCoinbase, siDiscord, siEthereum, siFigma, siGithub, siNear, siRobinhood, siSolana, siTelegram, siWalletconnect, siX } from "simple-icons";
 import type { Chain } from "@/lib/spec";
 
 // Brand marks from simple-icons (CC0). Wallets that simple-icons doesn't carry (MetaMask, Phantom) show the
@@ -23,6 +23,9 @@ export const CHAIN_BRAND: Record<Chain, { icon: Si; tint: string }> = {
   near: { icon: siNear, tint: "#FFFFFF" },
   solana: { icon: siSolana, tint: "#14F195" },
   ethereum: { icon: siEthereum, tint: "#B4C1FF" },
+  // simple-icons carries no Base mark; Coinbase's is the closest, in Base blue.
+  base: { icon: siCoinbase, tint: "#0052FF" },
+  bsc: { icon: siBnbchain, tint: "#F0B90B" },
   robinhood: { icon: siRobinhood, tint: "#CCFF00" },
 };
 

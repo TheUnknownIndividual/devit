@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ArrowRightLeft, ArrowUp, Check, Copy, Globe2, Loader2 } from "lucide-react";
-import { CHAINS, type Chain, type TokenInfo } from "@/lib/spec";
+import { CHAINS, isEvm, type Chain, type TokenInfo } from "@/lib/spec";
+import { venue } from "@/lib/venues";
 import { explorerTx, sendEvm, sendNear, sendSolana, short, useWallets } from "./wallet";
 import { WalletButton } from "./connect";
 import type { BuiltTx } from "@/lib/swap";
@@ -49,7 +50,7 @@ export function useLiveToken(initial: TokenInfo | null, mode: Mode): TokenInfo |
   return t;
 }
 
-const STAT_LABEL: Record<string, string> = { price: "Price", marketCap: "Market cap", holders: "Holders", liquidity: "Liquidity", volume24h: "24h volume", change24h: "24h change", supply: "Supply" };
+const STAT_LABEL: Record<string, string> = { curve: "Bonding curve", price: "Price", marketCap: "Market cap", holders: "Holders", liquidity: "Liquidity", volume24h: "24h volume", change24h: "24h change", supply: "Supply" };
 
 /** "up" or "down" for a moment after a live number moves, like a terminal's tick flash. */
 function useFlash(v: number | null | undefined): string {
@@ -79,6 +80,7 @@ export function LiveStats({ token, items, mode, count = false }: { token: TokenI
       case "volume24h": return <Count text={usd(t.volume24h)} on={count} />;
       case "change24h": return pct(t.change24h);
       case "supply": return <Count text={num(t.supply)} on={count} />;
+      case "curve": return t.venue?.stage === "curve" ? (t.venue.progress != null ? `${Math.round(t.venue.progress * 100)}% sold` : "Live") : t.venue?.stage === "graduated" ? "Graduated" : "—";
       default: return "—";
     }
   };
@@ -277,6 +279,11 @@ export function Chart({ token, mode, dark }: { token: TokenInfo | null; mode: Mo
       </div>
     );
   }
+  // A pool only GeckoTerminal lists (a launchpad curve DexScreener doesn't index) has no DexScreener link: use its embed.
+  if (!token.pairUrl) {
+    const net = { ethereum: "eth", solana: "solana", near: "near", base: "base", bsc: "bsc", robinhood: "robinhood" }[token.chain];
+    return <div className="ss-chart"><iframe src={`https://www.geckoterminal.com/${net}/pools/${token.pairAddress}?embed=1&info=0&swaps=0&light_chart=${dark ? 0 : 1}`} title={`${token.symbol} chart`} loading="lazy" /></div>;
+  }
   const src = `https://dexscreener.com/${token.chain}/${token.pairAddress}?embed=1&loadChartSettings=0&trades=0&tabs=0&info=0&chartLeftToolbar=0&chartTheme=${dark ? "dark" : "light"}&theme=${dark ? "dark" : "light"}&chartStyle=1&chartType=usd&interval=15`;
   return <div className="ss-chart"><iframe src={src} title={`${token.symbol} chart`} loading="lazy" /></div>;
 }
@@ -308,9 +315,14 @@ function SameChain({ chain, token, ticker }: { chain: Chain; token: TokenInfo | 
   const [tx, setTx] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const native = CHAINS[chain].native;
+  // Still on a launchpad curve: its own page is the way in when our router can't fill the curve (four.meme).
+  const tv = token?.venue;
+  const pad = venue(tv?.launchpad);
+  const curveUrl = tv?.stage === "curve" ? tv.buyUrl : null;
+  const viaPad = !!curveUrl && pad?.routable === false;
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || viaPad) return;
     const a = Number(amount);
     if (!(a > 0)) { setQ(null); return; }
     const h = setTimeout(async () => {
@@ -319,14 +331,15 @@ function SameChain({ chain, token, ticker }: { chain: Chain; token: TokenInfo | 
       setQ(r ? await r.json() : { error: "No quote right now" });
     }, 350);
     return () => clearTimeout(h);
-  }, [amount, chain, token, connected]);
+  }, [amount, chain, token, connected, viaPad]);
 
   if (!token) return <p className="ss-muted" style={{ margin: 0 }}>The buy box goes live once the site knows the token's contract address.</p>;
   const wantKind = chain === "solana" ? "solana" : chain === "near" ? "near" : "evm";
   const wrongWallet = connected && connected.wallet.kind !== wantKind;
   const canSwap = !!q?.swap && !!connected && !wrongWallet;
-  const handoff = chain === "solana" ? `https://jup.ag/swap/SOL-${token.address}` : chain === "near" ? `https://www.neartrade.lol/token/${encodeURIComponent(token.address)}` : `https://app.uniswap.org/swap?chain=${chain === "ethereum" ? "mainnet" : chain}&outputCurrency=${token.address}`;
-  const handoffName = chain === "solana" ? "Jupiter" : chain === "near" ? "neartrade" : "Uniswap";
+  const fallback = venue(chain === "solana" ? "jupiter" : chain === "bsc" ? "pancakeswap" : chain === "near" ? null : "uniswap");
+  const handoff = curveUrl ?? (fallback?.buy ? fallback.buy(token.address, chain) : `https://www.neartrade.lol/token/${encodeURIComponent(token.address)}`);
+  const handoffName = curveUrl && pad ? pad.name : fallback?.name ?? "neartrade";
 
   async function buy() {
     if (!connected || !token) return;
@@ -358,7 +371,8 @@ function SameChain({ chain, token, ticker }: { chain: Chain; token: TokenInfo | 
           <div className="ss-note">Route: {q.venue}{q.impactPct != null ? ` · price impact ${q.impactPct.toFixed(2)}%` : ""}</div>
         </div>
       )}
-      {q?.error && <div className="ss-err">{q.error}</div>}
+      {q?.error && !curveUrl && <div className="ss-err">{q.error}</div>}
+      {curveUrl && pad && !q?.swap && <div className="ss-note" style={{ marginTop: 10 }}>${ticker} is still on the {pad.name} bonding curve{tv?.progress != null ? ` (${Math.round(tv.progress * 100)}% sold)` : ""}: buy it there until it graduates.</div>}
       {step === "sent" && tx && (
         <div className="ss-quote" style={{ borderColor: "var(--accent)" }}>
           <Check size={15} style={{ display: "inline", verticalAlign: -2, marginRight: 6 }} />Sent. <a href={explorerTx(chain, tx)} target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>View the transaction</a>

@@ -3,7 +3,8 @@ import path from "node:path";
 import { isPublicHttps } from "./net";
 import { logoAccent, themeColorOf } from "./palette";
 import { metadataAddress, parseMetadata } from "./solana";
-import { rpcFor } from "./chain";
+import { BLOCKSCOUT, DEFAULT_RPC, rpcFor } from "./chain";
+import { isVenueHost } from "./venues";
 import type { Chain, Finding, Research, SocialInput, TokenInfo, Voice, XPost, XProfile } from "./spec";
 
 // Before writing a word, find out who the project is: socials and story from DexScreener, CoinGecko,
@@ -165,7 +166,7 @@ class Links {
 
 // ---------- sources ----------
 
-const GECKO_PLATFORM: Partial<Record<Chain, string>> = { solana: "solana", ethereum: "ethereum", near: "near-protocol" };
+const GECKO_PLATFORM: Partial<Record<Chain, string>> = { solana: "solana", ethereum: "ethereum", base: "base", bsc: "binance-smart-chain", near: "near-protocol" };
 
 async function coingecko(t: TokenInfo, links: Links, descriptions: Research["descriptions"]): Promise<boolean> {
   const platform = GECKO_PLATFORM[t.chain];
@@ -235,7 +236,8 @@ async function nearMetadata(t: TokenInfo, links: Links, descriptions: Research["
 const SOURCE_NOISE = /(openzeppelin|hardhat|solidity|soliditylang|ethereum\.org|eips\.ethereum|github\.com\/(ethereum|OpenZeppelin|Uniswap|transmissions11|Vectorized|smartcontractkit)|consensys|zeppelin|uniswap\.org|docs\.|wikipedia|stackexchange|eth\.wiki|w3\.org|apache\.org|opensource\.org|spdx\.org|blockscout|etherscan|chainlink)/i;
 
 async function evmSource(t: TokenInfo, links: Links): Promise<string | null> {
-  const base = t.chain === "robinhood" ? "https://robinhoodchain.blockscout.com" : "https://eth.blockscout.com";
+  const base = BLOCKSCOUT[t.chain];
+  if (!base) return null;
   const d = await fetchJson<{ source_code?: string; additional_sources?: Array<{ source_code?: string }> }>(`${base}/api/v2/smart-contracts/${t.address}`);
   const src = [d?.source_code ?? "", ...(d?.additional_sources ?? []).map((x) => x.source_code ?? "")].join("\n");
   if (!src) return null;
@@ -591,7 +593,7 @@ export function socialsFromText(text: string): SocialInput {
   if (dc) out.discord = dc;
   for (const m of text.matchAll(/\b(?:https?:\/\/)?((?:[a-z0-9-]+\.)+[a-z]{2,})(\/[^\s]*)?/gi)) {
     const host = m[1].toLowerCase().replace(/^www\./, "");
-    if (/^(x|twitter|t|telegram|discord)\.(com|me|gg)$/.test(host) || /\.near$|\.tg$/.test(host) || /dexscreener|pump\.fun|jup\.ag/.test(host)) continue;
+    if (/^(x|twitter|t|telegram|discord)\.(com|me|gg)$/.test(host) || /\.near$|\.tg$/.test(host) || isVenueHost(host)) continue;
     // A bare word with a dot ("Bonk.fun" in a headline edit) counts only as a link or next to the word site.
     if (!/^(https?:\/\/|www\.)/i.test(m[0]) && !/\b(web)?site\b/i.test(text) && text.trim() !== m[0]) continue;
     out.website = m[0];

@@ -1,7 +1,7 @@
 import type { Chain } from "./spec";
 
 // Same-chain buys inside a generated site, with the native coin as input.
-// Solana routes through Jupiter, Ethereum and Robinhood Chain through KyberSwap, NEAR through neartrade's
+// Solana routes through Jupiter, the EVM chains (Ethereum, Base, BNB Chain, Robinhood Chain) through KyberSwap, NEAR through neartrade's
 // developer API (every launchpad curve and Rhea pool; its fee is inside the transactions it returns).
 // The visitor's own wallet signs: the server only builds the unsigned transaction.
 // A platform fee is charged only when the operator sets one in env (see .env.example).
@@ -10,7 +10,7 @@ const SOL_MINT = "So11111111111111111111111111111111111111112";
 const NATIVE_EVM = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 const JUP = "https://lite-api.jup.ag/swap/v1";
 const KYBER = "https://aggregator-api.kyberswap.com";
-const KYBER_CHAIN: Partial<Record<Chain, string>> = { ethereum: "ethereum", robinhood: "robinhood" };
+const KYBER_CHAIN: Partial<Record<Chain, string>> = { ethereum: "ethereum", base: "base", bsc: "bsc", robinhood: "robinhood" };
 const SLIPPAGE_BPS = 300;
 const TIMEOUT = 9000;
 

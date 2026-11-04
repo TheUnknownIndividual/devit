@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { recentTrades } from "@/lib/chain";
-import type { Chain } from "@/lib/spec";
+import { CHAIN_IDS, type Chain } from "@/lib/spec";
 
-const CHAINS = new Set(["near", "solana", "ethereum", "robinhood"]);
+const CHAINS = new Set<string>(CHAIN_IDS);
 const cache = new Map<string, { at: number; body: unknown }>();
 
 export async function GET(req: Request) {

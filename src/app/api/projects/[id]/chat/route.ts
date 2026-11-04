@@ -95,7 +95,7 @@ async function chat(req: Request, ctx: { params: Promise<{ id: string }> }) {
     const out = await updateProject(id, (q) => {
       q.messages.push({ id: newId(), role: "user", text, at: Date.now() });
       if (!q.spec || (addr && !token)) {
-        q.messages.push({ id: newId(), role: "agent", text: "I couldn't find that token on NEAR, Solana, Ethereum or Robinhood Chain.", at: Date.now() });
+        q.messages.push({ id: newId(), role: "agent", text: "I couldn't find that token on NEAR, Solana, Ethereum, Base, BNB Chain or Robinhood Chain.", at: Date.now() });
         return;
       }
       q.history.push(structuredClone(q.spec));

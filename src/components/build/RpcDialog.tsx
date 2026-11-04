@@ -7,12 +7,14 @@ import { ChainIcon } from "@/components/brand";
 import { CHAINS, type Chain } from "@/lib/spec";
 import type { PublicProject } from "@/lib/public";
 
-const PROBE: Record<Chain, string> = { near: "status", solana: "getHealth", ethereum: "eth_chainId", robinhood: "eth_chainId" };
-const DEFAULTS: Record<Chain, string> = { near: "FastNEAR public RPC", solana: "Solana public RPC (Helius when the server has a key)", ethereum: "PublicNode", robinhood: "Robinhood Chain public RPC" };
+const PROBE: Record<Chain, string> = { near: "status", solana: "getHealth", ethereum: "eth_chainId", base: "eth_chainId", bsc: "eth_chainId", robinhood: "eth_chainId" };
+const DEFAULTS: Record<Chain, string> = { near: "FastNEAR public RPC", solana: "Solana public RPC (Helius when the server has a key)", ethereum: "PublicNode", base: "PublicNode", bsc: "PublicNode", robinhood: "Robinhood Chain public RPC" };
 const PROVIDERS: Record<Chain, Array<{ name: string; url: string }>> = {
   near: [{ name: "FastNEAR", url: "https://fastnear.com" }, { name: "dRPC", url: "https://drpc.org" }],
   solana: [{ name: "Helius", url: "https://dashboard.helius.dev" }, { name: "dRPC", url: "https://drpc.org" }],
   ethereum: [{ name: "dRPC", url: "https://drpc.org" }, { name: "Alchemy", url: "https://dashboard.alchemy.com" }],
+  base: [{ name: "dRPC", url: "https://drpc.org" }, { name: "Alchemy", url: "https://dashboard.alchemy.com" }],
+  bsc: [{ name: "dRPC", url: "https://drpc.org" }, { name: "NodeReal", url: "https://nodereal.io" }],
   robinhood: [{ name: "dRPC", url: "https://drpc.org" }, { name: "Alchemy", url: "https://dashboard.alchemy.com" }],
 };
 

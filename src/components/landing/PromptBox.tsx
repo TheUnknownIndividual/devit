@@ -12,6 +12,7 @@ import { ThemeSwatch } from "@/components/ThemeSwatch";
 import { BrandIcon, BRANDS, ChainIcon } from "@/components/brand";
 import { readIntent } from "@/lib/intent";
 import { detectAddress } from "@/lib/address";
+import { readToken } from "@/lib/venues";
 import { THEME_LABELS } from "@/lib/themes";
 import { usd } from "@/blocks/format";
 import { BLOCK_LABELS, CHAINS, type Chain, type Finding, type ThemeId, type TokenInfo } from "@/lib/spec";
@@ -133,9 +134,10 @@ export function PromptBox() {
 
   const read = useMemo(() => readIntent(`${prompt} ${address}`, chain), [prompt, address, chain]);
   const addrRead = useMemo(() => {
-    const a = address.trim();
-    const ds = a.match(/dexscreener\.com\/[a-z]+\/([A-Za-z0-9.\-_]+)/)?.[1];
-    return detectAddress(ds ?? a);
+    // A bare address, or a launchpad, DEX, chart or explorer link to one (lib/venues.ts).
+    const r = readToken(address.trim());
+    if (!r?.address) return null;
+    return { address: r.address, chains: r.chains.length ? r.chains : detectAddress(r.address)?.chains ?? [] };
   }, [address]);
 
   // A pasted address names its chain; follow it so the picker never disagrees with the paste.

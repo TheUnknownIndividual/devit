@@ -19,8 +19,8 @@ export async function oneClickTokens(): Promise<OneClickToken[]> {
   return list;
 }
 
-const CHAIN_KEY: Record<Chain, string> = { near: "near", solana: "sol", ethereum: "eth", robinhood: "hood" };
-const NATIVE: Record<Chain, string> = { near: "wNEAR", solana: "SOL", ethereum: "ETH", robinhood: "ETH" };
+const CHAIN_KEY: Record<Chain, string> = { near: "near", solana: "sol", ethereum: "eth", base: "base", bsc: "bsc", robinhood: "hood" };
+const NATIVE: Record<Chain, string> = { near: "wNEAR", solana: "SOL", ethereum: "ETH", base: "ETH", bsc: "BNB", robinhood: "ETH" };
 
 /** Coins a buyer can pay with, shown in the "Any chain" picker. */
 export const PAY_WITH = [

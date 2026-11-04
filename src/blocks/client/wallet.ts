@@ -45,8 +45,10 @@ export type Wallet = EvmWallet | SolWallet | NearWallet;
 
 export interface Connected { wallet: Wallet; address: string; /** EVM only: the wallet's current chain, 0x-hex. */ chainId?: string }
 
-export const EVM_CHAIN: Partial<Record<Chain, { id: string; name: string; rpc: string[]; explorer: string }>> = {
+export const EVM_CHAIN: Partial<Record<Chain, { id: string; name: string; rpc: string[]; explorer: string; native?: string }>> = {
   ethereum: { id: "0x1", name: "Ethereum", rpc: ["https://ethereum-rpc.publicnode.com"], explorer: "https://etherscan.io" },
+  base: { id: "0x2105", name: "Base", rpc: ["https://mainnet.base.org"], explorer: "https://basescan.org" },
+  bsc: { id: "0x38", name: "BNB Smart Chain", rpc: ["https://bsc-dataseed.bnbchain.org"], explorer: "https://bscscan.com", native: "BNB" },
   // Chain 4663 (0x1237). Checked 2026-11-04 against chainid.network and the RPC's own eth_chainId.
   robinhood: { id: "0x1237", name: "Robinhood Chain", rpc: ["https://rpc.mainnet.chain.robinhood.com", "https://robinhood-rpc.publicnode.com"], explorer: "https://robinhoodchain.blockscout.com" },
 };
@@ -317,7 +319,7 @@ export async function ensureChain(chain: Chain): Promise<void> {
     // 4902: the wallet doesn't know this chain yet (MetaMask Mobile reports it inside data.originalError).
     const code = (e as { code?: number; data?: { originalError?: { code?: number } } }).code ?? (e as { data?: { originalError?: { code?: number } } }).data?.originalError?.code;
     if (code !== 4902) throw e;
-    await w.provider.request({ method: "wallet_addEthereumChain", params: [{ chainId: c.id, chainName: c.name, rpcUrls: c.rpc, blockExplorerUrls: [c.explorer], nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 } }] });
+    await w.provider.request({ method: "wallet_addEthereumChain", params: [{ chainId: c.id, chainName: c.name, rpcUrls: c.rpc, blockExplorerUrls: [c.explorer], nativeCurrency: c.native ? { name: c.native, symbol: c.native, decimals: 18 } : { name: "Ether", symbol: "ETH", decimals: 18 } }] });
   }
   if (connected?.wallet === w) { connected = { ...connected, chainId: c.id }; emit(); }
 }

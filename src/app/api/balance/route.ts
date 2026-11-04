@@ -8,6 +8,8 @@ import { CHAINS, type Chain } from "@/lib/spec";
 const cache = new Map<string, { at: number; body: { amount: number; symbol: string } }>();
 const VALID: Record<Chain, RegExp> = {
   ethereum: /^0x[0-9a-fA-F]{40}$/,
+  base: /^0x[0-9a-fA-F]{40}$/,
+  bsc: /^0x[0-9a-fA-F]{40}$/,
   robinhood: /^0x[0-9a-fA-F]{40}$/,
   solana: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/,
   near: /^(?=.{2,64}$)([a-z\d]+[-_])*[a-z\d]+(\.([a-z\d]+[-_])*[a-z\d]+)*$/,
@@ -29,6 +31,8 @@ async function rpc<T>(url: string, method: string, params: unknown): Promise<T> 
 // Public endpoints to fall back on when the configured RPC is down or out of credit.
 const FALLBACK: Record<Chain, string> = {
   ethereum: "https://ethereum-rpc.publicnode.com",
+  base: "https://base-rpc.publicnode.com",
+  bsc: "https://bsc-rpc.publicnode.com",
   robinhood: "https://robinhood-rpc.publicnode.com",
   solana: "https://api.mainnet-beta.solana.com",
   near: "https://free.rpc.fastnear.com",

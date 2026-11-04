@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { runBuild } from "@/lib/agent";
 import { saveProject } from "@/lib/store";
-import { THEME_IDS, newId, type Project } from "@/lib/spec";
+import { CHAIN_IDS, THEME_IDS, newId, type Project } from "@/lib/spec";
 import { overLimit } from "@/lib/net";
 import { activePlan, buildsToday, countBuild, ensureAnon, ownerKeysFor, viewer } from "@/lib/accounts";
 import { hasOwnLlm, runWithKeys } from "@/lib/keyscope";
@@ -10,7 +10,7 @@ import { plan } from "@/lib/plans";
 
 const Body = z.object({
   prompt: z.string().trim().min(3).max(1200),
-  chain: z.enum(["near", "solana", "ethereum", "robinhood"]).default("near"),
+  chain: z.enum(CHAIN_IDS).default("near"),
   kind: z.enum(["memecoin", "dapp", "nft"]).default("memecoin"),
   address: z.string().trim().max(120).optional(),
   style: z.enum(THEME_IDS).optional(),
