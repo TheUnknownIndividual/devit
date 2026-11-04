@@ -19,13 +19,14 @@ import { IntegrationsDialog } from "./Integrations";
 import { RpcDialog } from "./RpcDialog";
 import { PublishDialog } from "./PublishDialog";
 import { prepareImage, readDoc, type Doc } from "./attach";
+import { AccountMenu } from "@/components/account/AccountMenu";
 
 type Device = "desktop" | "tablet" | "phone";
 const WIDTH: Record<Device, string> = { desktop: "100%", tablet: "820px", phone: "390px" };
 
 const VIA: Record<string, string> = { "near-ai": "NEAR AI Cloud", claude: "Claude", "offline writer": "Offline writer", "offline editor": "Offline editor" };
 
-export function Workspace({ initial, heliusOnServer }: { initial: PublicProject; heliusOnServer: boolean }) {
+export function Workspace({ initial, heliusOnServer, canEdit = true }: { initial: PublicProject; heliusOnServer: boolean; canEdit?: boolean }) {
   const [p, setP] = useState(initial);
   const [device, setDevice] = useState<Device>("desktop");
   const [selectOn, setSelectOn] = useState(true);
@@ -169,17 +170,14 @@ export function Workspace({ initial, heliusOnServer }: { initial: PublicProject;
 
   const ready = !!p.spec;
   const chain = p.network.chain;
-  const title = p.spec?.name ?? "New site";
+  const title = p.title;
 
   return (
     <div className="flex h-screen flex-col bg-ink-950">
       {/* Top bar */}
       <header className="flex h-14 shrink-0 items-center gap-2 border-b border-white/[0.07] px-3">
         <Link href="/" className="btn btn-ghost btn-icon" aria-label="Home"><LogoMark size={20} /></Link>
-        <Link href="/projects" className="btn btn-ghost hidden max-w-[220px] sm:inline-flex" title="My sites">
-          <span className="truncate font-semibold text-white">{title}</span>
-          {p.spec?.ticker && <span className="text-zinc-500">${p.spec.ticker}</span>}
-        </Link>
+        <ProjectName name={title} ticker={p.spec?.ticker ?? null} editable={canEdit} onSave={(name) => call("", { name }, "patch", "PATCH")} />
         {building && <span className="hidden items-center gap-1.5 text-[12px] text-zinc-400 sm:flex"><Loader2 size={13} className="animate-spin text-sel" /> Building</span>}
 
         <div className="mx-auto hidden items-center gap-1 rounded-[11px] border border-white/[0.07] bg-ink-900 p-0.5 md:flex" role="radiogroup" aria-label="Preview size">
@@ -225,8 +223,10 @@ export function Workspace({ initial, heliusOnServer }: { initial: PublicProject;
           <button type="button" className="btn btn-primary" disabled={!ready} onClick={() => setDialog("publish")}>
             <Globe size={15} /> <span className="hidden sm:inline">{p.published ? (p.publishedIsCurrent ? "Published" : "Update") : "Publish"}</span>
           </button>
+          <AccountMenu compact />
         </div>
       </header>
+      {!canEdit && <div className="shrink-0 border-b border-white/[0.07] bg-ink-900 px-4 py-2 text-[12px] text-zinc-400">View only: this project belongs to another account. Duplicate it from your own projects to make changes.</div>}
 
       <div className="grid min-h-0 flex-1 md:grid-cols-[400px_1fr]">
         {/* Chat */}
@@ -377,6 +377,43 @@ export function Workspace({ initial, heliusOnServer }: { initial: PublicProject;
       <RpcDialog key={`rpc-${dialog === "rpc"}`} open={dialog === "rpc"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
       <PublishDialog open={dialog === "publish"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
     </div>
+  );
+}
+
+/** The project's name in the top bar. Click to rename: Enter saves, Esc cancels. */
+function ProjectName({ name, ticker, editable, onSave }: { name: string; ticker: string | null; editable: boolean; onSave: (name: string) => Promise<boolean> }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+  const settled = useRef(false);
+  const save = async () => {
+    setEditing(false);
+    const v = draft.trim();
+    if (v && v !== name) await onSave(v);
+  };
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        className="field hidden h-9 w-[220px] font-semibold sm:block"
+        value={draft}
+        maxLength={60}
+        aria-label="Project name"
+        onFocus={(e) => e.currentTarget.select()}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); settled.current = true; void save(); }
+          if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); settled.current = true; setEditing(false); }
+        }}
+        onBlur={() => { if (!settled.current) void save(); }}
+      />
+    );
+  }
+  const label = <><span className="truncate font-semibold text-white">{name}</span>{ticker && <span className="text-zinc-500">${ticker}</span>}</>;
+  if (!editable) return <span className="btn hidden max-w-[240px] cursor-default sm:inline-flex">{label}</span>;
+  return (
+    <button type="button" className="btn btn-ghost hidden max-w-[240px] sm:inline-flex" title="Rename" onClick={() => { settled.current = false; setDraft(name); setEditing(true); }}>
+      {label}
+    </button>
   );
 }
 

@@ -86,6 +86,7 @@ export function PromptBox() {
   const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [limitHit, setLimitHit] = useState(false);
   const [listening, setListening] = useState(false);
   const [canSpeak, setCanSpeak] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -219,7 +220,8 @@ export function PromptBox() {
           socials: { x: socials.x.trim() || undefined, telegram: socials.telegram.trim() || undefined, website: socials.website.trim() || undefined },
         }),
       });
-      const j = (await r.json().catch(() => ({}))) as { id?: string; error?: string };
+      const j = (await r.json().catch(() => ({}))) as { id?: string; error?: string; limit?: boolean };
+      setLimitHit(!!j.limit);
       if (!r.ok || !j.id) throw new Error(j.error || "Couldn't start the build. Try again.");
       router.push(`/build/${j.id}`);
     } catch (e) {
@@ -517,7 +519,7 @@ export function PromptBox() {
         </div>
       </div>
 
-      {error && <p role="alert" className="mt-3 animate-rise text-[13px] text-red-300">{error}</p>}
+      {error && <p role="alert" className="mt-3 animate-rise text-[13px] text-red-300">{error}{limitHit && <> <a href="/pricing" className="text-white underline underline-offset-2">See plans</a> · <a href="/settings#keys" className="text-white underline underline-offset-2">Add a key</a></>}</p>}
 
       <KindPicker kind={kind} onPick={setKind} />
     </div>

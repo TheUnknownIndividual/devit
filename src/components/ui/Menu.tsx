@@ -15,7 +15,7 @@ export interface MenuItem<T extends string> {
 }
 
 export function Menu<T extends string>({
-  trigger, items, value, onPick, up, align = "left", width = 240, label,
+  trigger, items, value, onPick, up, align = "left", width = 240, label, header,
 }: {
   trigger: (open: boolean) => ReactNode;
   items: MenuItem<T>[];
@@ -25,6 +25,8 @@ export function Menu<T extends string>({
   align?: "left" | "right";
   width?: number;
   label: string;
+  /** A non-interactive top row (who's signed in, say). */
+  header?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -48,6 +50,7 @@ export function Menu<T extends string>({
           style={{ width }}
           className={`absolute z-50 animate-menu rounded-xl border border-white/10 bg-ink-850 p-1 shadow-[0_16px_48px_rgba(0,0,0,0.5)] ${up ? "bottom-full mb-2 [--my0:4px]" : "top-full mt-2 [--my0:-4px]"} ${align === "right" ? "right-0" : "left-0"} ${align === "right" ? (up ? "origin-bottom-right" : "origin-top-right") : up ? "origin-bottom-left" : "origin-top-left"}`}
         >
+          {header && <div className="mb-1 border-b border-white/[0.07] px-2.5 pb-2 pt-1.5">{header}</div>}
           {items.map((it) => (
             <button
               key={it.value}

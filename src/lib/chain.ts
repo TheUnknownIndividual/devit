@@ -1,5 +1,6 @@
 import type { Chain, TokenInfo, TokenLink } from "./spec";
 import { detectAddress } from "./address";
+import { ownerKeys } from "./keyscope";
 export { detectAddress, findAddress } from "./address";
 
 // Reads everything a token site needs from public sources: DexScreener for the pair, logo and socials,
@@ -25,6 +26,16 @@ export const DEFAULT_RPC: Record<Chain, string> = {
   ethereum: process.env.ETHEREUM_RPC_URL || "https://ethereum-rpc.publicnode.com",
   robinhood: process.env.ROBINHOOD_RPC_URL || "https://rpc.mainnet.chain.robinhood.com",
 };
+
+/** The RPC for a read: the project owner's own (Settings → API keys) when set, else ours. */
+export function rpcFor(chain: Chain): string {
+  const k = ownerKeys();
+  if (k.rpc?.[chain]) return k.rpc[chain]!;
+  if (chain === "solana" && k.helius) return `https://mainnet.helius-rpc.com/?api-key=${k.helius}`;
+  return DEFAULT_RPC[chain];
+}
+
+const isHelius = (url: string) => /\.helius-rpc\.com\//.test(url);
 
 export const GECKO_NETWORK: Record<Chain, string> = { near: "near", solana: "solana", ethereum: "eth", robinhood: "robinhood" };
 
@@ -109,7 +120,7 @@ async function solanaBasics(address: string, rpcUrl: string) {
   const sup = await rpc<{ value?: { uiAmount?: number; decimals?: number } }>(rpcUrl, "getTokenSupply", [address]);
   let name: string | null = null, symbol: string | null = null, icon: string | null = null;
   const holders: number | null = null;
-  if (process.env.HELIUS_API_KEY) {
+  if (isHelius(rpcUrl)) {
     const asset = await rpc<{ content?: { metadata?: { name?: string; symbol?: string }; links?: { image?: string } } }>(rpcUrl, "getAsset", { id: address });
     name = asset?.content?.metadata?.name ?? null;
     symbol = asset?.content?.metadata?.symbol ?? null;
@@ -133,7 +144,7 @@ export async function tokenContext(raw: string, preferred?: Chain, rpcOverride?:
   const order = preferred && det.chains.includes(preferred) ? [preferred, ...det.chains.filter((c) => c !== preferred)] : det.chains;
 
   for (const chain of order) {
-    const rpcUrl = rpcOverride || DEFAULT_RPC[chain];
+    const rpcUrl = rpcOverride || rpcFor(chain);
     const pairs = await dexPairs(chain, det.address);
     const best = [...pairs].sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0))[0];
     const tokenAddr = best ? best.baseToken.address : det.address;
@@ -144,7 +155,7 @@ export async function tokenContext(raw: string, preferred?: Chain, rpcOverride?:
     if (chain === "near") basics = await nearBasics(tokenAddr, rpcUrl);
     else if (chain === "solana") basics = await solanaBasics(tokenAddr, rpcUrl);
     else basics = await evmBasics(chain, tokenAddr, rpcUrl);
-    if (basics && (basics.name || basics.symbol || basics.supply != null)) sources.push(chain === "solana" && process.env.HELIUS_API_KEY ? "Helius" : `${chain} RPC`);
+    if (basics && (basics.name || basics.symbol || basics.supply != null)) sources.push(chain === "solana" && isHelius(rpcUrl) ? "Helius" : `${chain} RPC`);
 
     if (!best && !basics?.name && !basics?.symbol) continue;
     return {

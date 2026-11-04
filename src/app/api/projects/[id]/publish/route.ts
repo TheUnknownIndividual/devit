@@ -4,6 +4,7 @@ import { slugTaken, updateProject } from "@/lib/store";
 import { newId } from "@/lib/spec";
 import { publicProject } from "@/lib/public";
 import { RESERVED_SLUGS as RESERVED, siteUrl } from "@/lib/sites";
+import { editable } from "@/lib/accounts";
 
 const Body = z.object({ slug: z.string().trim().toLowerCase().regex(/^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/) });
 
@@ -16,6 +17,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
+  const g = await editable(id);
+  if (g instanceof Response) return g;
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Use 3–32 letters, numbers or dashes." }, { status: 400 });
   const { slug } = parsed.data;

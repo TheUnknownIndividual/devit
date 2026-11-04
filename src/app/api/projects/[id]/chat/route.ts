@@ -10,6 +10,8 @@ import { CHAINS, newId, type Block, type SiteSpec } from "@/lib/spec";
 import { publicProject } from "@/lib/public";
 import { THEMES, fitAccent, readableOn } from "@/lib/themes";
 import { overLimit } from "@/lib/net";
+import { editable, ownerKeysFor } from "@/lib/accounts";
+import { runWithKeys } from "@/lib/keyscope";
 
 const Body = z.object({
   text: z.string().trim().min(1).max(1200),
@@ -34,6 +36,14 @@ function withPosts(spec: SiteSpec): Block[] {
  * and researched; anything else is a page-wide edit.
  */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const g = await editable(id);
+  if (g instanceof Response) return g;
+  // Model calls and chain reads run on the owner's own keys when they've added some.
+  return runWithKeys(await ownerKeysFor(g.p.ownerId), () => chat(req, ctx));
+}
+
+async function chat(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const limited = overLimit(req, "edit", 80);
   if (limited) return limited;
   const { id } = await ctx.params;

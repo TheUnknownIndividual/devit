@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { applyComments } from "@/lib/agent";
-import { getProject, updateProject } from "@/lib/store";
+import { updateProject } from "@/lib/store";
 import { newId } from "@/lib/spec";
 import { publicProject } from "@/lib/public";
 import { overLimit } from "@/lib/net";
+import { editable, ownerKeysFor } from "@/lib/accounts";
+import { runWithKeys } from "@/lib/keyscope";
 
 const Body = z.object({
   comments: z.array(z.object({
@@ -23,12 +25,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Add a comment first." }, { status: 400 });
-  const p = await getProject(id);
-  if (!p?.spec) return NextResponse.json({ error: "not ready" }, { status: 409 });
+  const g = await editable(id);
+  if (g instanceof Response) return g;
+  const { p } = g;
+  if (!p.spec) return NextResponse.json({ error: "not ready" }, { status: 409 });
   const own = new Set((p.assets ?? []).map((a) => a.id));
   const comments = parsed.data.comments.map((c) => ({ ...c, assets: c.assets?.filter((a) => own.has(a)) }));
   const urls = (p.assets ?? []).filter((a) => comments.some((c) => c.assets?.includes(a.id))).map((a) => a.url);
-  const res = await applyComments(p, comments);
+  const res = await runWithKeys(await ownerKeysFor(p.ownerId), () => applyComments(p, comments));
   const out = await updateProject(id, (q) => {
     if (!q.spec) return;
     q.history.push(structuredClone(q.spec));

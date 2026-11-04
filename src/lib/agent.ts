@@ -408,6 +408,8 @@ export async function runBuild(id: string): Promise<void> {
       return;
     }
     p.spec = spec;
+    // Renamed while it was still building: the site had no name of its own yet, so it takes that one.
+    if (p.name) p.spec.name = p.name;
     p.research = found ?? undefined;
     if (refs.length) p.refs = refs;
     p.network.chain = chain;
