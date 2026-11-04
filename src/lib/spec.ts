@@ -258,6 +258,8 @@ export interface Project {
   ownerId?: string;
   /** SHA-256 of the anonymous browser id that made it, until someone signs in on that browser. */
   anon?: string;
+  /** The team workspace it lives in, if any; its members get their role's access. */
+  teamId?: string;
   prompt: string;
   kind: "memecoin" | "dapp" | "nft";
   /** Style picked on the landing page; wins over the one read from the sentence. */

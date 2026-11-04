@@ -4,7 +4,7 @@ import { slugTaken, updateProject } from "@/lib/store";
 import { newId } from "@/lib/spec";
 import { publicProject } from "@/lib/public";
 import { RESERVED_SLUGS as RESERVED, siteUrl } from "@/lib/sites";
-import { editable } from "@/lib/accounts";
+import { editable } from "@/lib/access";
 
 const Body = z.object({ slug: z.string().trim().toLowerCase().regex(/^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/) });
 

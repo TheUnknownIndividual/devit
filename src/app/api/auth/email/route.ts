@@ -4,6 +4,7 @@ import { z } from "zod";
 import { completeMethod, peekChallenge, publicUser, putChallenge, sweepChallenges, takeChallenge } from "@/lib/accounts";
 import { sha256 } from "@/lib/secrets";
 import { overLimit } from "@/lib/net";
+import { sendMail } from "@/lib/mail";
 
 // Email one-time code: six digits, 10 minutes, five tries. Sent through Resend when RESEND_API_KEY is set; in dev
 // without it the code goes to the server log instead.
@@ -16,24 +17,11 @@ const Body = z.discriminatedUnion("step", [
 const key = (email: string) => `email-${sha256(email).slice(0, 40)}`;
 
 async function send(email: string, code: string): Promise<boolean> {
-  const api = process.env.RESEND_API_KEY?.trim();
-  if (!api) {
-    if (process.env.NODE_ENV === "production") return false;
-    console.log(`[sitesmith] sign-in code for ${email}: ${code}`);
-    return true;
-  }
-  const r = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { authorization: `Bearer ${api}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      from: process.env.EMAIL_FROM || "sitesmith <onboarding@resend.dev>",
-      to: [email],
-      subject: `${code} is your sitesmith code`,
-      text: `Your sitesmith sign-in code is ${code}\n\nIt works for 10 minutes. If you didn't ask for it, ignore this email.`,
-    }),
-    signal: AbortSignal.timeout(8000),
-  }).catch(() => null);
-  return !!r?.ok;
+  const sent = await sendMail(email, `${code} is your sitesmith code`, `Your sitesmith sign-in code is ${code}\n\nIt works for 10 minutes. If you didn't ask for it, ignore this email.`);
+  if (sent !== null) return sent;
+  if (process.env.NODE_ENV === "production") return false;
+  console.log(`[sitesmith] sign-in code for ${email}: ${code}`);
+  return true;
 }
 
 export async function POST(req: Request) {

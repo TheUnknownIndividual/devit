@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { deleteProject, getProject, updateProject } from "@/lib/store";
 import { removeUploads } from "@/lib/uploads";
-import { editable } from "@/lib/accounts";
+import { editable } from "@/lib/access";
 import { readableOn, restyle } from "@/lib/themes";
 import { publicProject } from "@/lib/public";
 import { isPublicHttps } from "@/lib/net";
@@ -53,10 +53,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   return NextResponse.json(publicProject(p));
 }
 
-/** Deletes the project, its pictures and, with them, its published site. */
+/** Deletes the project, its pictures and, with them, its published site. Its owner or its team's owner only. */
 export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-  const g = await editable(id);
+  const g = await editable(id, "owner");
   if (g instanceof Response) return g;
   await deleteProject(id);
   await removeUploads(id).catch(() => undefined);

@@ -14,8 +14,10 @@ import type { PublicUser } from "@/lib/accounts";
 import { KEY_LABELS } from "@/lib/apikeys";
 import type { KeyId } from "@/lib/keyscope";
 import { PLANS, type PlanId } from "@/lib/plans";
+import type { TeamView } from "@/lib/team-view";
+import { TeamPanel } from "./TeamPanel";
 
-const SECTIONS = [["account", "Account"], ["methods", "Sign-in methods"], ["keys", "API keys"], ["plan", "Plan"]] as const;
+const SECTIONS = [["account", "Account"], ["methods", "Sign-in methods"], ["keys", "API keys"], ["plan", "Plan"], ["team", "Team"]] as const;
 const MODEL_KEYS: KeyId[] = ["nearai", "anthropic", "openai", "openrouter"];
 const CHAIN_KEYS: KeyId[] = ["helius", "rpc:near", "rpc:solana", "rpc:ethereum", "rpc:robinhood"];
 
@@ -27,7 +29,7 @@ async function send(method: string, path: string, body?: unknown) {
 }
 
 /** usage.cap: the plan's builds a day; fairUse: the cap behind "unlimited". admin: env ADMINS lists this account. */
-export function SettingsView({ initial, usage, admin = false }: { initial: PublicUser; usage: { today: number; cap: number | null; fairUse: number }; admin?: boolean }) {
+export function SettingsView({ initial, usage, admin = false, teams }: { initial: PublicUser; usage: { today: number; cap: number | null; fairUse: number }; admin?: boolean; teams: { list: TeamView[]; canCreate: boolean } }) {
   const router = useRouter();
   const [user, setUser] = useState(initial);
   const [name, setName] = useState(initial.name ?? "");
@@ -129,6 +131,10 @@ export function SettingsView({ initial, usage, admin = false }: { initial: Publi
             </p>
           )}
           {admin && <GrantPlan self={user} onSelf={update} />}
+        </Section>
+
+        <Section id="team" title="Team" hint="Share projects with up to four people. Editors change and publish; viewers open the builder and the live preview without changing anything.">
+          <TeamPanel initial={teams.list} canCreate={teams.canCreate} me={user.id} />
         </Section>
       </div>
     </div>

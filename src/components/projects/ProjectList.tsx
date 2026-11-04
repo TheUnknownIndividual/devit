@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { Copy, Globe, Loader2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Copy, FolderInput, FolderOutput, Globe, Loader2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { ChainIcon } from "@/components/brand";
 import { Dialog } from "@/components/ui/Dialog";
 import { Menu } from "@/components/ui/Menu";
 import { CHAINS, type Chain } from "@/lib/spec";
+import type { Access } from "@/lib/access";
 
 export interface ProjectRow {
   id: string;
@@ -19,6 +20,9 @@ export interface ProjectRow {
   liveUrl: string | null;
   status: "building" | "ready" | "error";
   prompt: string;
+  access: Access;
+  /** This account owns it (not just through a team). */
+  mine: boolean;
 }
 
 /** The project's own logo, or its initial on a plain tile. */
@@ -30,7 +34,10 @@ export function ProjectLogo({ src, name, size = 36 }: { src: string | null; name
 
 const host = (u: string) => u.replace(/^https?:\/\//, "");
 
-export function ProjectList({ rows }: { rows: ProjectRow[] }) {
+type Pick = "rename" | "duplicate" | "delete" | `move:${string}`;
+
+/** `current` is the team being listed (null: personal); `teams` are the ones a project of yours can move into. */
+export function ProjectList({ rows, current = null, teams = [] }: { rows: ProjectRow[]; current?: { id: string; owner: boolean } | null; teams?: Array<{ id: string; name: string }> }) {
   const router = useRouter();
   const [names, setNames] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<string | null>(null);
@@ -56,6 +63,13 @@ export function ProjectList({ rows }: { rows: ProjectRow[] }) {
     const r = await fetch(`/api/projects/${id}/duplicate`, { method: "POST" });
     setBusy(null);
     if (r.ok) router.refresh(); else setError((await r.json().catch(() => ({}))).error ?? "Couldn't duplicate it.");
+  }
+
+  async function move(id: string, teamId: string | null) {
+    setBusy(id); setError(null);
+    const r = await fetch(`/api/projects/${id}/team`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ teamId }) });
+    setBusy(null);
+    if (r.ok) router.refresh(); else setError((await r.json().catch(() => ({}))).error ?? "Couldn't move it.");
   }
 
   async function remove(p: ProjectRow) {
@@ -109,24 +123,34 @@ export function ProjectList({ rows }: { rows: ProjectRow[] }) {
                   <Globe size={13} className="shrink-0" /> <span className="truncate">{host(p.liveUrl)}</span>
                 </a>
               )}
-              {busy === p.id ? <span className="grid h-9 w-9 place-items-center"><Loader2 size={15} className="animate-spin text-zinc-400" /></span> : (
-                <Menu
-                  label={`${title} actions`}
-                  align="right"
-                  width={180}
-                  onPick={(v: "rename" | "duplicate" | "delete") => {
-                    if (v === "rename") { settled.current = false; setDraft(title); setEditing(p.id); }
-                    else if (v === "duplicate") void duplicate(p.id);
-                    else setConfirm({ ...p, title });
-                  }}
-                  items={[
-                    { value: "rename", label: "Rename", icon: <Pencil size={14} /> },
-                    { value: "duplicate", label: "Duplicate", icon: <Copy size={14} />, disabled: p.status === "building" },
-                    { value: "delete", label: "Delete", icon: <Trash2 size={14} className="text-red-300" /> },
-                  ]}
-                  trigger={() => <button type="button" className="btn btn-ghost btn-icon" aria-label={`Actions for ${title}`}><MoreHorizontal size={16} /></button>}
-                />
-              )}
+              {busy === p.id ? <span className="grid h-9 w-9 place-items-center"><Loader2 size={15} className="animate-spin text-zinc-400" /></span> : (() => {
+                const edit = p.access !== "viewer";
+                const items = [
+                  ...(edit ? [
+                    { value: "rename" as Pick, label: "Rename", icon: <Pencil size={14} /> },
+                    { value: "duplicate" as Pick, label: "Duplicate", icon: <Copy size={14} />, disabled: p.status === "building" },
+                  ] : []),
+                  ...(p.mine ? teams.filter((t) => t.id !== current?.id).map((t) => ({ value: `move:${t.id}` as Pick, label: `Move to ${t.name}`, icon: <FolderInput size={14} /> })) : []),
+                  ...(current && (p.mine || current.owner) ? [{ value: "move:" as Pick, label: p.mine ? "Move to Personal" : "Move out of team", icon: <FolderOutput size={14} /> }] : []),
+                  ...(p.access === "owner" ? [{ value: "delete" as Pick, label: "Delete", icon: <Trash2 size={14} className="text-red-300" /> }] : []),
+                ];
+                if (!items.length) return <span className="w-9 shrink-0" />;
+                return (
+                  <Menu
+                    label={`${title} actions`}
+                    align="right"
+                    width={220}
+                    onPick={(v: Pick) => {
+                      if (v === "rename") { settled.current = false; setDraft(title); setEditing(p.id); }
+                      else if (v === "duplicate") void duplicate(p.id);
+                      else if (v.startsWith("move:")) void move(p.id, v.slice(5) || null);
+                      else setConfirm({ ...p, title });
+                    }}
+                    items={items}
+                    trigger={() => <button type="button" className="btn btn-ghost btn-icon" aria-label={`Actions for ${title}`}><MoreHorizontal size={16} /></button>}
+                  />
+                );
+              })()}
             </li>
           );
         })}

@@ -6,6 +6,8 @@ import { buildsToday, getUser, publicUser, viewer } from "@/lib/accounts";
 import { isAdmin, sweepPayments } from "@/lib/billing";
 import { entitled, planOf } from "@/lib/entitlements";
 import { FAIR_USE_BUILDS_PER_DAY, plan } from "@/lib/plans";
+import { teamsOf } from "@/lib/teams";
+import { teamView } from "@/lib/team-view";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Settings · sitesmith" };
@@ -25,6 +27,7 @@ export default async function Settings() {
             initial={publicUser(user)}
             usage={{ today: await buildsToday(`user:${user.id}`), cap: (await entitled(user, "unlimitedBuilds")) ? null : plan(await planOf(user)).buildsPerDay, fairUse: FAIR_USE_BUILDS_PER_DAY }}
             admin={isAdmin(user)}
+            teams={{ list: await Promise.all((await teamsOf(user.id)).map((t) => teamView(t, user))), canCreate: await entitled(user, "teams") }}
           />
         ) : (
           <SignInNudge count={0} />
