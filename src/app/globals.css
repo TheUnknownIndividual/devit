@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; --ease-out: cubic-bezier(.2,.8,.2,1); --ease-spring: cubic-bezier(.34,1.56,.64,1); }
+html, body { background: #08080A; color: #EDEDEF; }
+body { -webkit-font-smoothing: antialiased; }
+::selection { background: rgba(124,156,255,0.35); }
+
+@layer components {
+  /* One button family so every control lines up: same heights, same radius, icon + label. */
+  .btn { @apply relative inline-flex h-9 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] px-3 text-[13px] font-medium leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sel/60 disabled:pointer-events-none disabled:opacity-50; transition: transform .18s var(--ease-out), background-color .2s, border-color .2s, color .2s, box-shadow .25s; }
+  .btn-lg { @apply h-11 rounded-xl px-4 text-[14px]; }
+  .btn-icon { @apply w-9 px-0; }
+  .btn-primary { @apply bg-lime text-ink-950 hover:bg-lime-600; }
+  .btn-ghost { @apply text-zinc-300 hover:bg-white/[0.06] hover:text-white; }
+  .btn-outline { @apply border border-white/10 bg-white/[0.03] text-zinc-200 hover:bg-white/[0.07] hover:text-white; }
+  .chip { @apply relative inline-flex h-8 items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 text-[13px] text-zinc-200 hover:border-white/20 hover:bg-white/[0.08]; transition: transform .18s var(--ease-out), background-color .2s, border-color .2s, color .2s; }
+  .panel { @apply rounded-2xl border border-white/[0.08] bg-ink-900; }
+  .field { @apply h-10 w-full rounded-[10px] border border-white/10 bg-white/[0.04] px-3 text-[14px] text-white placeholder:text-zinc-500 outline-none focus:border-sel/60; }
+  .kbd { @apply rounded border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[11px] text-zinc-400; }
+}
+
+/* ---------- motion ---------- */
+
+/* Press, hover and icon movement on every button and chip. */
+.btn:active:not(:disabled), .chip:active:not(:disabled) { transform: scale(.96); }
+.btn svg, .chip svg { transition: transform .3s var(--ease-spring); }
+.btn:hover .nudge-up { transform: translateY(-2px); }
+.btn:hover .nudge-r, .chip:hover .nudge-r { transform: translateX(3px); }
+.btn:hover .turn, .chip:hover .turn { transform: rotate(90deg); }
+.btn:hover .tilt, .chip:hover .tilt { transform: rotate(-12deg) scale(1.1); }
+.btn:hover .pop, .chip:hover .pop { transform: scale(1.15); }
+.btn-outline:hover { border-color: rgba(255,255,255,.22); }
+
+/* A light sweep across the primary button on hover. */
+.btn-primary { overflow: hidden; }
+.btn-primary::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(105deg, transparent 30%, rgba(255,255,255,.6) 50%, transparent 70%); transform: translateX(-130%); transition: transform .7s var(--ease-out); }
+.btn-primary:hover::after { transform: translateX(130%); }
+.btn-primary:hover { box-shadow: 0 6px 24px -6px rgba(198,242,78,.55); }
+
+/* The prompt box: a slow travelling light along its border while you type. */
+@property --a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.composer { position: relative; }
+.composer::before { content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1px; pointer-events: none; opacity: 0; transition: opacity .5s;
+  background: conic-gradient(from var(--a), transparent 0 55%, rgba(124,156,255,.9) 72%, rgba(198,242,78,.9) 84%, transparent 96%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; animation: spin-a 5s linear infinite; }
+.composer:focus-within::before, .composer[data-live="true"]::before { opacity: 1; }
+@keyframes spin-a { to { --a: 360deg; } }
+
+/* Page entrance: each piece rises a beat after the one before. */
+.enter { animation: enter .8s var(--ease-out) both; animation-delay: calc(var(--d, 0) * 90ms); }
+@keyframes enter { from { opacity: 0; transform: translateY(16px); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+
+/* Scroll reveal (only once JS has marked the page, so nothing hides without it). */
+.fx [data-reveal] { opacity: 0; transform: translateY(18px); transition: opacity .7s var(--ease-out), transform .7s var(--ease-out); transition-delay: calc(var(--d, 0) * 80ms); }
+.fx [data-reveal].in { opacity: 1; transform: none; }
+
+/* Cards light up where the cursor is. */
+.spot { position: relative; isolation: isolate; }
+.spot::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity .3s; z-index: -1;
+  background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%), rgba(124,156,255,.12), transparent 45%); }
+.spot:hover::after { opacity: 1; }
+
+/* Hero backdrop: the colour fields lean a little toward the cursor, a soft light follows it and the dots under it brighten. */
+.hero { --hx: .5; --hy: .35; --px: 50%; --py: 35%; }
+.hero .field-a, .hero .field-b, .hero .field-c { transition: transform 1.6s var(--ease-out); will-change: transform; }
+.hero .field-a { transform: translate3d(calc((var(--hx) - .5) * 60px), calc((var(--hy) - .5) * 40px), 0); }
+.hero .field-b { transform: translate3d(calc((var(--hx) - .5) * -45px), calc((var(--hy) - .5) * 30px), 0); }
+.hero .field-c { transform: translate3d(calc((var(--hx) - .5) * 30px), calc((var(--hy) - .5) * -35px), 0); }
+.hero .hero-light { opacity: 0; transition: opacity .6s; background: radial-gradient(520px circle at var(--px) var(--py), rgba(124,156,255,.14), rgba(198,242,78,.04) 40%, transparent 65%); }
+.hero .hero-dots { opacity: 0; transition: opacity .6s; -webkit-mask-image: radial-gradient(220px circle at var(--px) var(--py), #000, transparent 70%); mask-image: radial-gradient(220px circle at var(--px) var(--py), #000, transparent 70%); }
+.hero:hover .hero-light, .hero:hover .hero-dots { opacity: 1; }
+@media (hover: none) { .hero .hero-light, .hero .hero-dots { display: none; } }
+
+/* Height-animated reveal for rows that appear inside the prompt box. */
+.grow { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .45s var(--ease-out), opacity .35s; opacity: 0; }
+.grow[data-open="true"] { grid-template-rows: 1fr; opacity: 1; }
+.grow > * { overflow: hidden; min-height: 0; }
+
+.stagger > * { animation: enter .5s var(--ease-out) both; }
+.stagger > *:nth-child(2) { animation-delay: 60ms; } .stagger > *:nth-child(3) { animation-delay: 120ms; } .stagger > *:nth-child(4) { animation-delay: 180ms; } .stagger > *:nth-child(5) { animation-delay: 240ms; } .stagger > *:nth-child(6) { animation-delay: 300ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}

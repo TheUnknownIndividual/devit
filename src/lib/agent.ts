@@ -1,0 +1,612 @@
+import { z } from "zod";
+import { askJson, llmAvailable } from "./llm";
+import { tokenContext } from "./chain";
+import { readIntent, type Intent } from "./intent";
+import { research } from "./research";
+import { readReference } from "./reference";
+import { withoutRefs as withoutRefsText } from "./reference-urls";
+import { orderLike, refBlockOrder, refLine, themeFromRef, themeForRef } from "./ref-style";
+import { THEMES, THEME_LABELS, THEME_NOTES, colorFromText, fitAccent, fxOf, readableOn, referenceIn, restyle, themeNamed } from "./themes";
+import { updateProject } from "./store";
+import { BLOCK_LABELS, CHAINS, THEME_IDS, newId, type Asset, type Block, type BlockType, type Chain, type PendingComment, type Project, type RefRead, type Research, type SiteSpec, type ThemeFx, type ThemeId, type TokenInfo, type TokenLink } from "./spec";
+
+// The build pipeline: prompt → intent → chain data → style → copy → blocks.
+// Each step is written to the project as it runs so the builder can animate it.
+
+const MIN_STEP_MS = 420;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+type StepOut = string | null | { skipped: string };
+
+async function step(id: string, stepId: string, title: string, run: () => Promise<StepOut>): Promise<void> {
+  const started = Date.now();
+  await updateProject(id, (p) => {
+    p.steps.push({ id: stepId, title, detail: "", state: "running", at: started });
+  });
+  let detail: string | null = null;
+  let state: "done" | "skipped" | "error" = "done";
+  try {
+    const out = await run();
+    if (out === null) state = "skipped";
+    else if (typeof out === "object") { state = "skipped"; detail = out.skipped; }
+    else detail = out;
+  } catch (e) {
+    state = "error";
+    detail = e instanceof Error ? e.message : "failed";
+  }
+  const left = MIN_STEP_MS - (Date.now() - started);
+  if (left > 0) await sleep(left);
+  await updateProject(id, (p) => {
+    const s = p.steps.find((x) => x.id === stepId);
+    if (s) { s.state = state; s.detail = detail ?? "Skipped"; s.at = Date.now(); }
+  });
+}
+
+// ---------- copy ----------
+
+interface Copy {
+  name: string;
+  ticker: string;
+  tagline: string;
+  headline: string;
+  subhead: string;
+  cta: string;
+  how: { title: string; body: string }[];
+  faq: { q: string; a: string }[];
+  roadmap: { when: string; title: string; body: string }[];
+  story: { title: string; body: string; points: string[] } | null;
+}
+
+const CopySchema = z.object({
+  name: z.string().min(1).max(40),
+  ticker: z.string().min(1).max(12),
+  tagline: z.string().min(1).max(120),
+  theme: z.enum(THEME_IDS).optional(),
+  accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  headline: z.string().min(1).max(80),
+  subhead: z.string().min(1).max(240),
+  cta: z.string().min(1).max(24),
+  how: z.array(z.object({ title: z.string().max(40), body: z.string().max(200) })).min(3).max(4),
+  faq: z.array(z.object({ q: z.string().max(120), a: z.string().max(400) })).min(2).max(5),
+  roadmap: z.array(z.object({ when: z.string().max(16), title: z.string().max(48), body: z.string().max(160) })).min(2).max(4),
+  story: z.object({ title: z.string().max(40), body: z.string().max(700), points: z.array(z.string().max(180)).max(4) }).nullable().optional(),
+});
+
+function walletWord(chain: Chain): string {
+  return chain === "solana" ? "Phantom, Solflare or Backpack" : chain === "near" ? "HOT, Meteor or Intear" : "MetaMask, Rabby or any WalletConnect wallet";
+}
+
+function firstLine(t: string | null | undefined, max: number): string | null {
+  const s = (t ?? "").replace(/https?:\/\/\S+/g, "").split(/\n+/).map((x) => x.trim()).find((x) => x.length > 8);
+  if (!s) return null;
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), max - 20)).replace(/[,;:\s]+$/, "")}…`;
+}
+
+/** Say it the way they say it: capitals, lowercase, their sign-off. */
+function inVoice(text: string, r: Research | null): string {
+  const v = r?.x?.voice;
+  if (!v) return text;
+  let out = text;
+  if (v.caps > 0.5) out = out.toUpperCase();
+  else if (v.lowercase > 0.6) out = out.toLowerCase();
+  if (v.signature && !out.endsWith(v.signature)) out = `${out} ${v.signature}`;
+  return out;
+}
+
+/** Without a style named, the team's own voice picks one. */
+export function themeFromResearch(r: Research | null): ThemeId | null {
+  const v = r?.x?.voice;
+  if (v && v.caps > 0.5) return "degen";
+  if (v && v.lowercase > 0.6) return "cozy";
+  if (r && !r.meme && r.utility.length) {
+    // What the project does picks the look its users already know: a trading tool reads like a terminal, a
+    // protocol like DeFi, a wallet like a wallet app.
+    const u = r.utility.join(" ");
+    if (/\b(trading|terminal|sniper|bot|perps?|copy[- ]?trad)/i.test(u)) return "terminal";
+    if (/\b(wallet|payments?|app)\b/i.test(u)) return "app";
+    if (/\b(swaps?|yield|liquidity|protocol|bridge|staking|stake|dex|vaults?)\b/i.test(u)) return "glass";
+    return "clean";
+  }
+  return null;
+}
+
+function offlineStory(r: Research | null, theme: ThemeId): Copy["story"] {
+  if (!r?.lore && !r?.utility.length) return null;
+  const title = theme === "retro" ? "Lore" : theme === "cozy" ? "our story" : r.meme ? "The lore" : "What it is";
+  return { title, body: r.lore ?? "", points: r.meme ? [] : r.utility.slice(0, 3) };
+}
+
+function offlineCopy(intent: Intent, token: TokenInfo | null, chain: Chain, r: Research | null = null): Copy {
+  const ticker = (token?.symbol || intent.ticker || intent.name || "TOKEN").toUpperCase().slice(0, 12);
+  const name = token?.name || intent.name || ticker;
+  const native = CHAINS[chain].native;
+  const chainName = CHAINS[chain].name;
+  const lines: Record<ThemeId, { headline: string; subhead: string; cta: string; tagline: string }> = {
+    degen: { headline: `${ticker} to the top`, subhead: `${name} on ${chainName}. No roadmap theatre, no promises. Just the chart and the people holding it.`, cta: `Buy $${ticker}`, tagline: `The ${chainName} coin that doesn't sit still.` },
+    clean: { headline: `${name}, built in the open`, subhead: `A community token on ${chainName}. Every number on this page is read from the chain when you open it.`, cta: `Buy ${ticker}`, tagline: `A community token on ${chainName}.` },
+    retro: { headline: `Insert coin: ${ticker}`, subhead: `An 8-bit coin on ${chainName}. Collect it, hold it, climb the high-score table.`, cta: "Insert coin", tagline: `Player one has entered ${chainName}.` },
+    cozy: { headline: `the ${name.toLowerCase()} corner of ${chainName}`, subhead: `sit down, stay a while. $${ticker} is a small coin with a big blanket.`, cta: `Get $${ticker}`, tagline: `a cozy coin on ${chainName}.` },
+    terminal: { headline: `$${ticker}, live on ${chainName}`, subhead: `Price, liquidity and every trade, read from the chain as it happens. Buy from this page in two clicks.`, cta: `Trade $${ticker}`, tagline: `${name} on ${chainName}, live.` },
+    app: { headline: `Meet ${name}`, subhead: `${name} lives on ${chainName}. Connect a wallet, pick an amount, done. No exchange account needed.`, cta: `Get $${ticker}`, tagline: `${name} on ${chainName}.` },
+    brutal: { headline: `${ticker}. No noise.`, subhead: `A coin on ${chainName}. The chart is the chart. The contract is the contract. Both are below.`, cta: `Buy $${ticker}`, tagline: `${ticker} on ${chainName}. That's it.` },
+    glass: { headline: `${name} on ${chainName}`, subhead: `Swap into $${ticker} from any chain, with price and liquidity read live from ${chainName}.`, cta: `Swap to ${ticker}`, tagline: `${name}, on ${chainName}.` },
+  };
+  const l = { ...lines[intent.theme] };
+  // Their own words beat ours: the bio or site line for the tagline, the story for the subhead.
+  const bio = firstLine(r?.x?.profile.bio, 110) ?? firstLine(r?.website?.title, 110) ?? firstLine(r?.website?.description, 110);
+  if (bio) l.tagline = bio;
+  // The story block tells the lore in full; the hero gets its first sentence, or their bio.
+  const opener = r?.lore?.split(/(?<=[.!?])\s+/)[0];
+  const sub = firstLine(r?.x?.profile.bio, 200) ?? (opener && opener.length <= 200 ? opener : null);
+  if (sub && sub !== r?.lore) l.subhead = sub;
+  l.headline = inVoice(l.headline, r);
+  return {
+    name, ticker, ...l,
+    story: offlineStory(r, intent.theme),
+    how: [
+      { title: "Get a wallet", body: `${walletWord(chain)}. Any ${chainName} wallet works.` },
+      { title: `Get ${native}, or don't`, body: `Holding something on another chain? The buy box takes SOL, ETH, BTC or USDC and swaps it through NEAR Intents.` },
+      { title: `Buy $${ticker}`, body: "Type an amount in the buy box, check the quote and confirm in your wallet." },
+    ],
+    faq: [
+      { q: `Where does $${ticker} trade?`, a: token?.dexId ? `On ${token.dexId} on ${chainName}. The buy box on this page routes your order there.` : `On ${chainName}. The buy box on this page finds the best route.` },
+      { q: `Can I buy without ${native}?`, a: "Yes. Choose \"Any chain\" in the buy box and pay from Solana, Ethereum, Bitcoin or NEAR. It arrives in your wallet as the token." },
+      { q: "Where do the numbers come from?", a: `Price, market cap and holders are read live${token?.sources.length ? ` from ${token.sources.join(", ")}` : " from the chain"} each time the page opens.` },
+    ],
+    roadmap: [
+      { when: "Done", title: "Launch", body: `Live on ${chainName}.` },
+      { when: "Now", title: "[YOUR NEXT GOAL]", body: "Replace with what the community is working on." },
+      { when: "Next", title: "[LATER GOAL]", body: "Replace with what comes after." },
+    ],
+  };
+}
+
+async function writeCopy(prompt: string, intent: Intent, token: TokenInfo | null, chain: Chain, r: Research | null, refs: RefRead[] = []): Promise<{ copy: Copy; via: string; theme: ThemeId; accent: string | null }> {
+  const fallback = offlineCopy(intent, token, chain, r);
+  if (!llmAvailable()) return { copy: fallback, via: "offline writer", theme: intent.theme, accent: intent.accent };
+  const system = [
+    "You write landing page copy for crypto token websites. Short, punchy, specific to the token. No price predictions, no promises of returns, no invented numbers.",
+    `Themes: ${THEME_IDS.map((t) => `${t} (${THEME_NOTES[t]})`).join(", ")}.`,
+    "Roadmap items you cannot know must be placeholders in square brackets like [YOUR NEXT GOAL].",
+    "You get research on the project: its own descriptions, its website and its recent X posts. Use it.",
+    "Write in the team's own voice as measured from their posts (capitals or lowercase, emoji habits, sign-off, pet words). Reuse their phrases; never copy a whole post.",
+    "story: the lore in 2-4 sentences from their own descriptions (what it is, where the name or mascot comes from). points: real utility only if the research names it, else []. If there's nothing to go on, story is null.",
+    "Never invent partnerships, listings, numbers or utility the research doesn't state.",
+    "how: buying happens in the buy box on this site (Buy section, it also takes other coins from any chain). Never send people to another DEX or app, and never put the contract address in the text (the site shows it with a copy button).",
+    "You may get reference sites the team likes: match their mood and how much they say per section (punchy or wordy, jokey or serious), never their words, names or claims.",
+    "JSON keys: name, ticker, tagline, theme, accent (#rrggbb, optional), headline (<=8 words), subhead, cta (<=3 words), how[3]{title,body}, faq[3]{q,a}, roadmap[3]{when,title,body}, story{title,body,points[]}|null.",
+  ].join("\n");
+  const user = JSON.stringify({
+    request: prompt,
+    chain: CHAINS[chain].name,
+    token: token ? { name: token.name, symbol: token.symbol, dex: token.dexId } : null,
+    suggestedTheme: intent.theme,
+    research: r ? {
+      descriptions: r.descriptions.map((d) => ({ source: d.source, text: d.text.slice(0, 900) })),
+      website: r.website ? { title: r.website.title, description: r.website.description, text: r.website.excerpt?.slice(0, 900) } : null,
+      x: r.x ? { handle: r.x.profile.handle, bio: r.x.profile.bio, voice: r.x.voice, posts: r.x.posts.slice(0, 12).map((p) => p.text.slice(0, 280)) } : null,
+      links: r.links.map((l) => l.label),
+    } : null,
+    references: refs.length ? refs.map((x) => ({ site: x.host, look: x.notes, sections: refBlockOrder(x) })) : undefined,
+  });
+  const res = await askJson(system, user, (v) => {
+    const p = CopySchema.safeParse(v);
+    return p.success ? p.data : null;
+  });
+  if (!res) return { copy: fallback, via: "offline writer", theme: intent.theme, accent: intent.accent };
+  const { theme, accent, ...copy } = res.value;
+  return { copy: { ...copy, story: copy.story ?? null, ticker: copy.ticker.replace(/^\$/, "").toUpperCase() }, via: res.via, theme: theme ?? intent.theme, accent: intent.accent ?? accent ?? null };
+}
+
+// ---------- layout ----------
+
+function block(type: BlockType, props: Record<string, unknown>): Block {
+  return { id: `${type}-${newId(5)}`, type, props };
+}
+
+function layout(copy: Copy, token: TokenInfo | null, wants: Set<BlockType>, themeId: ThemeId, r: Research | null): Block[] {
+  const hasPair = !!token?.pairAddress;
+  // Each style leads with what its kind of site leads with: a terminal puts the chart and tape first,
+  // wallet apps and glass DeFi a big centred headline, brutalist sites a huge one.
+  const hero = {
+    terminal: { layout: "split", size: "md" },
+    app: { layout: "center", size: "xl" },
+    brutal: { layout: "split", size: "xl" },
+    glass: { layout: "center", size: "lg" },
+  }[themeId as string] ?? { layout: "split", size: "lg" };
+  const blocks: Block[] = [
+    block("nav", {}),
+    block("hero", { headline: copy.headline, subhead: copy.subhead, cta: copy.cta, ...hero }),
+    block("stats", { items: ["price", "marketCap", token?.holders != null ? "holders" : "liquidity", "volume24h"] }),
+  ];
+  const chart = hasPair || wants.has("chart") ? block("chart", { title: "Chart" }) : null;
+  const trades = hasPair || wants.has("trades") ? block("trades", { title: themeId === "retro" ? "Live buys" : "Live trades" }) : null;
+  const buy = block("buy", { title: `Buy $${copy.ticker}` });
+  if (themeId === "terminal") blocks.push(...[chart, trades, buy].filter((b): b is Block => !!b));
+  else blocks.push(buy);
+  if (copy.story && (copy.story.body || copy.story.points.length)) blocks.push(block("story", { title: copy.story.title, body: copy.story.body, points: copy.story.points }));
+  if (themeId !== "terminal") blocks.push(...[chart, trades].filter((b): b is Block => !!b));
+  blocks.push(block("how", { title: "How to buy", steps: copy.how }));
+  if (wants.has("tokenomics")) blocks.push(block("tokenomics", { title: "Tokenomics", style: "bar", rows: [{ label: "[LIQUIDITY]", pct: 80 }, { label: "[COMMUNITY]", pct: 15 }, { label: "[TEAM]", pct: 5 }] }));
+  if (wants.has("holders")) blocks.push(block("holders", { title: themeId === "retro" ? "Hi-scores" : "Holders" }));
+  if (wants.has("treasury")) blocks.push(block("treasury", { title: "Treasury", body: "Balances of the community multisig, read live.", account: "" }));
+  if (wants.has("roadmap") || themeId === "clean" || themeId === "retro") blocks.push(block("roadmap", { title: themeId === "retro" ? "Levels" : "Roadmap", items: copy.roadmap }));
+  blocks.push(block("faq", { title: "FAQ", items: copy.faq }));
+  if (r?.x?.posts.length) blocks.push(block("posts", { title: themeId === "cozy" ? `from @${r.x.profile.handle}` : `From @${r.x.profile.handle}`, count: 3 }));
+  blocks.push(block("socials", { title: "Join us" }));
+  blocks.push(block("footer", { disclaimer: `$${copy.ticker} is a memecoin with no promise of value. Nothing here is financial advice.` }));
+  return blocks;
+}
+
+const article = (w: string) => `${/^[aeiou]/i.test(w) ? "an" : "a"} ${w}`;
+
+const KIND_LABEL: Record<string, string> = { x: "X", telegram: "Telegram", website: "website" };
+
+/** Socials and website as the site shows them. */
+export function siteLinks(r: Research): TokenLink[] {
+  return r.links.filter((l) => l.type !== "x-community" || !r.links.some((x) => x.type === "x")).map((l) => ({ type: l.type === "x" ? "twitter" : l.type, label: l.label, url: l.url }));
+}
+
+/** One line on what research found and, for what it didn't, how to add it. */
+export function foundLine(r: Research): string {
+  const bits = r.links.filter((l) => ["x", "telegram", "website", "discord"].includes(l.type)).map((l) => (l.type === "x" ? `X @${l.url.split("/").pop()}` : l.type === "website" ? l.url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "") : l.label));
+  const found = bits.length ? `I found ${bits.join(", ")}${r.x?.posts.length ? ` and read ${r.x.posts.length} recent posts to match your voice` : ""}.` : "I couldn't find any socials for this one yet.";
+  const missing = r.missing.map((m) => KIND_LABEL[m]);
+  const ask = missing.length ? ` I couldn't find your ${missing.join(" or ")}: paste ${missing.length > 1 ? "them" : "it"} here (a link or @handle) and I'll add ${missing.length > 1 ? "them" : "it"}.` : "";
+  return found + ask;
+}
+
+export async function runBuild(id: string): Promise<void> {
+  const start = await updateProject(id, () => {});
+  if (!start) return;
+  const prompt = start.prompt;
+  let intent = readIntent(prompt, start.network.chain);
+  let token: TokenInfo | null = null;
+  let chain: Chain = intent.chain ?? start.network.chain;
+  let found: Research | null = null;
+  let copyRes: Awaited<ReturnType<typeof writeCopy>> | null = null;
+  const given = start.socials ?? {};
+
+  await step(id, "intent", "Reading your request", async () => {
+    const bits = [intent.ticker ? `$${intent.ticker}` : null, intent.address ? "contract address found" : null, intent.chain ? CHAINS[intent.chain].name : null, given.x ? `@${given.x.replace(/^@/, "").split("/").pop()}` : null].filter(Boolean);
+    return bits.length ? bits.join(" · ") : "No token yet, building from the description";
+  });
+
+  await step(id, "chain", "Reading the chain", async () => {
+    if (!intent.address) return { skipped: "No contract address yet" };
+    token = await tokenContext(intent.address, intent.chain ?? undefined, start.network.rpcUrl);
+    if (!token) throw new Error("Couldn't find that token on NEAR, Solana, Ethereum or Robinhood Chain");
+    const t: TokenInfo = token;
+    chain = t.chain;
+    const facts = [t.name, `$${t.symbol}`, CHAINS[t.chain].name, t.holders != null ? `${t.holders.toLocaleString("en-US")} holders` : null].filter(Boolean);
+    return `${facts.join(" · ")} (via ${t.sources.join(", ") || "chain"})`;
+  });
+
+  await step(id, "research", "Finding socials and the story", async () => {
+    if (!token && !Object.values(given).some(Boolean)) return { skipped: "Nothing to look up without a contract address or socials" };
+    found = await research(token, given);
+    const r: Research = found;
+    const kinds = r.links.filter((l) => ["x", "telegram", "website", "discord"].includes(l.type)).map((l) => l.label);
+    const from = r.sources.filter((x) => x !== "X" && x !== "X profile");
+    return `${kinds.length ? kinds.join(", ") : "No socials found"}${from.length ? ` · from ${from.join(", ")}` : ""}${r.lore ? " · story found" : ""}`;
+  });
+
+  await step(id, "voice", "Reading their X", async () => {
+    const r = found as Research | null;
+    if (!r?.x) return { skipped: r?.links.some((l) => l.type === "x") ? "X didn't answer, so I used the bio and site instead" : "No X account found" };
+    const v = r.x.voice;
+    const notes = v.notes.length ? v.notes.slice(0, 3).join(", ") : "plain voice";
+    return `@${r.x.profile.handle}${r.x.profile.followers != null ? ` · ${r.x.profile.followers.toLocaleString("en-US")} followers` : ""} · ${r.x.posts.length ? `${r.x.posts.length} posts, ${notes}` : "profile only"}`;
+  });
+
+  // Reference sites: their look and motion, read in a browser. Their sections join the ones the site shows.
+  const refs: RefRead[] = [];
+  await step(id, "reference", "Studying the reference site", async () => {
+    if (!intent.refs.length) return { skipped: "No reference site given (add one with ref: https://…)" };
+    const read = (await Promise.all(intent.refs.map((u) => readReference(u).catch(() => null)))).filter((x): x is RefRead => !!x);
+    refs.push(...read);
+    if (!read.length) throw new Error(`Couldn't open ${intent.refs.map((u) => new URL(u).hostname).join(", ")}`);
+    for (const t of read.flatMap(refBlockOrder)) if (["tokenomics", "roadmap", "faq", "holders"].includes(t)) intent.wants.add(t);
+    return read.map((x) => `${x.host} · ${x.notes.slice(0, 5).join(", ")}`).join(" | ");
+  });
+  if (refs.length && !start.style && !themeNamed(withoutRefsText(prompt))) {
+    const t = themeForRef(refs[0]);
+    if (t) intent = { ...intent, theme: t };
+  }
+
+  // Their voice picks the style when neither the landing page nor the sentence did.
+  if (!start.style && !themeNamed(prompt) && !refs.length) {
+    const t = themeFromResearch(found);
+    if (t) intent = { ...intent, theme: t };
+  }
+
+  await step(id, "copy", "Writing the copy", async () => {
+    copyRes = await writeCopy(prompt, intent, token, chain, found, refs);
+    if (start.style) copyRes = { ...copyRes, theme: start.style };
+    return `${copyRes.copy.headline} (${copyRes.via})`;
+  });
+
+  await step(id, "style", "Picking a style", async () => {
+    const themeId = copyRes!.theme;
+    intent = { ...intent, theme: themeId };
+    // Their own colour beats a guessed one, unless the sentence named a colour. Cozy keeps its ink accent.
+    const brand = (found as Research | null)?.brand;
+    const fitted = brand ? fitAccent(brand.color, THEMES[themeId].dark) : null;
+    if (fitted && !intent.accent && themeId !== "cozy") copyRes = { ...copyRes!, accent: fitted };
+    // Without a brand colour, a product named as the look ("like Axiom") lends its own.
+    const lent = !fitted && !intent.accent && intent.ref?.accent && themeId === intent.ref.theme ? intent.ref.accent : null;
+    if (lent) copyRes = { ...copyRes!, accent: lent };
+    const from = brand && copyRes!.accent === fitted ? ` from their ${brand.from}` : lent ? ` from ${intent.ref!.name}` : "";
+    return `${THEME_LABELS[themeId]}${copyRes!.accent ? ` · accent ${copyRes!.accent}${from}` : ""}`;
+  });
+
+  let spec: SiteSpec | null = null;
+  await step(id, "blocks", "Laying out blocks", async () => {
+    const c = copyRes!;
+    const r = found as Research | null;
+    const base = THEMES[c.theme];
+    let theme = c.accent ? { ...base, accent: c.accent, accentText: readableOn(c.accent) } : { ...base };
+    let blocks = layout(c.copy, token, intent.wants, c.theme, r);
+    // A reference's look over the style, the team's brand colour (or a colour they named) kept; its section order.
+    if (refs.length) {
+      const brand = intent.accent ?? (r?.brand ? c.accent : null);
+      theme = await themeFromRef(refs[0], theme, brand);
+      blocks = orderLike(blocks, refBlockOrder(refs[0]));
+    }
+    spec = {
+      name: c.copy.name, ticker: c.copy.ticker, tagline: c.copy.tagline, chain, theme, token, blocks,
+      links: r ? siteLinks(r) : undefined,
+      x: r?.x ? { profile: r.x.profile, posts: r.x.posts.slice(0, 6) } : null,
+    };
+    return blocks.filter((b) => b.type !== "nav" && b.type !== "footer").map((b) => BLOCK_LABELS[b.type].toLowerCase()).join(", ");
+  });
+
+  await step(id, "wallet", "Wiring wallet and buy box", async () => {
+    const venue = chain === "solana" ? "in-site swaps through Jupiter" : chain === "near" ? "in-site swaps on every launchpad and Rhea through neartrade" : "in-site swaps through KyberSwap";
+    const wallets = chain === "solana" ? "Phantom, Solflare, Backpack" : chain === "near" ? "HOT, Meteor, Intear" : "MetaMask, Rabby, Coinbase";
+    return `${wallets} · ${venue} · any-chain buys through NEAR Intents`;
+  });
+
+  await updateProject(id, (p) => {
+    if (!spec) {
+      p.status = "error";
+      p.messages.push({ id: newId(), role: "agent", text: "I couldn't build this one. Try adding the token name or contract address.", at: Date.now() });
+      return;
+    }
+    p.spec = spec;
+    p.research = found ?? undefined;
+    if (refs.length) p.refs = refs;
+    p.network.chain = chain;
+    p.status = "ready";
+    p.version += 1;
+    const t = (spec as SiteSpec).token;
+    const style = THEME_LABELS[(spec as SiteSpec).theme.id].toLowerCase().replace("defi", "DeFi");
+    const r = found as Research | null;
+    const built = t
+      ? `Built ${article(style)} site for $${(spec as SiteSpec).ticker} on ${CHAINS[t.chain].name}. Price, holders and trades are live.`
+      : `Built ${article(style)} site. Paste your contract address here to pull in the live price, logo and socials.`;
+    p.messages.push({
+      id: newId(), role: "agent", at: Date.now(), via: copyRes?.via,
+      text: `${built}${refs.length ? ` ${refLine(refs[0], (spec as SiteSpec).theme, refBlockOrder(refs[0]).length > 1)}` : ""}${r ? ` ${foundLine(r)}` : " Paste your X handle and I'll match the copy to how you post."} Click any block in the preview to comment on it.`,
+    });
+  });
+}
+
+// ---------- edits from comments ----------
+
+/** A look the words ask the whole site to take: a product ("like Axiom") or a style word next to style/look/make it. */
+function lookNamed(t: string): ThemeId | null {
+  const ref = referenceIn(t);
+  if (ref && /\b(like|style|look|feel|vibes?|similar|à la|inspired)\b/i.test(t)) return ref.theme;
+  if (!/\b(style|theme|look|feel|vibe|make it|whole|site)\b/i.test(t)) return null;
+  const id = themeNamed(t);
+  // Only words that name a look, not words about the project ("make it about the dog" stays as it is).
+  return id && themeNamed(t.replace(/\b(trading|trader|perps?|dashboard|sniper|analytics|wallet|fintech|payments?|app|defi|dex|swaps?|yield|liquidity|bridge|protocol|game|gaming|frog|bunny|treasury|dao|community|grants?|ape|pump|moon|dog|cat|wif|bonk|send)\b/gi, "")) === id ? id : null;
+}
+
+/** Effect changes a comment asks for, or null when it asks for none. */
+export function fxEdit(text: string, cur: ThemeFx): ThemeFx | null {
+  const fx = { ...cur };
+  // Clause by clause, so "remove the ticker and use a grid background" doesn't remove the background too.
+  for (const t of text.split(/[,;.]|\b(?:and|then|but|also|plus)\b/i)) fxClause(t, fx);
+  return (Object.keys(fx) as (keyof ThemeFx)[]).some((k) => fx[k] !== cur[k]) ? fx : null;
+}
+
+function fxClause(t: string, fx: ThemeFx): void {
+  const off = /\b(no|remove|delete|hide|drop|without|lose|kill|stop)\b/i.test(t);
+  if (/\b(ticker|marquee|scrolling (strip|text|banner|bar))\b/i.test(t)) fx.ticker = !off;
+  if (/\b(background|bg|behind)\b/i.test(t)) {
+    if (off || /\bplain\b/i.test(t)) fx.bg = "none";
+    else if (/\bgrid\b/i.test(t) && !/\bdots?\b/i.test(t)) fx.bg = "grid";
+    else if (/\b(dots?|dotted|polka)\b/i.test(t)) fx.bg = "dots";
+    else if (/\bglow(ing)?\b/i.test(t)) fx.bg = "glow";
+    else if (/\b(orbs?|blobs?|bubbles?)\b/i.test(t)) fx.bg = "orbs";
+    else if (/\bstripe[sd]?\b/i.test(t)) fx.bg = "stripes";
+  }
+  if (/\b(cards?|panels?|boxes|surfaces?)\b/i.test(t)) {
+    if (/\b(glass(y)?|frosted|blur(red)?)\b/i.test(t)) fx.surface = "glass";
+    else if (/\b(hard|offset|brutal(ist)?|sticker)\b/i.test(t)) fx.surface = "offset";
+    else if (/\b(soft|shadows?|floating|lifted)\b/i.test(t)) fx.surface = "soft";
+    else if (/\b(flat|outlined?|thin borders?)\b/i.test(t)) fx.surface = "outline";
+  }
+  if (/\b(denser|dense|more compact|tighter|less space|less padding)\b/i.test(t)) fx.density = "compact";
+  else if (/\b(more (space|room|breathing room|padding)|airier|airy|spacious|less cramped)\b/i.test(t)) fx.density = "airy";
+  if (/\b(animations?|motion|moving|movement)\b/i.test(t) || /\bbouncy|bouncier\b/i.test(t)) {
+    if (/\b(bouncy|bouncier|playful|fun|more)\b/i.test(t)) fx.motion = "bouncy";
+    else if (/\b(calm|calmer|subtle|less|slower|gentle)\b/i.test(t)) fx.motion = "calm";
+    else if (/\b(snappy|snappier|faster|quick|sharp)\b/i.test(t)) fx.motion = "snappy";
+  }
+  if (/\bbuttons?\b/i.test(t)) {
+    if (/\b(pill|rounded|round)\b/i.test(t)) fx.pill = !off;
+    else if (/\b(square|sharp|boxy)\b/i.test(t)) fx.pill = false;
+  }
+}
+
+const EditSchema = z.object({
+  blocks: z.array(z.object({ id: z.string(), props: z.record(z.string(), z.unknown()).optional(), remove: z.boolean().optional() })),
+  theme: z.object({
+    accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+    id: z.enum(THEME_IDS).optional(),
+    fx: z.object({
+      bg: z.enum(["none", "grid", "dots", "glow", "orbs", "stripes"]), surface: z.enum(["outline", "soft", "glass", "offset"]),
+      motion: z.enum(["snappy", "calm", "bouncy"]), density: z.enum(["compact", "regular", "airy"]), ticker: z.boolean(), pill: z.boolean(),
+      reveal: z.enum(["rise", "fade", "scale", "blur", "slide", "none"]), hover: z.enum(["lift", "scale", "glow", "none"]), parallax: z.boolean(),
+    }).partial().optional(),
+    radius: z.number().min(0).max(40).optional(),
+  }).optional(),
+  logo: z.string().max(300).optional(),
+  summary: z.string().max(400),
+});
+
+/** Pictures on a block or as the logo are only ever the team's own uploads (or what was there already), never a url a model made up. */
+function keepOwnImages(next: SiteSpec, prev: SiteSpec, allowed: Set<string>): void {
+  for (const b of next.blocks) {
+    const img = b.props.image;
+    if (img === undefined) continue;
+    const before = prev.blocks.find((x) => x.id === b.id)?.props.image;
+    if (typeof img !== "string" || (!allowed.has(img) && img !== before)) delete b.props.image;
+  }
+  if (next.logo && !allowed.has(next.logo) && next.logo !== prev.logo) next.logo = prev.logo ?? null;
+}
+
+/** Offline: an uploaded picture goes where the comment says (the logo when it says so), else on the commented hero or story. */
+function placeImages(next: SiteSpec, comments: PendingComment[], assets: Map<string, Asset>): string[] {
+  const done: string[] = [];
+  for (const c of comments) {
+    const a = (c.assets ?? []).map((id) => assets.get(id)).find(Boolean);
+    if (!a) continue;
+    const b = next.blocks.find((x) => x.id === c.blockId);
+    if (/\b(logo|icon|pfp|avatar)\b/i.test(c.text) || !b || !["hero", "story"].includes(b.type)) next.logo = a.url;
+    else b.props.image = a.url;
+    done.push(c.text);
+  }
+  return done;
+}
+
+/** The card corner radius a comment asks for, or null. Site-wide: the blocks share one radius token. */
+export function radiusEdit(t: string, cur: number): number | null {
+  if (/\bbuttons?\b/i.test(t) && !/\b(cards?|blocks?|boxes|sections?|corners?|everything|these|them|all)\b/i.test(t)) return null;
+  if (/\b(sharp|square|squared|boxy|no (rounding|radius|rounded corners))\b/i.test(t) && /\b(corners?|edges?|cards?|blocks?|boxes|these|them|it|everything)\b/i.test(t)) return cur === 0 ? null : 0;
+  if (/\b(less rounded|slightly rounded|a bit rounded|subtle(ly)? rounded)\b/i.test(t)) return cur <= 8 ? (cur === 8 ? null : 8) : Math.max(8, cur - 8);
+  if (/\b(more rounded|rounder|very rounded|super rounded|really rounded|pill)\b/i.test(t)) return Math.min(40, Math.max(cur + 10, 20));
+  if (/\b(rounded|round|curved|soft) ?(corners?|edges?)?\b/i.test(t) && !/\b(around|round up|turnaround)\b/i.test(t)) return cur >= 16 ? Math.min(40, cur + 8) : 20;
+  return null;
+}
+
+function offlineEdit(spec: SiteSpec, comments: PendingComment[]): { spec: SiteSpec; done: string[]; skipped: string[] } {
+  const next: SiteSpec = structuredClone(spec);
+  const done: string[] = [];
+  const skipped: string[] = [];
+  for (const c of comments) {
+    const b = next.blocks.find((x) => x.id === c.blockId);
+    const t = c.text.trim();
+    if (!b) { skipped.push(t); continue; }
+    const quoted = t.match(/["“']([^"”']{1,80})["”']/)?.[1];
+    const color = colorFromText(t);
+    let hit = false;
+    // Whole-site look first: "like Axiom", "glass cards", "no ticker". A "remove" aimed at an effect isn't a block removal.
+    const look = lookNamed(t);
+    if (look && look !== next.theme.id) { next.theme = restyle(next.theme, look, t, color); hit = true; }
+    const fx = fxEdit(t, fxOf(next.theme));
+    if (fx) { next.theme = { ...next.theme, fx }; hit = true; }
+    // Corners: "make these rounded", "rounder", "sharp corners". Buttons alone are fx.pill (above).
+    const radius = radiusEdit(t, next.theme.radius);
+    if (radius !== null) { next.theme = { ...next.theme, radius }; hit = true; }
+    if (!fx && /\b(remove|delete|hide|drop)\b/i.test(t)) { next.blocks = next.blocks.filter((x) => x.id !== b.id); hit = true; }
+    else if (/\b(move|put)\b.*\b(up|higher|top|above)\b/i.test(t)) { const i = next.blocks.indexOf(b); if (i > 1) { next.blocks.splice(i, 1); next.blocks.splice(i - 1, 0, b); } hit = true; }
+    else if (/\b(move|put)\b.*\b(down|lower|bottom|below)\b/i.test(t)) { const i = next.blocks.indexOf(b); if (i < next.blocks.length - 2) { next.blocks.splice(i, 1); next.blocks.splice(i + 1, 0, b); } hit = true; }
+    else {
+      // A comment on one element edits that element first.
+      const el = c.element && ["headline", "subhead", "cta", "title", "body"].includes(c.element) ? c.element : null;
+      if (quoted && el) { b.props[el] = quoted; hit = true; }
+      else if (quoted) {
+        if (/\b(button|cta)\b/i.test(t) && "cta" in b.props) { b.props.cta = quoted; hit = true; }
+        else if (/\b(subtitle|subhead|tagline|description)\b/i.test(t) && "subhead" in b.props) { b.props.subhead = quoted; hit = true; }
+        else if ("headline" in b.props) { b.props.headline = quoted; hit = true; }
+        else if ("title" in b.props) { b.props.title = quoted; hit = true; }
+      }
+      const sizeKey = el === "cta" || (!el && /\b(button|cta)\b/i.test(t)) ? "ctaSize" : "size";
+      if (/\b(bigger|larger|huge|giant)\b/i.test(t)) { b.props[sizeKey] = "xl"; hit = true; }
+      if (/\b(smaller|tiny|compact)\b/i.test(t)) { b.props[sizeKey] = "md"; hit = true; }
+      if (/\bdonut|pie\b/i.test(t) && b.type === "tokenomics") { b.props.style = "donut"; hit = true; }
+      if (/\bcent(er|re)\b/i.test(t) && b.type === "hero") { b.props.layout = "center"; hit = true; }
+      if (/\b(left|side by side|split)\b/i.test(t) && b.type === "hero") { b.props.layout = "split"; hit = true; }
+      if (color && !look) { next.theme = { ...next.theme, accent: color, accentText: readableOn(color) }; hit = true; }
+    }
+    (hit ? done : skipped).push(t);
+  }
+  return { spec: next, done, skipped };
+}
+
+// Edits a short rule can do for sure: a quoted new text, remove, move, bigger/smaller, a colour, corners. Each one
+// alone, in a few words, with no "and" joining a second ask the rules might miss.
+const PLAIN_EDIT = /^(?:(?:make |change |set |the )?(?:it|this|these|them|the \w+|\w+)?\s*(?:should )?(?:say|read|to|=)\s*["“'][^"”']{1,80}["”']|(?:please )?(?:remove|delete|hide|drop)(?: (?:it|this|these|them|the \w+))?|move (?:it |this |these |them )?(?:up|down|higher|lower)|make (?:it|this|these|them) (?:bigger|larger|smaller|rounded|rounder|sharp|square|less rounded)|(?:make (?:it|this|these|them) )?(?:red|orange|yellow|green|blue|purple|pink|black|white|#[0-9a-f]{6})|(?:rounded|rounder|sharp|square) corners)\.?$/i;
+
+// A picture with a few words saying where it goes ("use this as the logo", "hero image"): placed without a model.
+const PLAIN_PLACE = /^(?:(?:please )?(?:use|make|set|put|add)(?: (?:this|it|these|that|the (?:picture|image|pic)))?(?: (?:as|for|in|on|to be|into))?(?: (?:the|my|our|a))? )?(?:new )?(?:logo|icon|pfp|avatar|hero(?: (?:image|art|picture))?|image|picture|pic|art|artwork|banner|header)(?: (?:here|there|instead))?\.?$/i;
+
+/**
+ * How hard a batch of comments is, so credits go where they matter: "free" when every comment is a plain edit the
+ * offline editor does for sure (no model is asked), "light" for a few short edits (a small model), "heavy" for
+ * anything that rewrites copy, restyles, touches many blocks, or does more with a picture than put it in place.
+ */
+export function difficulty(comments: PendingComment[], offlineDoes: (c: PendingComment) => boolean): "free" | "light" | "heavy" {
+  if (comments.every((c) => (c.assets?.length ? PLAIN_PLACE.test(c.text.trim()) : PLAIN_EDIT.test(c.text.trim()) && offlineDoes(c)))) return "free";
+  const blocks = new Set(comments.map((c) => c.blockId)).size;
+  const words = comments.reduce((n, c) => n + c.text.split(/\s+/).length, 0);
+  const big = /\b(rewrite|redesign|restyle|re-?do|overhaul|whole (site|page)|entire|every|all sections|new section|add (a|an|another) (section|block)|layout|animation|animate|scroll|hover|parallax|like https?:|ref:|reference|story|lore|copy|tone|voice|funn(y|ier)|professional|translate)\b/i;
+  if (comments.some((c) => c.assets?.length && !PLAIN_PLACE.test(c.text.trim())) || blocks > 3 || words > 45 || comments.some((c) => big.test(c.text) || c.text.length > 160)) return "heavy";
+  return "light";
+}
+
+export async function applyComments(project: Project, comments: PendingComment[]): Promise<{ spec: SiteSpec; message: string; via: string }> {
+  const spec = project.spec!;
+  const assets = new Map((project.assets ?? []).map((a) => [a.id, a]));
+  const tier = difficulty(comments, (c) => offlineEdit(spec, [c]).done.length === 1);
+  if (tier !== "free" && llmAvailable()) {
+    const touched = spec.blocks.filter((b) => comments.some((c) => c.blockId === b.id));
+    const system = [
+      "You edit a token website described as JSON blocks. Change only the blocks the comments are about.",
+      "Return {blocks:[{id, props?, remove?}], theme?:{accent?, id?, fx?}, summary}. props replaces that block's props entirely, so include every field.",
+      `theme.id restyles the whole site: ${THEME_IDS.map((t) => `${t} (${THEME_NOTES[t]})`).join(", ")}.`,
+      "theme.radius is the corner radius of cards and blocks in px (0 square, 8 subtle, 20 rounded, 32 very rounded); the site shares one radius.",
+      "theme.fx changes effects only: bg none|grid|dots|glow|orbs|stripes, surface outline|soft|glass|offset, motion snappy|calm|bouncy, density compact|regular|airy, ticker (slogan strip under the nav), pill (pill buttons), reveal rise|fade|scale|blur|slide|none (how sections come in on scroll), hover lift|scale|glow|none (cards and buttons under the cursor), parallax (hero art drifts as the page scrolls). Send only the keys that change.",
+      "Comments can come with images the team uploaded (id, url, size). Use one by its url: props.image on a hero or story block shows it as that block's art; logo (top level) sets the site's logo. Never invent image urls.",
+      "Never invent prices, holder counts or tokenomics numbers; use [PLACEHOLDER] text for facts you don't have.",
+    ].join("\n");
+    const imagesOf = (c: PendingComment) => (c.assets ?? []).map((id) => assets.get(id)).filter((a): a is Asset => !!a).map((a) => ({ id: a.id, url: a.url, name: a.name, w: a.w, h: a.h }));
+    const user = JSON.stringify({ theme: { id: spec.theme.id, accent: spec.theme.accent, radius: spec.theme.radius, fx: fxOf(spec.theme) }, blocks: touched, comments: comments.map((c) => ({ blockId: c.blockId, element: c.element, text: c.text, images: imagesOf(c) })) });
+    const res = await askJson(system, user, (v) => {
+      const p = EditSchema.safeParse(v);
+      return p.success ? p.data : null;
+    }, tier);
+    if (res) {
+      const next: SiteSpec = structuredClone(spec);
+      if (res.value.logo) next.logo = res.value.logo;
+      for (const e of res.value.blocks) {
+        const i = next.blocks.findIndex((b) => b.id === e.id);
+        if (i < 0) continue;
+        if (e.remove) next.blocks.splice(i, 1);
+        else if (e.props) next.blocks[i] = { ...next.blocks[i], props: e.props };
+      }
+      if (res.value.theme?.id && res.value.theme.id !== next.theme.id) next.theme = restyle(next.theme, res.value.theme.id, "", null);
+      if (res.value.theme?.fx) next.theme = { ...next.theme, fx: { ...fxOf(next.theme), ...res.value.theme.fx } };
+      if (res.value.theme?.radius !== undefined) next.theme = { ...next.theme, radius: Math.round(res.value.theme.radius) };
+      if (res.value.theme?.accent) next.theme = { ...next.theme, accent: res.value.theme.accent, accentText: readableOn(res.value.theme.accent) };
+      keepOwnImages(next, spec, new Set([...assets.values()].map((a) => a.url)));
+      return { spec: next, message: res.value.summary, via: res.via };
+    }
+  }
+  const withImages: SiteSpec = structuredClone(spec);
+  const placed = placeImages(withImages, comments, assets);
+  const r = offlineEdit(withImages, comments.filter((c) => !placed.includes(c.text) || (!PLAIN_PLACE.test(c.text.trim()) && c.text.split(/\s+/).length > 4)));
+  r.done.push(...placed);
+  if (tier === "free" && !r.skipped.length) return { spec: r.spec, message: `Done: ${[...new Set(r.done)].join("; ")}.`, via: "offline editor" };
+  const parts = [`Applied ${new Set(r.done).size} of ${new Set(comments.map((c) => c.text)).size} changes.`];
+  // One comment sent to several blocks is listed once.
+  const skipped = [...new Set(r.skipped)];
+  if (skipped.length) parts.push(`The offline editor couldn't do: ${skipped.map((s) => `"${s}"`).join(", ")}. Set NEAR_AI_API_KEY (or ANTHROPIC_API_KEY / OPENAI_API_KEY) in .env.local for free-form edits, or try wording like: button should say "Get it", make it bigger, rounder corners, move up, remove, make it blue.`);
+  return { spec: r.spec, message: parts.join(" "), via: "offline editor" };
+}

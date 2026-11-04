@@ -1,0 +1,16 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "sitesmith-sites",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+  // Every subdomain of the sites domain goes to this Worker. Replace example.xyz with the real domain
+  // (the zone must be on the same Cloudflare account) and add a proxied wildcard DNS record: * → 192.0.2.1.
+  "routes": [{ "pattern": "*.example.xyz/*", "zone_name": "example.xyz" }],
+  "vars": {
+    "SITES_DOMAIN": "example.xyz",
+    // Where the builder app runs, reachable from Cloudflare.
+    "ORIGIN": "https://builder.example.xyz"
+  }
+  // EDGE_SECRET is a secret, not a var: `npx wrangler secret put EDGE_SECRET`, same value as the builder's env.
+}
