@@ -23,7 +23,7 @@ const Patch = z.object({
   chain: z.enum(CHAIN_IDS).optional(),
   rpcUrl: z.union([z.literal(""), z.string().max(400).refine(isPublicHttps, "Use a public https RPC URL")]).optional(),
   walletconnectProjectId: z.union([z.literal(""), z.string().regex(/^[0-9a-f]{32}$/i)]).optional(),
-  privyAppId: z.union([z.literal(""), z.string().regex(/^[a-z0-9]{20,32}$/i)]).optional(),
+  privyAppId: z.union([z.literal(""), z.string().regex(/^[a-z0-9]{25}$/i)]).optional(),
   themeId: z.enum(THEME_IDS).optional(),
   accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
 });

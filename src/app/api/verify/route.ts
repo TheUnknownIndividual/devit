@@ -9,7 +9,7 @@ export async function GET(req: Request) {
   const id = (u.searchParams.get("id") ?? "").trim();
   try {
     if (kind === "privy") {
-      if (!/^[a-z0-9]{20,32}$/i.test(id)) return NextResponse.json({ ok: false, reason: "Privy App IDs are 20–32 letters and numbers." });
+      if (!/^[a-z0-9]{25}$/i.test(id)) return NextResponse.json({ ok: false, reason: "Privy App IDs are 25 letters and numbers." });
       const r = await fetch(`https://auth.privy.io/api/v1/apps/${id}`, { headers: { "privy-app-id": id }, signal: AbortSignal.timeout(6000), cache: "no-store" });
       if (!r.ok) return NextResponse.json({ ok: false, reason: "Privy doesn't recognise that App ID." });
       const j = (await r.json().catch(() => ({}))) as { name?: string; allowed_domains?: string[] };
