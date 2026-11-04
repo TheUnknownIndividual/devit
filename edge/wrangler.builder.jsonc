@@ -1,0 +1,12 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "sitesmith-builder",
+  "main": "src/builder.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+  "workers_dev": false,
+  // A custom domain: Cloudflare creates the DNS record and certificate for it.
+  "routes": [{ "pattern": "sitesmith.trover.tech", "custom_domain": true }],
+  "vars": { "ORIGIN_VIA": "https://elys.trade" }
+  // EDGE_SECRET: `npx wrangler secret put EDGE_SECRET -c wrangler.builder.jsonc`, same value as the builder's env.
+}
