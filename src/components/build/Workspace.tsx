@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowUp, ChevronDown, Crosshair, ExternalLink, Globe, Loader2, MessageSquare, Monitor, MousePointer2, Palette, Plug, Server,
+  ArrowUp, ChevronDown, Crosshair, Eye, ExternalLink, Globe, Loader2, MessageSquare, Monitor, MousePointer2, Palette, Plug, Server,
   FileText, ImagePlus, Smartphone, Tablet, Trash2, Undo2, X,
 } from "lucide-react";
 import { LogoMark } from "@/components/Logo";
@@ -26,10 +26,10 @@ const WIDTH: Record<Device, string> = { desktop: "100%", tablet: "820px", phone:
 
 const VIA: Record<string, string> = { "near-ai": "NEAR AI Cloud", claude: "Claude", "offline writer": "Offline writer", "offline editor": "Offline editor" };
 
-export function Workspace({ initial, heliusOnServer, canEdit = true }: { initial: PublicProject; heliusOnServer: boolean; canEdit?: boolean }) {
+export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }: { initial: PublicProject; heliusOnServer: boolean; canEdit?: boolean; viewNote?: string }) {
   const [p, setP] = useState(initial);
   const [device, setDevice] = useState<Device>("desktop");
-  const [selectOn, setSelectOn] = useState(true);
+  const [selectOn, setSelectOn] = useState(canEdit);
   // Every pick in the preview; shift-click adds or removes one, and a comment goes to all of them.
   const [picks, setPicks] = useState<Array<{ blockId: string; label: string; element: string | null }>>([]);
   const selected = picks[picks.length - 1] ?? null;
@@ -150,7 +150,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true }: { initial
   // Enter sends: with blocks picked it applies the change to them right away (with any changes that failed before).
   function submit() {
     const t = text.trim();
-    if (!t || busy || building || uploading) return;
+    if (!t || busy || building || uploading || !canEdit) return;
     const assets = attached.map((a) => a.id);
     setText(""); setAttached([]); setDocs([]); setAttachError(null);
     if (picks.length) {
@@ -178,6 +178,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true }: { initial
       <header className="flex h-14 shrink-0 items-center gap-2 border-b border-white/[0.07] px-3">
         <Link href="/" className="btn btn-ghost btn-icon" aria-label="Home"><LogoMark size={20} /></Link>
         <ProjectName name={title} ticker={p.spec?.ticker ?? null} editable={canEdit} onSave={(name) => call("", { name }, "patch", "PATCH")} />
+        {!canEdit && <span className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-1.5 text-[11px] text-zinc-400"><Eye size={12} /> View only</span>}
         {building && <span className="hidden items-center gap-1.5 text-[12px] text-zinc-400 sm:flex"><Loader2 size={13} className="animate-spin text-sel" /> Building</span>}
 
         <div className="mx-auto hidden items-center gap-1 rounded-[11px] border border-white/[0.07] bg-ink-900 p-0.5 md:flex" role="radiogroup" aria-label="Preview size">
@@ -198,15 +199,15 @@ export function Workspace({ initial, heliusOnServer, canEdit = true }: { initial
             onPick={(c: Chain) => void call("", { chain: c }, "patch", "PATCH")}
             items={(Object.keys(CHAINS) as Chain[]).map((c) => ({ value: c, label: CHAINS[c].name, icon: <ChainIcon chain={c} size={15} /> }))}
             trigger={(o) => (
-              <button type="button" className="btn btn-outline" aria-label={`Network: ${CHAINS[chain].name}`}>
+              <button type="button" className="btn btn-outline" disabled={!canEdit} aria-label={`Network: ${CHAINS[chain].name}`}>
                 <ChainIcon chain={chain} size={15} /><span className="hidden lg:inline">{CHAINS[chain].name}</span><ChevronDown size={14} className={`text-zinc-500 ${o ? "rotate-180" : ""}`} />
               </button>
             )}
           />
-          <button type="button" className="btn btn-outline btn-icon hidden sm:inline-flex" onClick={() => setDialog("rpc")} aria-label="RPC endpoint" title="RPC endpoint">
+          <button type="button" className="btn btn-outline btn-icon hidden sm:inline-flex" disabled={!canEdit} onClick={() => setDialog("rpc")} aria-label="RPC endpoint" title="RPC endpoint">
             <span className="relative"><Server size={15} />{p.network.rpcUrlSet && <span className="absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full bg-lime" />}</span>
           </button>
-          {ready && (
+          {ready && canEdit && (
             <Menu
               label="Style"
               align="right"
@@ -216,17 +217,17 @@ export function Workspace({ initial, heliusOnServer, canEdit = true }: { initial
               trigger={() => <button type="button" className="btn btn-outline btn-icon hidden sm:inline-flex" aria-label="Style" title="Style"><Palette size={15} /></button>}
             />
           )}
-          <button type="button" className="btn btn-outline" onClick={() => setDialog("integrations")}><Plug size={15} /><span className="hidden lg:inline">Integrations</span></button>
+          <button type="button" className="btn btn-outline" disabled={!canEdit} onClick={() => setDialog("integrations")}><Plug size={15} /><span className="hidden lg:inline">Integrations</span></button>
           <span className="mx-0.5 hidden h-5 w-px bg-white/10 sm:block" />
-          <button type="button" className="btn btn-ghost btn-icon hidden sm:inline-flex" disabled={!p.history.length || !!busy} onClick={() => void call("/undo", {}, "undo")} aria-label="Undo" title="Undo"><Undo2 size={16} /></button>
+          <button type="button" className="btn btn-ghost btn-icon hidden sm:inline-flex" disabled={!canEdit || !p.history.length || !!busy} onClick={() => void call("/undo", {}, "undo")} aria-label="Undo" title="Undo"><Undo2 size={16} /></button>
           <a className={`btn btn-ghost btn-icon hidden sm:inline-flex ${ready ? "" : "pointer-events-none opacity-50"}`} href={`/live/${p.id}`} target="_blank" rel="noreferrer" aria-label="Open live" title="Open live"><ExternalLink size={16} /></a>
-          <button type="button" className="btn btn-primary" disabled={!ready} onClick={() => setDialog("publish")}>
+          <button type="button" className="btn btn-primary" disabled={!ready || !canEdit} onClick={() => setDialog("publish")}>
             <Globe size={15} /> <span className="hidden sm:inline">{p.published ? (p.publishedIsCurrent ? "Published" : "Update") : "Publish"}</span>
           </button>
           <AccountMenu compact />
         </div>
       </header>
-      {!canEdit && <div className="shrink-0 border-b border-white/[0.07] bg-ink-900 px-4 py-2 text-[12px] text-zinc-400">View only: this project belongs to another account. Duplicate it from your own projects to make changes.</div>}
+      {!canEdit && <div className="shrink-0 border-b border-white/[0.07] bg-ink-900 px-4 py-2 text-[12px] text-zinc-400">{viewNote ?? "View only: this project belongs to another account. Duplicate it from your own projects to make changes."}</div>}
 
       <div className="grid min-h-0 flex-1 md:grid-cols-[400px_1fr]">
         {/* Chat */}
@@ -234,7 +235,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true }: { initial
           className={`relative min-h-0 flex-col border-r border-white/[0.07] bg-ink-950 ${mobileTab === "chat" ? "flex" : "hidden"} md:flex`}
           onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setDragOver(true); } }}
           onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
-          onDrop={(e) => { if (!e.dataTransfer.files.length) return; e.preventDefault(); setDragOver(false); if (ready && !building) void attach(e.dataTransfer.files); }}
+          onDrop={(e) => { if (!e.dataTransfer.files.length) return; e.preventDefault(); setDragOver(false); if (ready && !building && canEdit) void attach(e.dataTransfer.files); }}
         >
           {dragOver && (
             <div className="pointer-events-none absolute inset-2 z-20 grid place-items-center rounded-[14px] border border-dashed border-sel/60 bg-ink-950/90 text-center">
@@ -324,27 +325,28 @@ export function Workspace({ initial, heliusOnServer, canEdit = true }: { initial
                 ref={input}
                 rows={2}
                 value={text}
-                disabled={building}
+                disabled={building || !canEdit}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}
                 onPaste={(e) => { const f = [...e.clipboardData.files]; if (f.length && ready) { e.preventDefault(); void attach(f); } }}
-                placeholder={building ? "Building…" : picks.length > 1 ? `What should change in these ${picks.length}?` : selected ? `What should change in ${selected.label}?` : "Ask for a change, or paste a contract address…"}
+                placeholder={!canEdit ? "View only" : building ? "Building…" : picks.length > 1 ? `What should change in these ${picks.length}?` : selected ? `What should change in ${selected.label}?` : "Ask for a change, or paste a contract address…"}
                 className="block w-full resize-none bg-transparent px-3.5 pt-3 text-[13.5px] leading-relaxed text-white outline-none placeholder:text-zinc-500"
               />
               <div className="flex items-center gap-1.5 p-2">
                 <button
                   type="button"
                   onClick={() => setSelectOn((s) => !s)}
+                  disabled={!canEdit}
                   aria-pressed={selectOn}
                   className={`btn h-8 ${selectOn ? "border border-sel/40 bg-sel/10 text-sel" : "btn-ghost"}`}
                   title="Click blocks in the preview to comment on them"
                 >
                   <MousePointer2 size={14} /> Select
                 </button>
-                <button type="button" className="btn btn-ghost btn-icon h-8 w-8" disabled={!ready || building} onClick={() => fileInput.current?.click()} aria-label="Add a picture or text file" title="Add a picture or text file"><ImagePlus size={15} /></button>
+                <button type="button" className="btn btn-ghost btn-icon h-8 w-8" disabled={!ready || building || !canEdit} onClick={() => fileInput.current?.click()} aria-label="Add a picture or text file" title="Add a picture or text file"><ImagePlus size={15} /></button>
                 <input ref={fileInput} type="file" multiple hidden accept="image/png,image/jpeg,image/webp,image/gif,.txt,.md,text/plain,text/markdown" onChange={(e) => { if (e.target.files) void attach(e.target.files); e.target.value = ""; }} />
                 <span className="ml-1 hidden text-[11.5px] text-zinc-500 lg:inline">{selected ? "Enter applies · Esc clears" : selectOn ? "Click or drag over blocks" : ""}</span>
-                <button type="button" className="btn btn-primary btn-icon ml-auto h-8 w-8" disabled={!text.trim() || !!busy || building || uploading > 0} onClick={submit} aria-label={selected ? "Apply" : "Send"}>
+                <button type="button" className="btn btn-primary btn-icon ml-auto h-8 w-8" disabled={!canEdit || !text.trim() || !!busy || building || uploading > 0} onClick={submit} aria-label={selected ? "Apply" : "Send"}>
                   {busy === "chat" ? <Loader2 size={15} className="animate-spin" /> : <ArrowUp size={15} />}
                 </button>
               </div>

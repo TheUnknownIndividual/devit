@@ -1,7 +1,8 @@
 // What a plan unlocks, in one place. Every Pro/Team check goes through here so the pricing page and the code agree.
 import { activePlan, getUser, type User } from "./accounts";
-import type { PlanId } from "./plans";
+import { plan, type PlanId } from "./plans";
 import type { Project } from "./spec";
+import { teamsOf, type Team } from "./teams";
 
 export type Feature = "unlimitedBuilds" | "customDomain" | "noFooter" | "privateSites" | "priorityModels" | "teams";
 
@@ -10,14 +11,33 @@ const FEATURES: Record<PlanId, Feature[]> = {
   pro: ["unlimitedBuilds", "customDomain", "noFooter", "privateSites", "priorityModels"],
   team: ["unlimitedBuilds", "customDomain", "noFooter", "privateSites", "priorityModels", "teams"],
 };
+const RANK: Record<PlanId, number> = { free: 0, pro: 1, team: 2 };
+
+/** A team works while its owner's own plan runs teams; after that members can only look. */
+export async function teamActive(t: Team): Promise<boolean> {
+  return FEATURES[activePlan(await getUser(t.ownerId))].includes("teams");
+}
+
+/** Seats come from the owner's plan; the owner holds one. */
+export async function teamSeats(t: Team): Promise<number> {
+  return plan(activePlan(await getUser(t.ownerId))).seats;
+}
 
 /** The plan a user works under: their own, or the best plan of a team they belong to (teams hook in here). */
 export async function planOf(u: User | null): Promise<PlanId> {
-  return activePlan(u);
+  let best = activePlan(u);
+  if (!u || best === "team") return best;
+  for (const t of await teamsOf(u.id)) {
+    if (t.ownerId === u.id) continue;
+    const p = activePlan(await getUser(t.ownerId));
+    if (FEATURES[p].includes("teams") && RANK[p] > RANK[best]) best = p;
+  }
+  return best;
 }
 
 export async function entitled(u: User | null, f: Feature): Promise<boolean> {
-  return FEATURES[await planOf(u)].includes(f);
+  // Running a team is the payer's own; members borrow everything else.
+  return FEATURES[f === "teams" ? activePlan(u) : await planOf(u)].includes(f);
 }
 
 /** A project's features come from its owner's plan, whoever is looking at it. */

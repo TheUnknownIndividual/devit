@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { saveProject } from "@/lib/store";
 import { copyUploads } from "@/lib/uploads";
 import { displayName, newId, type Project } from "@/lib/spec";
-import { editable, ensureAnon } from "@/lib/accounts";
+import { ensureAnon } from "@/lib/accounts";
+import { editable } from "@/lib/access";
 
 /** A copy to try a different direction: same site, chat and pictures, unpublished, owned by whoever made the copy. */
 export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {

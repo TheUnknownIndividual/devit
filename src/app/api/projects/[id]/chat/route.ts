@@ -10,7 +10,8 @@ import { CHAINS, newId, type Block, type SiteSpec } from "@/lib/spec";
 import { publicProject } from "@/lib/public";
 import { THEMES, fitAccent, readableOn } from "@/lib/themes";
 import { overLimit } from "@/lib/net";
-import { editable, ownerKeysFor } from "@/lib/accounts";
+import { ownerKeysFor } from "@/lib/accounts";
+import { editable } from "@/lib/access";
 import { runWithKeys } from "@/lib/keyscope";
 
 const Body = z.object({

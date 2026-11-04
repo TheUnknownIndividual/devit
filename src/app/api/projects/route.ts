@@ -4,9 +4,10 @@ import { runBuild } from "@/lib/agent";
 import { saveProject } from "@/lib/store";
 import { CHAIN_IDS, THEME_IDS, newId, type Project } from "@/lib/spec";
 import { overLimit } from "@/lib/net";
-import { activePlan, buildsToday, countBuild, ensureAnon, ownerKeysFor, viewer } from "@/lib/accounts";
+import { buildsToday, countBuild, ensureAnon, ownerKeysFor, viewer } from "@/lib/accounts";
 import { hasOwnLlm, runWithKeys } from "@/lib/keyscope";
 import { plan } from "@/lib/plans";
+import { planOf } from "@/lib/entitlements";
 
 const Body = z.object({
   prompt: z.string().trim().min(3).max(1200),
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
   const anon = v.user ? undefined : await ensureAnon();
   const keys = await ownerKeysFor(v.user?.id);
   const who = v.user ? `user:${v.user.id}` : `anon:${anon}`;
-  const cap = plan(activePlan(v.user)).buildsPerDay;
+  const cap = plan(await planOf(v.user)).buildsPerDay;
   if (cap != null && !hasOwnLlm(keys) && (await buildsToday(who)) >= cap) {
     return NextResponse.json({ error: `That's the ${cap} free builds for today. Edits still work, or go Pro or add your own model key in Settings for more.`, limit: true }, { status: 429 });
   }

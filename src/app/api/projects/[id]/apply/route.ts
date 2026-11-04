@@ -5,7 +5,8 @@ import { updateProject } from "@/lib/store";
 import { newId } from "@/lib/spec";
 import { publicProject } from "@/lib/public";
 import { overLimit } from "@/lib/net";
-import { editable, ownerKeysFor } from "@/lib/accounts";
+import { ownerKeysFor } from "@/lib/accounts";
+import { editable } from "@/lib/access";
 import { runWithKeys } from "@/lib/keyscope";
 
 const Body = z.object({

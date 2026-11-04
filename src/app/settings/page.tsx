@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { TopBar } from "@/components/account/TopBar";
 import { SettingsView } from "@/components/settings/SettingsView";
 import { SignInNudge } from "@/components/projects/SignInNudge";
-import { activePlan, buildsToday, publicUser, viewer } from "@/lib/accounts";
+import { buildsToday, publicUser, viewer } from "@/lib/accounts";
+import { entitled, planOf } from "@/lib/entitlements";
+import { teamsOf } from "@/lib/teams";
+import { teamView } from "@/lib/team-view";
 import { plan } from "@/lib/plans";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +19,11 @@ export default async function Settings() {
       <main className="mx-auto max-w-[1040px] px-5 pb-24 pt-8">
         <h1 className="text-[24px] font-semibold tracking-[-0.02em] text-white">Settings</h1>
         {user ? (
-          <SettingsView initial={publicUser(user)} usage={{ today: await buildsToday(`user:${user.id}`), cap: plan(activePlan(user)).buildsPerDay }} />
+          <SettingsView
+            initial={publicUser(user)}
+            usage={{ today: await buildsToday(`user:${user.id}`), cap: plan(await planOf(user)).buildsPerDay }}
+            teams={{ list: await Promise.all((await teamsOf(user.id)).map((t) => teamView(t, user))), canCreate: await entitled(user, "teams") }}
+          />
         ) : (
           <SignInNudge count={0} />
         )}

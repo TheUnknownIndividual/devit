@@ -1,11 +1,11 @@
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { cookies } from "next/headers";
-import { getProject, listProjects, updateProject } from "./store";
+import { listProjects, updateProject } from "./store";
 import { seal, sha256, token, unseal } from "./secrets";
 import { KEY_IDS, type KeyId, type OwnerKeys } from "./keyscope";
 import type { Cycle, PlanId } from "./plans";
-import type { Chain, Project } from "./spec";
+import type { Chain } from "./spec";
 
 // Accounts as JSON files under data/accounts, like projects. No third-party auth: passkeys, wallet signatures and
 // email codes each prove one sign-in method, and an account can hold several. Sessions are random tokens in an
@@ -184,29 +184,6 @@ export async function ensureAnon(): Promise<string> {
 }
 
 // ---------- projects ----------
-
-/** Projects without owner or anonymous id were made before accounts existed: open to the local dev only. */
-const legacyOpen = () => process.env.NODE_ENV !== "production";
-
-export function canEdit(p: Pick<Project, "ownerId" | "anon">, v: Viewer): boolean {
-  if (p.ownerId) return v.user?.id === p.ownerId;
-  if (p.anon) return !!v.anon && v.anon === p.anon;
-  return legacyOpen();
-}
-
-export const forbidden = () => Response.json({ error: "This project belongs to another account." }, { status: 403 });
-
-/** For routes that change a project: the project and viewer when this viewer may edit it, else the error response. */
-export async function editable(id: string): Promise<{ p: Project; v: Viewer } | Response> {
-  const p = await getProject(id);
-  if (!p) return Response.json({ error: "not found" }, { status: 404 });
-  const v = await viewer();
-  return canEdit(p, v) ? { p, v } : forbidden();
-}
-
-export async function myProjects(v: Viewer): Promise<Project[]> {
-  return (await listProjects(500)).filter((p) => canEdit(p, v));
-}
 
 async function claimAnon(userId: string, anon: string): Promise<void> {
   for (const p of await listProjects(500)) {

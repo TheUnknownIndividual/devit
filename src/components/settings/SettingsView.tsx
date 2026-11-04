@@ -12,8 +12,10 @@ import type { PublicUser } from "@/lib/accounts";
 import { KEY_LABELS } from "@/lib/apikeys";
 import type { KeyId } from "@/lib/keyscope";
 import { PLANS } from "@/lib/plans";
+import type { TeamView } from "@/lib/team-view";
+import { TeamPanel } from "./TeamPanel";
 
-const SECTIONS = [["account", "Account"], ["methods", "Sign-in methods"], ["keys", "API keys"], ["plan", "Plan"]] as const;
+const SECTIONS = [["account", "Account"], ["methods", "Sign-in methods"], ["keys", "API keys"], ["plan", "Plan"], ["team", "Team"]] as const;
 const MODEL_KEYS: KeyId[] = ["nearai", "anthropic", "openai", "openrouter"];
 const CHAIN_KEYS: KeyId[] = ["helius", "rpc:near", "rpc:solana", "rpc:ethereum", "rpc:robinhood"];
 
@@ -24,7 +26,7 @@ async function send(method: string, path: string, body?: unknown) {
   return { ok: r.ok, j: await r.json().catch(() => ({})) };
 }
 
-export function SettingsView({ initial, usage }: { initial: PublicUser; usage: { today: number; cap: number | null } }) {
+export function SettingsView({ initial, usage, teams }: { initial: PublicUser; usage: { today: number; cap: number | null }; teams: { list: TeamView[]; canCreate: boolean } }) {
   const router = useRouter();
   const [user, setUser] = useState(initial);
   const [name, setName] = useState(initial.name ?? "");
@@ -116,6 +118,10 @@ export function SettingsView({ initial, usage }: { initial: PublicUser; usage: {
             </div>
             <Link href="/pricing" className="btn btn-outline">{user.plan === "free" ? "Upgrade" : "Change plan"} <ArrowUpRight size={14} /></Link>
           </div>
+        </Section>
+
+        <Section id="team" title="Team" hint="Share projects with up to four people. Editors change and publish; viewers open the builder and the live preview without changing anything.">
+          <TeamPanel initial={teams.list} canCreate={teams.canCreate} me={user.id} />
         </Section>
       </div>
     </div>

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { updateProject } from "@/lib/store";
 import { newId } from "@/lib/spec";
 import { publicProject } from "@/lib/public";
-import { editable } from "@/lib/accounts";
+import { editable } from "@/lib/access";
 
 export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;

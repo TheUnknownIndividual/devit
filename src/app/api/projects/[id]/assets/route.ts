@@ -3,7 +3,7 @@ import { updateProject } from "@/lib/store";
 import { newId, type Asset } from "@/lib/spec";
 import { MAX_BYTES, MAX_PER_PROJECT, saveUpload, sniff } from "@/lib/uploads";
 import { overLimit } from "@/lib/net";
-import { editable } from "@/lib/accounts";
+import { editable } from "@/lib/access";
 
 const dim = (v: string | null) => { const n = Number(v); return Number.isFinite(n) && n > 0 && n < 20_000 ? Math.round(n) : 0; };
 
