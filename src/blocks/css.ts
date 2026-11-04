@@ -230,19 +230,50 @@ export const SITE_CSS = `
 .ss.ss-upper .ss-ticker{text-transform:uppercase;letter-spacing:.04em}
 .ss[data-surface=offset] .ss-ticker{border-top:2px solid var(--border);border-bottom:2px solid var(--border)}
 
+/* focus, overflow and the cross-over between sections (theme.fx.transition). These shape the page, so preview shows them too. */
+.ss{overflow-x:clip;--tint:color-mix(in srgb,var(--surface) 55%,var(--bg))}
+.ss :focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.ss .ss-input:focus-visible{outline:0}
+.ss[data-transition=fade] .ss-sec{border-top:0}
+.ss[data-transition=fade]>section:nth-of-type(even){background:linear-gradient(180deg,transparent,var(--tint) 22%,var(--tint) 78%,transparent)}
+.ss[data-transition=angle]{--cut:clamp(20px,4vw,56px)}
+.ss[data-transition=angle]>section{clip-path:polygon(0 0,100% 0,100% calc(100% - var(--cut)),0 100%)}
+.ss[data-transition=angle]>.ss-sec{margin-top:calc(var(--cut) * -1);border-top:var(--cut) solid transparent;clip-path:polygon(0 var(--cut),100% 0,100% calc(100% - var(--cut)),0 100%)}
+.ss[data-transition=angle]>section:nth-of-type(even){background:var(--tint)}
+.ss[data-transition=stack]{--lap:28px;--sheet:min(calc(var(--radius) * 2),36px)}
+.ss[data-transition=stack]>.ss-sec{position:relative;margin-top:calc(var(--lap) * -1);border-top:var(--lap) solid transparent;background-color:var(--bg);border-radius:var(--sheet) var(--sheet) 0 0;box-shadow:0 -18px 36px -22px rgba(0,0,0,.4)}
+.ss[data-transition=stack]>section:nth-of-type(even){background-color:var(--tint)}
+.ss[data-transition=stack][data-surface=glass]>.ss-sec{background-color:color-mix(in srgb,var(--bg) 78%,transparent)}
+.ss[data-transition=wave]>.ss-sec{position:relative;border-top:0}
+.ss[data-transition=wave]>.ss-sec>.ss-wrap{position:relative;z-index:1}
+.ss[data-transition=wave]>section:nth-of-type(even){background:var(--tint)}
+.ss[data-transition=wave]>.ss-sec::before{content:"";position:absolute;left:0;right:0;top:-1px;height:clamp(18px,3vw,36px);pointer-events:none;background:var(--bg);-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 60' preserveAspectRatio='none'%3E%3Cpath d='M0 0H1200V30C1050 60 900 60 750 30S450 0 300 30S75 60 0 30Z'/%3E%3C/svg%3E") 0 0/100% 100% no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 60' preserveAspectRatio='none'%3E%3Cpath d='M0 0H1200V30C1050 60 900 60 750 30S450 0 300 30S75 60 0 30Z'/%3E%3C/svg%3E") 0 0/100% 100% no-repeat}
+.ss[data-transition=wave]>.ss-sec:nth-of-type(odd)::before{background:var(--tint)}
+.ss-progress{position:fixed;left:0;top:0;right:0;height:3px;z-index:30;background:var(--accent);transform-origin:0 50%;transform:scaleX(var(--prog,0));pointer-events:none}
+@supports (animation-timeline:scroll()){.ss-progress{animation:ssProg linear both;animation-timeline:scroll(root block)}}
+.ss-top{position:fixed;right:max(16px,env(safe-area-inset-right));bottom:max(16px,env(safe-area-inset-bottom));z-index:40;width:44px;height:44px;border-radius:var(--r-sm);display:grid;place-items:center;background:var(--accent);color:var(--accent-text);border:0;cursor:pointer;box-shadow:0 10px 28px -10px rgba(0,0,0,.55);animation:ssRise .3s var(--ease) both}
+.ss[data-pill] .ss-top{border-radius:999px}
+
 /* live mode only. Preview never animates, so scrolling it stays plain. */
-.ss{--dur:.6s;--ease:cubic-bezier(.2,.8,.2,1);--rise:16px}
-.ss[data-motion=snappy]{--dur:.35s;--ease:cubic-bezier(.2,.8,.2,1);--rise:10px}
-.ss[data-motion=calm]{--dur:.9s;--ease:cubic-bezier(.16,1,.3,1);--rise:24px}
-.ss[data-motion=bouncy]{--dur:.75s;--ease:cubic-bezier(.34,1.56,.64,1);--rise:28px}
+.ss{--dur:.6s;--ease:cubic-bezier(.2,.8,.2,1);--rise:16px;--stag:.06s}
+.ss[data-motion=snappy]{--dur:.35s;--ease:cubic-bezier(.2,.8,.2,1);--rise:10px;--stag:.04s}
+.ss[data-motion=calm]{--dur:.9s;--ease:cubic-bezier(.16,1,.3,1);--rise:24px;--stag:.09s}
+.ss[data-motion=bouncy]{--dur:.75s;--ease:cubic-bezier(.34,1.56,.64,1);--rise:28px;--stag:.07s}
 [data-ss-mode=live] .ss-rise{animation:ssRise var(--dur) var(--ease) both}
 [data-ss-mode=live] .ss-spin{animation:ssSpin 1s linear infinite}
 [data-ss-mode=live] .ss-sec.ss-wait{opacity:0;transform:translateY(var(--rise))}
 [data-ss-mode=live] .ss-sec.ss-in{transition:opacity var(--dur) ease-out,transform var(--dur) var(--ease)}
-[data-ss-mode=live] .ss-sec.ss-in .ss-grid>*{animation:ssRise var(--dur) var(--ease) both}
-[data-ss-mode=live] .ss-sec.ss-in .ss-grid>:nth-child(2){animation-delay:.06s}
-[data-ss-mode=live] .ss-sec.ss-in .ss-grid>:nth-child(3){animation-delay:.12s}
-[data-ss-mode=live] .ss-sec.ss-in .ss-grid>:nth-child(4){animation-delay:.18s}
+/* Children come in one after another (MotionFx numbers them --i); backwards fill so hover transforms still work afterwards. */
+[data-ss-mode=live][data-stagger] .ss-sec.ss-in :is(.ss-grid>*,.ss-points>li,.ss-faq>details,.ss-socials>*){animation:ssRise var(--dur) var(--ease) backwards;animation-delay:calc(var(--i,0) * var(--stag))}
+/* First load: nav fades, then the hero's kicker, headline, subhead, buttons and art in sequence. */
+[data-ss-mode=live][data-intro] .ss-rise{animation:none}
+[data-ss-mode=live][data-intro] :is(.ss-i1,.ss-i2,.ss-i3,.ss-i4){animation:ssRise calc(var(--dur) * 1.1) var(--ease) backwards}
+[data-ss-mode=live][data-intro] .ss-i2{animation-delay:.08s}
+[data-ss-mode=live][data-intro] .ss-i3{animation-delay:.18s}
+[data-ss-mode=live][data-intro] .ss-i4{animation-delay:.28s}
+[data-ss-mode=live][data-intro] .ss-i5{animation:ssPop calc(var(--dur) * 1.2) var(--ease) .2s backwards}
+[data-ss-mode=live][data-intro][data-motion=bouncy] .ss-hero-art{animation:ssPop calc(var(--dur) * 1.2) var(--ease) .2s backwards,ssFloat 5.5s ease-in-out 1.4s infinite}
+[data-ss-mode=live][data-intro] .ss-nav-in{animation:ssFade .5s ease-out backwards}
 [data-ss-mode=live] .ss-btn,[data-ss-mode=live] .ss-social,[data-ss-mode=live] .ss-card{transition:transform .2s var(--ease),box-shadow .2s var(--ease),filter .2s,border-color .2s}
 [data-ss-mode=live] .ss-btn:hover{filter:brightness(1.07)}
 [data-ss-mode=live] .ss-btn:active{transform:scale(.97)}
@@ -263,7 +294,19 @@ export const SITE_CSS = `
 [data-ss-mode=live][data-reveal=slide] .ss-sec.ss-wait{transform:translateX(-36px)}
 [data-ss-mode=live][data-reveal=blur] .ss-sec.ss-wait{transform:translateY(8px);filter:blur(12px)}
 [data-ss-mode=live][data-reveal=blur] .ss-sec.ss-in{transition:opacity var(--dur) ease-out,transform var(--dur) var(--ease),filter var(--dur) ease-out}
-[data-ss-mode=live][data-reveal=fade] .ss-sec.ss-in .ss-grid>*,[data-ss-mode=live][data-reveal=blur] .ss-sec.ss-in .ss-grid>*{animation-name:ssFade}
+[data-ss-mode=live][data-reveal=fade] .ss-sec.ss-in :is(.ss-grid>*,.ss-points>li,.ss-faq>details,.ss-socials>*),[data-ss-mode=live][data-reveal=blur] .ss-sec.ss-in :is(.ss-grid>*,.ss-points>li,.ss-faq>details,.ss-socials>*){animation-name:ssFade}
+[data-ss-mode=live][data-reveal=scale] .ss-sec.ss-in :is(.ss-grid>*,.ss-points>li,.ss-faq>details,.ss-socials>*){animation-name:ssPop}
+[data-ss-mode=live][data-reveal=slide] .ss-sec.ss-in :is(.ss-grid>*,.ss-points>li,.ss-faq>details,.ss-socials>*){animation-name:ssSlide}
+/* Nav: link underline follows the section in view; once scrolled it blurs and tightens (no height change, so nothing shifts). */
+[data-ss-mode=live] .ss-links a{position:relative}
+[data-ss-mode=live] .ss-links a::after{content:"";position:absolute;left:0;right:0;bottom:-4px;height:2px;background:var(--accent);transform:scaleX(0);transform-origin:left;transition:transform .25s var(--ease)}
+[data-ss-mode=live] .ss-links a:hover::after,[data-ss-mode=live] .ss-links a[aria-current]::after{transform:scaleX(1)}
+[data-ss-mode=live] .ss-links a[aria-current]{color:var(--text)}
+[data-ss-mode=live][data-nav=compact] .ss-nav{transition:background .25s,box-shadow .25s}
+[data-ss-mode=live][data-nav=compact] .ss-brand{transform-origin:left center;transition:transform .25s var(--ease)}
+[data-ss-mode=live][data-nav=compact][data-stuck] .ss-brand{transform:scale(.88)}
+[data-ss-mode=live][data-nav=compact][data-stuck] .ss-nav{background:color-mix(in srgb,var(--bg) 74%,transparent);-webkit-backdrop-filter:blur(18px) saturate(160%);backdrop-filter:blur(18px) saturate(160%);box-shadow:0 10px 30px -18px rgba(0,0,0,.5)}
+[data-ss-mode=live] .ss-stat .v{font-variant-numeric:tabular-nums}
 /* What cards and buttons do under the cursor (theme.fx.hover). */
 [data-ss-mode=live][data-hover=lift] .ss-card:hover,[data-ss-mode=live][data-hover=lift] .ss-btn:hover,[data-ss-mode=live][data-hover=lift] .ss-social:hover{transform:translateY(-4px);box-shadow:0 14px 34px -14px color-mix(in srgb,var(--text) 35%,transparent)}
 [data-ss-mode=live][data-hover=scale] .ss-card:hover,[data-ss-mode=live][data-hover=scale] .ss-btn:hover,[data-ss-mode=live][data-hover=scale] .ss-social:hover{transform:scale(1.035)}
@@ -277,11 +320,14 @@ export const SITE_CSS = `
 @keyframes ssSpin{to{transform:rotate(360deg)}}
 @keyframes ssFade{from{opacity:0}to{opacity:1}}
 @keyframes ssRise{from{opacity:0;transform:translateY(var(--rise,12px))}to{opacity:1;transform:none}}
+@keyframes ssPop{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:none}}
+@keyframes ssSlide{from{opacity:0;transform:translateX(-22px)}to{opacity:1;transform:none}}
+@keyframes ssProg{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 @keyframes ssMarquee{to{transform:translateX(-50%)}}
 @keyframes ssFloat{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-12px) rotate(-1.5deg)}}
 @keyframes ssDrift{from{transform:translate(0,0) scale(1)}to{transform:translate(-4%,3%) scale(1.06)}}
 @keyframes ssFlashUp{from{color:#22c55e;text-shadow:0 0 12px rgba(34,197,94,.5)}}
 @keyframes ssFlashDown{from{color:#ef4444;text-shadow:0 0 12px rgba(239,68,68,.5)}}
-@media (prefers-reduced-motion:reduce){[data-ss-mode=live] *{animation:none!important;transition:none!important}[data-ss-mode=live] .ss-sec.ss-wait{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){[data-ss-mode=live] *{animation:none!important;transition:none!important}.ss-progress{display:none}[data-ss-mode=live] .ss-sec.ss-wait{opacity:1;transform:none}}
 [data-ss-mode=preview] *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 `;
