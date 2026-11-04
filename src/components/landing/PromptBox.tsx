@@ -116,8 +116,8 @@ export function PromptBox() {
       const d = (e as CustomEvent<{ style?: ThemeId; prompt?: string; focus?: "address" }>).detail ?? {};
       if (d.style) setStyle(d.style);
       if (d.prompt) setPrompt(d.prompt);
-      if (d.focus === "address") { setMore(true); setTimeout(() => addrInput.current?.focus(), 320); }
-      else area.current?.focus();
+      if (d.focus === "address") { setMore(true); setTimeout(() => addrInput.current?.focus({ preventScroll: true }), 320); }
+      else area.current?.focus({ preventScroll: true });
     };
     window.addEventListener("sitesmith:prompt", on);
     return () => window.removeEventListener("sitesmith:prompt", on);
@@ -324,7 +324,7 @@ export function PromptBox() {
           <div>
             <div className="px-4 pb-1 pt-2">
               <div className="mb-1.5 flex items-center gap-2 text-[12px]">
-                <span className="font-medium text-zinc-300">Contract address</span>
+                <span className="font-medium text-zinc-300">Contract address<span className="font-normal text-zinc-500">, optional</span></span>
                 <span className="hidden truncate text-zinc-500 sm:inline">· if it&apos;s live, we read DexScreener, the contract and its metadata</span>
               </div>
               <div className="group flex h-11 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] pl-3 pr-1.5 transition-colors focus-within:border-sel/50 focus-within:bg-white/[0.05]">
@@ -392,7 +392,7 @@ export function PromptBox() {
             {/* Socials: we read their posts to write in their voice. */}
             <div className="px-4 pt-3">
               <div className="mb-1.5 flex items-center gap-2 text-[12px]">
-                <span className="font-medium text-zinc-300">Socials</span>
+                <span className="font-medium text-zinc-300">Socials<span className="font-normal text-zinc-500">, optional</span></span>
                 <span className="truncate text-zinc-500">· we read your posts so the site sounds like you</span>
               </div>
               <div className="grid gap-2 sm:grid-cols-3">

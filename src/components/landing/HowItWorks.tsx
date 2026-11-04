@@ -1,5 +1,5 @@
 import { ArrowRight, Check, Globe, Loader2, MessageSquare, MousePointer2, Wallet } from "lucide-react";
-import { BrandIcon, BRANDS, ChainIcon, LetterMark } from "@/components/brand";
+import { BrandIcon, BRANDS, BrandLogo, ChainIcon, LogoStack, LOGOS } from "@/components/brand";
 import { TemplateCards } from "./TemplateCards";
 
 const STEPS = [
@@ -10,14 +10,14 @@ const STEPS = [
 ] as const;
 
 const INTEGRATIONS: Array<{ name: string; what: string; mark: React.ReactNode }> = [
-  { name: "MetaMask", what: "EVM wallets", mark: <LetterMark letter="M" bg="#F6851B" size={28} /> },
-  { name: "Phantom", what: "Solana wallets", mark: <LetterMark letter="P" bg="#AB9FF2" fg="#1C1C3A" size={28} /> },
-  { name: "WalletConnect", what: "Mobile wallets", mark: <span className="grid h-7 w-7 place-items-center rounded-md bg-[#3B99FC]"><BrandIcon icon={BRANDS.walletconnect} size={17} color="#fff" /></span> },
-  { name: "NEAR wallets", what: "HOT, Meteor, Intear", mark: <span className="grid h-7 w-7 place-items-center rounded-md bg-white"><BrandIcon icon={BRANDS.near} size={16} color="#000" /></span> },
-  { name: "Privy", what: "Email and social sign-in", mark: <LetterMark letter="P" bg="#FFFFFF" fg="#000" size={28} /> },
-  { name: "Helius", what: "Solana data and RPC", mark: <LetterMark letter="H" bg="#E84125" size={28} /> },
-  { name: "NEAR Intents", what: "Buy with any coin", mark: <span className="grid h-7 w-7 place-items-center rounded-md bg-lime"><BrandIcon icon={BRANDS.near} size={16} color="#08080A" /></span> },
-  { name: "Jupiter · KyberSwap", what: "Swaps on the site", mark: <LetterMark letter="J" bg="#1B2B2F" fg="#C7F284" size={28} /> },
+  { name: "MetaMask", what: "EVM wallets", mark: <LogoStack srcs={[LOGOS.metamask, LOGOS.rabby]} /> },
+  { name: "Phantom", what: "Solana wallets", mark: <LogoStack srcs={[LOGOS.phantom, LOGOS.solflare, LOGOS.backpack]} /> },
+  { name: "WalletConnect", what: "Mobile wallets", mark: <BrandLogo src={LOGOS.walletconnect} /> },
+  { name: "NEAR wallets", what: "HOT, Meteor, Intear", mark: <LogoStack srcs={[LOGOS.hot, LOGOS.meteor, LOGOS.intear]} /> },
+  { name: "Privy", what: "Email and social sign-in", mark: <BrandLogo src={LOGOS.privy} /> },
+  { name: "Helius", what: "Solana data and RPC", mark: <BrandLogo src={LOGOS.helius} /> },
+  { name: "NEAR Intents", what: "Buy with any coin", mark: <BrandLogo src={LOGOS.nearIntents} /> },
+  { name: "Jupiter · KyberSwap", what: "Swaps on the site", mark: <LogoStack srcs={[LOGOS.jupiter, LOGOS.kyberswap]} /> },
 ];
 
 export function HowItWorks() {

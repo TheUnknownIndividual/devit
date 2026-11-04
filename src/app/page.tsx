@@ -24,7 +24,8 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="hero relative mx-2 overflow-hidden rounded-[28px] border border-white/[0.06] sm:mx-3">
+      {/* overflow-clip, not hidden: a hidden box can still be scrolled by scrollIntoView/focus, which slid the hero up inside itself. */}
+      <section className="hero relative mx-2 overflow-clip rounded-[28px] border border-white/[0.06] sm:mx-3">
         {/* Background: slow-moving colour fields that lean toward the cursor, a dot grid that lights up under it, and fine grain. */}
         <div aria-hidden="true" className="pointer-events-none absolute inset-0">
           <div className="absolute inset-0 bg-[#0A0D1A]" />

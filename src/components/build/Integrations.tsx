@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AlertTriangle, ArrowUpRight, Check, CheckCircle2, ClipboardPaste, Copy, Loader2, MousePointerClick, Plug, ShieldCheck, UserPlus } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
-import { BrandIcon, BRANDS, LetterMark } from "@/components/brand";
+import { BrandLogo, LogoStack, LOGOS } from "@/components/brand";
 import type { PublicProject } from "@/lib/public";
 
 // Guided setup for services that need an ID from their own dashboard. Each guide is a short run of
@@ -155,7 +155,6 @@ function Row({ on, active, mark, name, status, onClick }: { on: boolean; active:
   );
 }
 
-const sq = (bg: string, child: ReactNode) => <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md" style={{ background: bg }}>{child}</span>;
 
 export function IntegrationsDialog({ open, onClose, project, onSaved, heliusOnServer, startAt }: {
   open: boolean; onClose: () => void; project: PublicProject; onSaved: (p: PublicProject) => void; heliusOnServer: boolean; startAt?: Id;
@@ -165,13 +164,13 @@ export function IntegrationsDialog({ open, onClose, project, onSaved, heliusOnSe
   const ints = project.integrations;
 
   const rows: Array<{ id: Id; name: string; mark: ReactNode; on: boolean; status: string }> = [
-    { id: "evm", name: "MetaMask and EVM wallets", mark: <LetterMark letter="M" bg="#F6851B" size={28} />, on: true, status: "Built in" },
-    { id: "solana", name: "Phantom and Solana wallets", mark: <LetterMark letter="P" bg="#AB9FF2" fg="#1C1C3A" size={28} />, on: true, status: "Built in" },
-    { id: "near", name: "NEAR wallets", mark: sq("#fff", <BrandIcon icon={BRANDS.near} size={15} color="#000" />), on: true, status: "Built in, via neartrade" },
-    { id: "intents", name: "NEAR Intents", mark: sq("#C6F24E", <BrandIcon icon={BRANDS.near} size={15} color="#08080A" />), on: true, status: "Buy with any coin" },
-    { id: "walletconnect", name: "WalletConnect", mark: sq("#3B99FC", <BrandIcon icon={BRANDS.walletconnect} size={16} color="#fff" />), on: !!ints.walletconnectProjectId, status: ints.walletconnectProjectId ? "Connected" : "Needs a Project ID" },
-    { id: "privy", name: "Privy", mark: <LetterMark letter="P" bg="#fff" fg="#000" size={28} />, on: !!ints.privyAppId, status: ints.privyAppId ? "Connected" : project.kind === "dapp" ? "Recommended for dApps" : "Email and social sign-in" },
-    { id: "helius", name: "Helius", mark: <LetterMark letter="H" bg="#E84125" size={28} />, on: heliusOnServer, status: heliusOnServer ? "On for Solana data" : "Public Solana RPC" },
+    { id: "evm", name: "MetaMask and EVM wallets", mark: <BrandLogo src={LOGOS.metamask} />, on: true, status: "Built in" },
+    { id: "solana", name: "Phantom and Solana wallets", mark: <BrandLogo src={LOGOS.phantom} />, on: true, status: "Built in" },
+    { id: "near", name: "NEAR wallets", mark: <BrandLogo src={LOGOS.hot} />, on: true, status: "Built in, via neartrade" },
+    { id: "intents", name: "NEAR Intents", mark: <BrandLogo src={LOGOS.nearIntents} />, on: true, status: "Buy with any coin" },
+    { id: "walletconnect", name: "WalletConnect", mark: <BrandLogo src={LOGOS.walletconnect} />, on: !!ints.walletconnectProjectId, status: ints.walletconnectProjectId ? "Connected" : "Needs a Project ID" },
+    { id: "privy", name: "Privy", mark: <BrandLogo src={LOGOS.privy} />, on: !!ints.privyAppId, status: ints.privyAppId ? "Connected" : project.kind === "dapp" ? "Recommended for dApps" : "Email and social sign-in" },
+    { id: "helius", name: "Helius", mark: <BrandLogo src={LOGOS.helius} />, on: heliusOnServer, status: heliusOnServer ? "On for Solana data" : "Public Solana RPC" },
   ];
 
   return (
@@ -190,6 +189,12 @@ export function IntegrationsDialog({ open, onClose, project, onSaved, heliusOnSe
   );
 }
 
+/** The wallets and services each built-in pane stands for, by their own marks. */
+const PANE_LOGOS: Record<"evm" | "solana" | "near" | "intents" | "helius", string[]> = {
+  evm: [LOGOS.metamask, LOGOS.rabby], solana: [LOGOS.phantom, LOGOS.solflare, LOGOS.backpack],
+  near: [LOGOS.hot, LOGOS.meteor, LOGOS.intear], intents: [LOGOS.nearIntents], helius: [LOGOS.helius],
+};
+
 function BuiltIn({ which, heliusOnServer }: { which: Exclude<Id, "walletconnect" | "privy">; heliusOnServer: boolean }) {
   const copy: Record<typeof which, { title: string; points: string[] }> = {
     evm: { title: "MetaMask, Rabby, Coinbase Wallet and more", points: ["Every installed EVM wallet announces itself (EIP-6963), so visitors see their own wallet with its real logo.", "On Robinhood Chain the site asks the wallet to switch networks, or adds the network if it's new.", "Buys swap right on the site through KyberSwap; the visitor confirms in their wallet.", "No setup needed."] },
@@ -201,7 +206,7 @@ function BuiltIn({ which, heliusOnServer }: { which: Exclude<Id, "walletconnect"
   const c = copy[which];
   return (
     <div className="animate-rise">
-      <div className="flex items-center gap-2 text-[15px] font-semibold text-white"><ShieldCheck size={17} className="text-lime" /> {c.title}</div>
+      <div className="flex items-center gap-3 text-[15px] font-semibold text-white"><LogoStack srcs={PANE_LOGOS[which]} size={32} /> {c.title}</div>
       <ul className="mt-4 space-y-2.5">
         {c.points.map((p) => <li key={p} className="flex gap-2.5 text-[13.5px] leading-relaxed text-zinc-300"><Check size={15} className="mt-0.5 shrink-0 text-lime" />{p}</li>)}
       </ul>
@@ -245,6 +250,7 @@ function Guide({ which, project, onSaved }: { which: "walletconnect" | "privy"; 
   return (
     <div className="animate-rise">
       <div className="flex flex-wrap items-center gap-3">
+        <BrandLogo src={which === "privy" ? LOGOS.privy : LOGOS.walletconnect} size={32} />
         <div className="text-[15px] font-semibold text-white">Connect {g.name}</div>
         <span className="text-[12px] text-zinc-500">{which === "privy" ? "Email, social and embedded-wallet sign-in" : "Phone wallets by QR code"}</span>
         <a className="btn btn-primary ml-auto" href={g.dashboard} target="_blank" rel="noreferrer" onClick={() => setAt((a) => Math.max(a, 1))}>

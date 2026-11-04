@@ -39,3 +39,24 @@ export function LetterMark({ letter, bg, fg = "#fff", size = 20 }: { letter: str
     </span>
   );
 }
+
+/** Official marks, saved from each brand's own site into public/brands (simple-icons doesn't ship these). */
+export const LOGOS = {
+  metamask: "/brands/metamask.svg", phantom: "/brands/phantom.svg", solflare: "/brands/solflare.svg", backpack: "/brands/backpack.png",
+  rabby: "/brands/rabby.png", hot: "/brands/hot.svg", meteor: "/brands/meteor.png", intear: "/brands/intear.svg",
+  walletconnect: "/brands/walletconnect.png", privy: "/brands/privy.png", helius: "/brands/helius.svg", jupiter: "/brands/jupiter.svg",
+  kyberswap: "/brands/kyberswap.png", nearIntents: "/brands/near-intents.png",
+} as const;
+
+export function BrandLogo({ src, size = 28, alt = "" }: { src: string; size?: number; alt?: string }) {
+  return <img src={src} alt={alt} width={size} height={size} style={{ width: size, height: size }} className="shrink-0 rounded-md object-contain" draggable={false} />;
+}
+
+/** Side-by-side marks for a row that stands for several products ("Jupiter · KyberSwap"). */
+export function LogoStack({ srcs, size = 28 }: { srcs: string[]; size?: number }) {
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      {srcs.map((s, i) => <BrandLogo key={s} src={s} size={i ? Math.round(size * 0.8) : size} />)}
+    </span>
+  );
+}
