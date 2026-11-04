@@ -6,6 +6,7 @@ import { BrandIcon, BRANDS } from "@/components/brand";
 import { HowItWorks } from "@/components/landing/HowItWorks";
 import { GetStarted } from "@/components/landing/GetStarted";
 import { MotionFx } from "@/components/fx/MotionFx";
+import { AccountMenu } from "@/components/account/AccountMenu";
 
 export default function Home() {
   return (
@@ -17,10 +18,12 @@ export default function Home() {
           <Link href="#how" className="btn btn-ghost">How it works</Link>
           <Link href="#templates" className="btn btn-ghost">Templates</Link>
           <Link href="#integrations" className="btn btn-ghost">Integrations</Link>
+          <Link href="/pricing" className="btn btn-ghost">Pricing</Link>
         </nav>
         <div className="flex items-center gap-2">
           <Link href="/projects" className="btn btn-ghost"><FolderOpen size={15} className="tilt" /> <span className="hidden sm:inline">My sites</span></Link>
           <GetStarted />
+          <AccountMenu />
         </div>
       </header>
 

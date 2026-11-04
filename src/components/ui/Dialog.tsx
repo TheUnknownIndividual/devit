@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 export function Dialog({ open, onClose, title, icon, width = 560, children, footer }: {
@@ -13,7 +14,8 @@ export function Dialog({ open, onClose, title, icon, width = 560, children, foot
     return () => document.removeEventListener("keydown", k);
   }, [open, onClose]);
   if (!open) return null;
-  return (
+  // On body: an animated parent (a transform or filter) would otherwise become the box "fixed" is measured from.
+  return createPortal(
     <div className="fixed inset-0 z-[100] grid place-items-center bg-black/60 p-4 backdrop-blur-[2px]" onMouseDown={onClose}>
       <div
         role="dialog"
@@ -31,6 +33,7 @@ export function Dialog({ open, onClose, title, icon, width = 560, children, foot
         <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
         {footer && <div className="flex shrink-0 items-center justify-end gap-2 border-t border-white/[0.07] px-4 py-3">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

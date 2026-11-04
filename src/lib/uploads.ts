@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 // Pictures a team adds in the chat (a logo, a hero image). Only raster images are taken, told apart by their first
@@ -38,4 +38,15 @@ export async function saveUpload(project: string, file: string, bytes: Uint8Arra
 
 export async function readUpload(project: string, file: string): Promise<Buffer | null> {
   try { return await readFile(where(project, file)); } catch { return null; }
+}
+
+/** A duplicated project gets its own copy of the pictures, so deleting either leaves the other whole. */
+export async function copyUploads(from: string, to: string): Promise<void> {
+  if (!PROJECT_RE.test(from) || !PROJECT_RE.test(to)) throw new Error("bad upload path");
+  await cp(path.join(DIR, from), path.join(DIR, to), { recursive: true }).catch(() => undefined);
+}
+
+export async function removeUploads(project: string): Promise<void> {
+  if (!PROJECT_RE.test(project)) throw new Error("bad upload path");
+  await rm(path.join(DIR, project), { recursive: true, force: true });
 }

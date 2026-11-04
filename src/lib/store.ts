@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile, readdir } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import type { Project } from "./spec";
 
@@ -40,6 +40,13 @@ export async function updateProject(id: string, fn: (p: Project) => void | Promi
   });
   locks.set(id, next.catch(() => undefined));
   return next;
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  const prev = locks.get(id) ?? Promise.resolve();
+  await prev;
+  await rm(file(id), { force: true });
+  locks.delete(id);
 }
 
 export async function findBySlug(slug: string): Promise<Project | null> {

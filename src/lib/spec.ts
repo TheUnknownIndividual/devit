@@ -219,6 +219,12 @@ export interface PendingComment {
 export interface Project {
   id: string;
   slug: string;
+  /** Display name set by a rename; the site's own name stays spec.name. */
+  name?: string;
+  /** The account that owns it. Missing on anonymous and pre-account projects. */
+  ownerId?: string;
+  /** SHA-256 of the anonymous browser id that made it, until someone signs in on that browser. */
+  anon?: string;
   prompt: string;
   kind: "memecoin" | "dapp" | "nft";
   /** Style picked on the landing page; wins over the one read from the sentence. */
@@ -243,6 +249,9 @@ export interface Project {
   publishedSpec?: SiteSpec;
   version: number;
 }
+
+/** What the project is called in lists and the builder: a rename wins over the site's own name. */
+export const displayName = (p: Pick<Project, "name" | "spec">) => p.name || p.spec?.name || "New site";
 
 export function newId(len = 10): string {
   const abc = "abcdefghijkmnpqrstuvwxyz23456789";

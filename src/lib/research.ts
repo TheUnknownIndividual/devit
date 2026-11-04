@@ -3,7 +3,7 @@ import path from "node:path";
 import { isPublicHttps } from "./net";
 import { logoAccent, themeColorOf } from "./palette";
 import { metadataAddress, parseMetadata } from "./solana";
-import { DEFAULT_RPC } from "./chain";
+import { rpcFor } from "./chain";
 import type { Chain, Finding, Research, SocialInput, TokenInfo, Voice, XPost, XProfile } from "./spec";
 
 // Before writing a word, find out who the project is: socials and story from DexScreener, CoinGecko,
@@ -203,7 +203,7 @@ function readMetaJson(j: MetaJson | null, source: string, links: Links, descript
 }
 
 async function solanaMetadata(t: TokenInfo, links: Links, descriptions: Research["descriptions"]): Promise<string | null> {
-  const rpcUrl = DEFAULT_RPC.solana;
+  const rpcUrl = rpcFor("solana");
   let uri: string | null = null;
   const pda = metadataAddress(t.address);
   if (pda) {
@@ -222,7 +222,7 @@ async function solanaMetadata(t: TokenInfo, links: Links, descriptions: Research
 }
 
 async function nearMetadata(t: TokenInfo, links: Links, descriptions: Research["descriptions"]): Promise<string | null> {
-  const r = await rpc<{ result?: number[] }>(DEFAULT_RPC.near, "query", { request_type: "call_function", finality: "final", account_id: t.address, method_name: "ft_metadata", args_base64: "e30=" });
+  const r = await rpc<{ result?: number[] }>(rpcFor("near"), "query", { request_type: "call_function", finality: "final", account_id: t.address, method_name: "ft_metadata", args_base64: "e30=" });
   if (!r?.result) return null;
   let meta: { reference?: string | null } | null = null;
   try { meta = JSON.parse(Buffer.from(r.result).toString("utf8")); } catch { return null; }

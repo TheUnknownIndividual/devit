@@ -4,6 +4,9 @@ import { runBuild } from "@/lib/agent";
 import { saveProject } from "@/lib/store";
 import { THEME_IDS, newId, type Project } from "@/lib/spec";
 import { overLimit } from "@/lib/net";
+import { activePlan, buildsToday, countBuild, ensureAnon, ownerKeysFor, viewer } from "@/lib/accounts";
+import { hasOwnLlm, runWithKeys } from "@/lib/keyscope";
+import { plan } from "@/lib/plans";
 
 const Body = z.object({
   prompt: z.string().trim().min(3).max(1200),
@@ -20,15 +23,26 @@ export async function POST(req: Request) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Describe your site in a sentence first." }, { status: 400 });
   const { prompt, chain, kind, address, style, socials } = parsed.data;
+  // The plan's daily build cap, per account or per anonymous browser. Builds on the owner's own model key are free.
+  const v = await viewer();
+  const anon = v.user ? undefined : await ensureAnon();
+  const keys = await ownerKeysFor(v.user?.id);
+  const who = v.user ? `user:${v.user.id}` : `anon:${anon}`;
+  const cap = plan(activePlan(v.user)).buildsPerDay;
+  if (cap != null && !hasOwnLlm(keys) && (await buildsToday(who)) >= cap) {
+    return NextResponse.json({ error: `That's the ${cap} free builds for today. Edits still work, or go Pro or add your own model key in Settings for more.`, limit: true }, { status: 429 });
+  }
   const full = address && !prompt.includes(address) ? `${prompt} ${address}` : prompt;
   const now = Date.now();
   const p: Project = {
     id: newId(12), slug: "", prompt: full, kind, style, socials, createdAt: now, updatedAt: now, status: "building",
     steps: [], messages: [{ id: newId(), role: "user", text: full, at: now }],
     spec: null, history: [], network: { chain }, integrations: {}, published: null, version: 0,
+    ...(v.user ? { ownerId: v.user.id } : { anon }),
   };
   await saveProject(p);
+  if (!hasOwnLlm(keys)) await countBuild(who);
   // The build writes its progress into the project; the workspace polls it.
-  void runBuild(p.id).catch(() => undefined);
+  void runWithKeys(keys, () => runBuild(p.id)).catch(() => undefined);
   return NextResponse.json({ id: p.id });
 }
