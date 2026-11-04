@@ -5,7 +5,9 @@ import { BLOCK_LABELS, CHAINS, type Block, type SiteSpec, type TokenInfo } from 
 import { SITE_CSS, themeVars } from "./css";
 import { usd, num, ago } from "./format";
 import { BuyBox, Chart, Count, CopyCA, LiveStats, LiveTrades, MotionFx, Ticker, WalletButton, type Mode } from "./client/parts";
+import { Treasury } from "./client/treasury";
 import { fxOf } from "@/lib/themes";
+import type { TreasuryData } from "@/lib/treasury";
 
 // Renders a SiteSpec. Each block carries data-block-id so the builder's select tool maps a click to one block,
 // and inner parts carry data-el so a comment can name the exact element ("headline", "cta", …).
@@ -47,6 +49,7 @@ function Nav({ b, spec, mode, walletconnect }: { b: Block; spec: SiteSpec; mode:
           {has("buy") && <a href="#buy">Buy</a>}
           {has("chart") && <a href="#chart">Chart</a>}
           {has("how") && <a href="#how">How to buy</a>}
+          {has("treasury") && <a href="#treasury">Treasury</a>}
           {has("roadmap") && <a href="#roadmap">Roadmap</a>}
           {has("faq") && <a href="#faq">FAQ</a>}
         </nav>
@@ -120,6 +123,22 @@ function Tokenomics({ b, spec }: { b: Block; spec: SiteSpec }) {
 }
 
 const SOCIAL_ICON: Record<string, typeof BRANDS.x> = { twitter: BRANDS.x, x: BRANDS.x, "x-community": BRANDS.x, telegram: BRANDS.telegram, discord: BRANDS.discord, github: BRANDS.github };
+
+function TreasuryBlock({ b, mode }: { b: Block; mode: Mode }) {
+  const p = b.props as P;
+  const accounts = [...arr<string>(p.accounts), s(p.account)].filter((a, i, l) => a && l.indexOf(a) === i).slice(0, 3);
+  return (
+    <Section b={b}>
+      <div className="ss-wrap">
+        <Title text={s(p.title, "Treasury")} />
+        {s(p.body) && <p className="ss-muted ss-tr-body" data-el="body">{s(p.body)}</p>}
+        {accounts.length
+          ? <Treasury accounts={accounts} snapshot={(p.snapshot as TreasuryData | undefined) ?? null} mode={mode} />
+          : <div className="ss-card ss-muted" data-el="treasury"><BrandIcon icon={BRANDS.near} size={18} color="currentColor" /> [ADD TREASURY ACCOUNT, e.g. yourdao.sputnik-dao.near]</div>}
+      </div>
+    </Section>
+  );
+}
 
 function Story({ b, spec }: { b: Block; spec: SiteSpec }) {
   const p = b.props as P;
@@ -243,18 +262,7 @@ function BlockView({ b, spec, mode, walletconnect }: { b: Block; spec: SiteSpec;
           </div>
         </Section>
       );
-    case "treasury":
-      return (
-        <Section b={b}>
-          <div className="ss-wrap">
-            <Title text={s(p.title, "Treasury")} />
-            <div className="ss-card" data-el="treasury">
-              <div className="ss-row" style={{ gap: 12 }}><BrandIcon icon={BRANDS.near} size={22} color="currentColor" /><b>{s(p.account) || "[TREASURY ACCOUNT]"}</b></div>
-              <p className="ss-muted" style={{ margin: "10px 0 0" }}>{s(p.body, "Balances of the community multisig, read live.")}</p>
-            </div>
-          </div>
-        </Section>
-      );
+    case "treasury": return <TreasuryBlock b={b} mode={mode} />;
     case "roadmap":
       return (
         <Section b={b}>
