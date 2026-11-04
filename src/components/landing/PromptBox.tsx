@@ -16,6 +16,7 @@ import { readToken } from "@/lib/venues";
 import { THEME_LABELS } from "@/lib/themes";
 import { usd } from "@/blocks/format";
 import { BLOCK_LABELS, CHAINS, type Chain, type Finding, type ThemeId, type TokenInfo } from "@/lib/spec";
+import { Upsell, refusalOf, type PlanRefusal } from "@/components/ui/Upsell";
 
 type Kind = "memecoin" | "dapp" | "nft";
 type Style = ThemeId | "auto";
@@ -87,7 +88,7 @@ export function PromptBox() {
   const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [limitHit, setLimitHit] = useState(false);
+  const [refusal, setRefusal] = useState<PlanRefusal | null>(null);
   const [listening, setListening] = useState(false);
   const [canSpeak, setCanSpeak] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -223,7 +224,7 @@ export function PromptBox() {
         }),
       });
       const j = (await r.json().catch(() => ({}))) as { id?: string; error?: string; limit?: boolean };
-      setLimitHit(!!j.limit);
+      setRefusal(refusalOf(j));
       if (!r.ok || !j.id) throw new Error(j.error || "Couldn't start the build. Try again.");
       router.push(`/build/${j.id}`);
     } catch (e) {
@@ -521,7 +522,7 @@ export function PromptBox() {
         </div>
       </div>
 
-      {error && <p role="alert" className="mt-3 animate-rise text-[13px] text-red-300">{error}{limitHit && <> <a href="/pricing" className="text-white underline underline-offset-2">See plans</a> · <a href="/settings#keys" className="text-white underline underline-offset-2">Add a key</a></>}</p>}
+      {error && (refusal ? <Upsell body={refusal} className="mt-3 animate-rise" /> : <p role="alert" className="mt-3 animate-rise text-[13px] text-red-300">{error}</p>)}
 
       <KindPicker kind={kind} onPick={setKind} />
     </div>

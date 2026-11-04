@@ -192,7 +192,7 @@ function Socials({ b, spec }: { b: Block; spec: SiteSpec }) {
   );
 }
 
-function BlockView({ b, spec, mode, walletconnect }: { b: Block; spec: SiteSpec; mode: Mode; walletconnect: string | null }) {
+function BlockView({ b, spec, mode, walletconnect, credit }: { b: Block; spec: SiteSpec; mode: Mode; walletconnect: string | null; credit: string | null }) {
   const p = b.props as P;
   const count = mode === "live" && fxOf(spec.theme).count !== false;
   switch (b.type) {
@@ -290,15 +290,18 @@ function BlockView({ b, spec, mode, walletconnect }: { b: Block; spec: SiteSpec;
               <div style={{ fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>{spec.name} · ${spec.ticker}</div>
               {s(p.disclaimer)}
             </div>
-            <span className="ss-built">Built with sitesmith</span>
+            {credit && <a className="ss-built" href={credit} target="_blank" rel="noopener" data-el="credit">Built with <b>sitesmith</b></a>}
           </div>
         </footer>
       );
   }
 }
 
-/** walletconnect: the project's WalletConnect project ID (public by design: WalletConnect checks the site's domain). */
-export function Site({ spec, mode, walletconnect = null }: { spec: SiteSpec; mode: Mode; walletconnect?: string | null }) {
+/**
+ * walletconnect: the project's WalletConnect project ID (public by design: WalletConnect checks the site's domain).
+ * credit: where the free plan's "Built with sitesmith" line links (lib/credit.ts), or null for none.
+ */
+export function Site({ spec, mode, walletconnect = null, credit = null }: { spec: SiteSpec; mode: Mode; walletconnect?: string | null; credit?: string | null }) {
   const t = spec.theme;
   const fx = fxOf(t);
   return (
@@ -313,7 +316,8 @@ export function Site({ spec, mode, walletconnect = null }: { spec: SiteSpec; mod
         data-transition={fx.transition ?? "none"} data-stagger={fx.stagger === false ? undefined : ""} data-intro={fx.intro === false ? undefined : ""} data-nav={fx.nav ?? "compact"}
       >
         {mode === "live" && fx.progress && <div className="ss-progress" aria-hidden="true" />}
-        {spec.blocks.map((b) => <BlockView key={b.id} b={b} spec={spec} mode={mode} walletconnect={walletconnect} />)}
+        {spec.blocks.map((b) => <BlockView key={b.id} b={b} spec={spec} mode={mode} walletconnect={walletconnect} credit={credit} />)}
+        {credit && !spec.blocks.some((b) => b.type === "footer") && <div className="ss-wrap ss-credit"><a className="ss-built" href={credit} target="_blank" rel="noopener">Built with <b>sitesmith</b></a></div>}
         <MotionFx mode={mode} toTop={fx.toTop !== false} progress={!!fx.progress} nav={(fx.nav ?? "compact") === "compact"} />
       </div>
     </>

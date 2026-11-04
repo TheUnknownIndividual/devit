@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Site } from "@/blocks/Site";
 import { findBySlug } from "@/lib/store";
+import { siteCredit } from "@/lib/credit";
 
 // A published site. Locally it lives at /s/<slug>; the Cloudflare Worker serves the same page at <slug>.<domain>.
 export const dynamic = "force-dynamic";
@@ -23,5 +24,5 @@ export default async function Published({ params }: { params: Promise<{ slug: st
   const p = await findBySlug(slug);
   const spec = p?.publishedSpec ?? p?.spec;
   if (!p || !spec) notFound();
-  return <Site spec={spec} mode="live" walletconnect={p.integrations.walletconnectProjectId ?? null} />;
+  return <Site spec={spec} mode="live" walletconnect={p.integrations.walletconnectProjectId ?? null} credit={await siteCredit(p)} />;
 }

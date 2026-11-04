@@ -32,7 +32,10 @@ export interface Method {
   passkey?: { publicKey: string; counter: number; transports?: string[] };
 }
 export interface StoredKey { enc: string; last4: string; host?: string; at: number; verifiedAt: number | null; use: boolean }
-export interface Payment { depositAddress: string; plan: PlanId; cycle: Cycle; usd: number; pay: string; at: number; status?: string }
+/** status is 1-Click's word for the deposit; received is the USDC it delivered; settledAt is set once, when the plan turned on. */
+export interface Payment { depositAddress: string; plan: PlanId; cycle: Cycle; usd: number; pay: string; at: number; status?: string; received?: number; settledAt?: number; checkedAt?: number }
+/** A plan set by hand (support, testing): who set it and for how long. */
+export interface Grant { plan: PlanId; days: number | null; by: string; at: number }
 export interface User {
   id: string;
   name: string | null;
@@ -43,6 +46,7 @@ export interface User {
   plan: PlanId;
   planUntil?: number;
   payments?: Payment[];
+  grants?: Grant[];
 }
 
 // ---------- files ----------
@@ -129,6 +133,8 @@ export function initialOf(u: Pick<User, "name" | "email" | "methods">): string {
 export function publicUser(u: User) {
   return {
     id: u.id, name: u.name, email: u.email, createdAt: u.createdAt, initial: initialOf(u), plan: activePlan(u), planUntil: u.planUntil ?? null,
+    payments: (u.payments ?? []).map((x) => ({ depositAddress: x.depositAddress, plan: x.plan, cycle: x.cycle, usd: x.usd, pay: x.pay, at: x.at, status: x.status ?? null, received: x.received ?? null, settledAt: x.settledAt ?? null })),
+    grants: (u.grants ?? []).map((g) => ({ plan: g.plan, days: g.days, at: g.at })),
     methods: u.methods.map((m) => ({ kind: m.kind, id: m.kind === "passkey" ? m.id.slice(0, 12) : m.id, fullId: m.id, label: m.label, at: m.at })),
     keys: Object.fromEntries(Object.entries(u.keys).map(([k, v]) => [k, { last4: v!.last4, host: v!.host ?? null, at: v!.at, verifiedAt: v!.verifiedAt, use: v!.use }])) as Partial<Record<KeyId, { last4: string; host: string | null; at: number; verifiedAt: number | null; use: boolean }>>,
   };

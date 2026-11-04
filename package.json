@@ -12,6 +12,8 @@
     "build": "next build",
     "start": "next start -p 3100",
     "style-refs": "node --import ./scripts/ts-loader.mjs --experimental-strip-types scripts/collect-style-refs.ts",
+    "grant-plan": "node --import ./scripts/ts-loader.mjs --experimental-strip-types scripts/grant-plan.ts",
+    "test-billing": "node --import ./scripts/ts-loader.mjs --experimental-strip-types scripts/test-billing.ts",
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {

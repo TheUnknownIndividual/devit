@@ -6,9 +6,11 @@
 // model, "heavy" (writing a whole site, restyling from a reference, edits across many blocks) its big one. A light
 // answer that doesn't validate is asked again of the same provider's heavy model before moving on.
 //
-// A signed-in owner's own keys (Settings → API keys, read through keyscope) go first, then ours.
+// A signed-in owner's own keys (Settings → API keys, read through keyscope) go first, at the tier asked for. On our
+// keys the owner's plan decides: priority models (Pro/Team) get the big model for every call, free owners' edits and
+// comments run on the small one, and builds keep the big one.
 
-import { hasOwnLlm, ownerKeys } from "./keyscope";
+import { hasOwnLlm, ownerKeys, priorityModels } from "./keyscope";
 
 export interface LlmResult { text: string; via: string }
 
@@ -143,10 +145,11 @@ function parse<T>(text: string, validate: (v: unknown) => T | null): T | null {
  * Ask for JSON. Returns the parsed object and which provider and model answered, or null if nobody could. A light
  * call that comes back unusable is retried on that provider's heavy model before the next provider is tried.
  */
-export async function askJson<T>(system: string, user: string, validate: (v: unknown) => T | null, tier: Tier = "heavy"): Promise<{ value: T; via: string } | null> {
+export async function askJson<T>(system: string, user: string, validate: (v: unknown) => T | null, tier: Tier = "heavy", use: "build" | "edit" = "build"): Promise<{ value: T; via: string } | null> {
   const sys = system + "\nReply with one JSON object only, no prose, no code fences.";
+  const ours: Tier = priorityModels() ? "heavy" : use === "edit" ? "light" : tier;
   for (const { call, key, own } of providers()) {
-    for (const t of tier === "light" ? (["light", "heavy"] as const) : (["heavy"] as const)) {
+    for (const t of (own ? tier : ours) === "light" ? (["light", "heavy"] as const) : (["heavy"] as const)) {
       const res = await call(sys, user, t === "light" ? 25_000 : 60_000, t, key);
       if (!res) break;
       const v = parse(res.text, validate);

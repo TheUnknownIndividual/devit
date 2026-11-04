@@ -10,5 +10,9 @@ export async function resolve(spec, ctx, next) {
       if (existsSync(fileURLToPath(u))) return next(u.href, ctx);
     }
   }
-  return next(spec, ctx);
+  // Packages without an exports map (next/headers): the subpath needs its .js.
+  try { return await next(spec, ctx); } catch (e) {
+    if (e?.code === "ERR_MODULE_NOT_FOUND" && /^[a-z@][^:]*\\/[^.]+$/.test(spec)) return next(spec + ".js", ctx);
+    throw e;
+  }
 }`));

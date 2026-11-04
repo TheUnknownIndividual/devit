@@ -142,7 +142,10 @@ export const SITE_CSS = `
 .ss-social{display:inline-flex;align-items:center;gap:10px;height:52px;padding:0 20px;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--surface);font-weight:700}
 .ss-foot{padding:40px 0 56px;border-top:1px solid var(--border);font-size:13px;color:var(--muted)}
 .ss-foot-in{display:flex;flex-wrap:wrap;justify-content:space-between;gap:16px}
-.ss-built{display:inline-flex;align-items:center;gap:6px;opacity:.8}
+.ss-built{display:inline-flex;align-items:center;gap:4px;align-self:flex-end;font-size:12px;color:var(--muted);opacity:.85;transition:opacity .15s,color .15s}
+.ss a.ss-built:hover{opacity:1;color:var(--text)}
+.ss-built b{font-weight:600;color:var(--text)}
+.ss-credit{display:flex;justify-content:flex-end;padding-top:24px;padding-bottom:32px;border-top:1px solid var(--border)}
 
 /* wallet modal */
 .ss-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:grid;place-items:center;padding:16px}
