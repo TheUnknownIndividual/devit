@@ -192,7 +192,7 @@ function Section({ id, title, hint, children }: { id: string; title: string; hin
 function MethodIcon({ kind }: { kind: string }) {
   const c = "grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/[0.05] text-zinc-300";
   if (kind === "passkey") return <span className={c}><Fingerprint size={15} /></span>;
-  if (kind === "email") return <span className={c}><Mail size={15} /></span>;
+  if (kind === "email" || kind === "google") return <span className={c}><Mail size={15} /></span>;
   const icon = kind === "solana" ? BRANDS.solana : kind === "evm" ? BRANDS.ethereum : BRANDS.near;
   return <span className={c}><BrandIcon icon={icon} size={14} color="#d4d4d8" /></span>;
 }

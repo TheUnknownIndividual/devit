@@ -15,9 +15,9 @@ export default function Home() {
       <header className="enter relative z-20 mx-auto flex h-16 max-w-[1240px] items-center justify-between gap-6 px-5">
         <Logo />
         <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
-          <Link href="#how" className="btn btn-ghost">How it works</Link>
-          <Link href="#templates" className="btn btn-ghost">Templates</Link>
-          <Link href="#integrations" className="btn btn-ghost">Integrations</Link>
+          <a href="#how" className="btn btn-ghost">How it works</a>
+          <a href="#templates" className="btn btn-ghost">Templates</a>
+          <a href="#integrations" className="btn btn-ghost">Integrations</a>
           <Link href="/pricing" className="btn btn-ghost">Pricing</Link>
         </nav>
         <div className="flex items-center gap-2">

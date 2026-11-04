@@ -22,10 +22,10 @@ export const SESSION_COOKIE = "ss_session";
 export const ANON_COOKIE = "ss_anon";
 const SESSION_DAYS = 30;
 
-export type MethodKind = "passkey" | "email" | "solana" | "evm" | "near";
+export type MethodKind = "passkey" | "email" | "google" | "solana" | "evm" | "near";
 export interface Method {
   kind: MethodKind;
-  /** Credential id, lowercased email, or wallet address / account id. */
+  /** Credential id, lowercased email, Google account id (sub), or wallet address / account id. */
   id: string;
   label: string;
   at: number;
@@ -94,7 +94,7 @@ export async function userByMethod(kind: MethodKind, id: string): Promise<User |
 }
 
 async function createUser(m: Method): Promise<User> {
-  const u: User = { id: newUserId(), name: null, email: m.kind === "email" ? m.id : null, createdAt: Date.now(), methods: [m], keys: {}, plan: "free" };
+  const u: User = { id: newUserId(), name: null, email: m.kind === "email" ? m.id : m.kind === "google" ? m.label : null, createdAt: Date.now(), methods: [m], keys: {}, plan: "free" };
   await writeJson(`users/${u.id}.json`, u);
   await writeJson(methodKey(m.kind, m.id), { userId: u.id });
   return u;
@@ -104,6 +104,7 @@ export async function addMethod(userId: string, m: Method): Promise<User | null>
   const u = await updateUser(userId, (u) => {
     u.methods = [...u.methods.filter((x) => !(x.kind === m.kind && x.id === m.id)), m];
     if (m.kind === "email" && !u.email) u.email = m.id;
+    if (m.kind === "google" && !u.email) u.email = m.label;
   });
   if (u) await writeJson(methodKey(m.kind, m.id), { userId });
   return u;
