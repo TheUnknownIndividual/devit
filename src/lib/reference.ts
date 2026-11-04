@@ -263,7 +263,7 @@ function hoverFrom(before: Record<string, string>, after: Record<string, string>
   return null;
 }
 
-async function viaBrowser(url: string): Promise<RefRead | null> {
+async function viaBrowser(url: string, shot?: string): Promise<RefRead | null> {
   let chromium: typeof import("playwright-core").chromium;
   try { ({ chromium } = await import("playwright-core")); } catch { return null; }
   let browser: Awaited<ReturnType<typeof chromium.launch>>;
@@ -286,6 +286,8 @@ async function viaBrowser(url: string): Promise<RefRead | null> {
     await page.waitForLoadState("networkidle", { timeout: 6_000 }).catch(() => undefined);
     await page.waitForTimeout(800);
     const first = await page.evaluate(readPage);
+    // The style library keeps a small picture of the first screen (jpeg, never reused on a built site).
+    if (shot) await page.screenshot({ path: shot, type: "jpeg", quality: 35 }).catch(() => undefined);
 
     // Scroll down in steps, as a person would, then see what the watched elements did.
     await page.evaluate(markBelow);
@@ -441,12 +443,12 @@ function finish(url: string, how: RefRead["how"], r: PageRead, extra: { reveal: 
 }
 
 /** Reads one reference site: rendered in a browser when one is installed, else from its HTML and CSS. Null if neither works. */
-export async function readReference(raw: string): Promise<RefRead | null> {
+export async function readReference(raw: string, opts?: { shot?: string }): Promise<RefRead | null> {
   let url: string;
   try { url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`).toString().replace(/^http:/, "https:"); } catch { return null; }
   if (!isPublicHttps(url) || !(await publicHost(new URL(url).hostname, new Map()))) return null;
   if (process.env.SITESMITH_REF_BROWSER !== "0") {
-    const r = await viaBrowser(url);
+    const r = await viaBrowser(url, opts?.shot);
     if (r) return r;
   }
   return viaHtml(url);

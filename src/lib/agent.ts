@@ -6,6 +6,7 @@ import { research } from "./research";
 import { readReference } from "./reference";
 import { withoutRefs as withoutRefsText } from "./reference-urls";
 import { orderLike, refBlockOrder, refLine, themeFromRef, themeForRef } from "./ref-style";
+import { nudgeTheme, pickStyleRefs, themeOfPicks, type StyleRef } from "./style-library";
 import { THEMES, THEME_LABELS, THEME_NOTES, colorFromText, fitAccent, fxOf, readableOn, referenceIn, restyle, themeNamed } from "./themes";
 import { updateProject } from "./store";
 import { BLOCK_LABELS, CHAINS, THEME_IDS, newId, type Asset, type Block, type BlockType, type Chain, type PendingComment, type Project, type RefRead, type Research, type SiteSpec, type ThemeFx, type Theme, type ThemeId, type TokenInfo, type TokenLink } from "./spec";
@@ -325,8 +326,12 @@ export async function runBuild(id: string): Promise<void> {
 
   // Reference sites: their look and motion, read in a browser. Their sections join the ones the site shows.
   const refs: RefRead[] = [];
+  let libRefs: StyleRef[] = [];
   await step(id, "reference", "Studying the reference site", async () => {
-    if (!intent.refs.length) return { skipped: "No reference site given (add one with ref: https://…)" };
+    if (!intent.refs.length) {
+      libRefs = pickStyleRefs({ vibe: prompt, theme: intent.theme, chain, kind: (found as Research | null)?.meme === false ? "utility" : "meme" });
+      return libRefs.length ? `Matched ${libRefs.length} live token sites: ${libRefs.map((x) => x.host).join(", ")}` : { skipped: "No reference site given (add one with ref: https://…)" };
+    }
     const read = (await Promise.all(intent.refs.map((u) => readReference(u).catch(() => null)))).filter((x): x is RefRead => !!x);
     refs.push(...read);
     if (!read.length) throw new Error(`Couldn't open ${intent.refs.map((u) => new URL(u).hostname).join(", ")}`);
@@ -343,6 +348,8 @@ export async function runBuild(id: string): Promise<void> {
     const t = themeFromResearch(found);
     if (t) intent = { ...intent, theme: t };
   }
+
+  if (libRefs.length && !start.style && !themeNamed(prompt) && !themeFromResearch(found)) intent = { ...intent, theme: themeOfPicks(libRefs, intent.theme) };
 
   await step(id, "copy", "Writing the copy", async () => {
     copyRes = await writeCopy(prompt, intent, token, chain, found, refs);
@@ -377,6 +384,8 @@ export async function runBuild(id: string): Promise<void> {
       theme = await themeFromRef(refs[0], theme, brand);
       blocks = orderLike(blocks, refBlockOrder(refs[0]));
     }
+    // Live token sites like it nudge the look first; the writer's fx and the prompt's own words go on top.
+    if (libRefs.length && !refs.length) theme = nudgeTheme(theme, libRefs, !intent.accent && !r?.brand);
     theme = { ...theme, fx: autoFx(theme, c.fx, prompt, refs.length > 0) };
     spec = {
       name: c.copy.name, ticker: c.copy.ticker, tagline: c.copy.tagline, chain, theme, token, blocks,
