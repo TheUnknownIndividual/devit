@@ -13,7 +13,7 @@ export function proxy(req: NextRequest) {
 
   const path = req.nextUrl.pathname;
   if (path === "/") return NextResponse.rewrite(new URL(`/s/${slug}`, req.url));
-  if (path.startsWith("/_next/") || SITE_API.test(path) || path === "/favicon.ico" || path === "/robots.txt") return NextResponse.next();
+  if (path.startsWith("/_next/") || path.startsWith("/wallets/") || SITE_API.test(path) || path === "/favicon.ico" || path === "/robots.txt") return NextResponse.next();
   return new NextResponse("Not found", { status: 404 });
 }
 

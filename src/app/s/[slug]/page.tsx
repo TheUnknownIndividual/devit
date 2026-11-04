@@ -23,5 +23,5 @@ export default async function Published({ params }: { params: Promise<{ slug: st
   const p = await findBySlug(slug);
   const spec = p?.publishedSpec ?? p?.spec;
   if (!p || !spec) notFound();
-  return <Site spec={spec} mode="live" walletconnect={!!p.integrations.walletconnectProjectId} />;
+  return <Site spec={spec} mode="live" walletconnect={p.integrations.walletconnectProjectId ?? null} />;
 }

@@ -60,7 +60,7 @@ function underArea(box: Area): Array<{ blockId: string; label: string; element: 
   return out.length ? out : blocks.map((b) => ({ blockId: b.getAttribute("data-block-id")!, label: b.getAttribute("data-block-label") ?? "Block", element: null }));
 }
 
-export function PreviewClient({ initial, walletconnect }: { initial: SiteSpec; walletconnect: boolean }) {
+export function PreviewClient({ initial, walletconnect }: { initial: SiteSpec; walletconnect: string | null }) {
   const [spec, setSpec] = useState(initial);
   const [selectOn, setSelectOn] = useState(true);
   // The hovered element itself, not a box: the outline is measured on every render, so it moves with the page.

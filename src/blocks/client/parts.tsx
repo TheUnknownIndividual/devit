@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowRightLeft, Check, Copy, ExternalLink, Globe2, Loader2, LogOut, Wallet as WalletIcon } from "lucide-react";
+import { ArrowRightLeft, Check, Copy, Globe2, Loader2 } from "lucide-react";
 import { CHAINS, type Chain, type TokenInfo } from "@/lib/spec";
-import { connect, connectNear, disconnect, explorerTx, listSolana, sendEvm, sendNear, sendSolana, short, useWallets, type Wallet } from "./wallet";
+import { explorerTx, sendEvm, sendNear, sendSolana, short, useWallets } from "./wallet";
+import { WalletButton } from "./connect";
 import type { BuiltTx } from "@/lib/swap";
 import { ago, num, pct, usd } from "../format";
 
@@ -16,6 +17,7 @@ function SmallPrice({ text }: { text: string }) {
 }
 
 export type Mode = "preview" | "live";
+export { WalletButton };
 
 export function CopyCA({ address }: { address: string }) {
   const [done, setDone] = useState(false);
@@ -26,75 +28,6 @@ export function CopyCA({ address }: { address: string }) {
         {done ? <Check size={14} /> : <Copy size={14} />}{done ? "Copied" : "Copy"}
       </button>
     </div>
-  );
-}
-
-const SOL_INSTALL = [
-  { name: "Phantom", url: "https://phantom.com/download", bg: "#AB9FF2", fg: "#1C1C3A" },
-  { name: "Solflare", url: "https://solflare.com/download", bg: "#FC7227", fg: "#fff" },
-];
-
-function Tile({ letter, bg, fg }: { letter: string; bg: string; fg: string }) {
-  return <span className="ss-wi" style={{ background: bg, color: fg, display: "grid", placeItems: "center", fontWeight: 800 }}>{letter}</span>;
-}
-
-export function WalletButton({ chain, token, walletconnect, block }: { chain: Chain; token: TokenInfo | null; walletconnect?: boolean; block?: boolean }) {
-  const { evm, std, connected } = useWallets();
-  const [open, setOpen] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [sol, setSol] = useState<Wallet[]>([]);
-  useEffect(() => { if (open) setSol(listSolana()); }, [open, std]);
-
-  async function pick(w: Wallet) {
-    setErr(null);
-    try { await connect(w, chain); setOpen(false); } catch (e) { setErr((e as Error).message || "The wallet said no."); }
-  }
-
-  if (connected) {
-    return (
-      <button type="button" className="ss-btn ss-btn-sm ss-btn-ghost" onClick={() => void disconnect()} title="Disconnect">
-        {connected.wallet.icon ? <img src={connected.wallet.icon} alt="" width={18} height={18} style={{ borderRadius: 4 }} /> : <WalletIcon size={16} />}
-        {short(connected.address)} <LogOut size={14} />
-      </button>
-    );
-  }
-
-  async function openNear() {
-    setErr(null);
-    try { await connectNear(); } catch (e) { const m = (e as Error).message ?? ""; if (!/cancel|reject|closed/i.test(m)) setErr(m || "The wallet said no."); }
-  }
-
-  return (
-    <>
-      <button type="button" className={block ? "ss-btn" : "ss-btn ss-btn-sm"} style={block ? { width: "100%" } : undefined} onClick={() => (chain === "near" ? void openNear() : setOpen(true))}><WalletIcon size={16} /> {block ? "Connect a wallet to buy" : "Connect"}</button>
-      {chain === "near" && err && <div className="ss-err">{err}</div>}
-      {open && (
-        <div className="ss-modal-bg" onClick={() => setOpen(false)}>
-          <div className="ss-modal" role="dialog" aria-label="Connect a wallet" onClick={(e) => e.stopPropagation()}>
-            <h3>Connect a wallet</h3>
-            <div className="ss-muted" style={{ fontSize: 14 }}>{CHAINS[chain].name}</div>
-            {chain === "solana" && (
-              <>
-                {sol.map((w) => <button key={w.id} type="button" className="ss-wallet" onClick={() => void pick(w)}>{w.icon ? <img src={w.icon} alt="" /> : <Tile letter={w.name[0]} bg={w.id === "phantom" ? "#AB9FF2" : w.id === "solflare" ? "#FC7227" : "#E33E3F"} fg="#fff" />}{w.name}<small>Detected</small></button>)}
-                {SOL_INSTALL.filter((i) => !sol.some((s) => s.name === i.name)).map((i) => (
-                  <a key={i.name} className="ss-wallet" href={i.url} target="_blank" rel="noreferrer"><Tile letter={i.name[0]} bg={i.bg} fg={i.fg} />{i.name}<small>Install <ExternalLink size={12} style={{ display: "inline" }} /></small></a>
-                ))}
-              </>
-            )}
-            {(chain === "ethereum" || chain === "robinhood") && (
-              <>
-                {evm.map((w) => <button key={w.id} type="button" className="ss-wallet" onClick={() => void pick(w)}><img src={w.icon} alt="" />{w.name}<small>Detected</small></button>)}
-                {!evm.some((w) => /metamask/i.test(w.rdns)) && (
-                  <a className="ss-wallet" href="https://metamask.io/download" target="_blank" rel="noreferrer"><Tile letter="M" bg="#F6851B" fg="#fff" />MetaMask<small>Install <ExternalLink size={12} style={{ display: "inline" }} /></small></a>
-                )}
-                {walletconnect && <button type="button" className="ss-wallet" disabled style={{ opacity: 0.6 }}><Tile letter="W" bg="#3B99FC" fg="#fff" />WalletConnect<small>Phone wallets</small></button>}
-              </>
-            )}
-            {err && <div className="ss-err">{err}</div>}
-          </div>
-        </div>
-      )}
-    </>
   );
 }
 
