@@ -38,7 +38,7 @@ function Logo({ spec, size = 36 }: { spec: SiteSpec; size?: number }) {
   );
 }
 
-function Nav({ b, spec, mode, walletconnect }: { b: Block; spec: SiteSpec; mode: Mode; walletconnect: string | null }) {
+function Nav({ b, spec, mode, walletconnect, privy }: { b: Block; spec: SiteSpec; mode: Mode; walletconnect: string | null; privy: string | null }) {
   const has = (t: string) => spec.blocks.some((x) => x.type === t);
   return (
     <header data-block-id={b.id} data-block-type="nav" data-block-label="Navigation" className="ss-nav">
@@ -53,7 +53,7 @@ function Nav({ b, spec, mode, walletconnect }: { b: Block; spec: SiteSpec; mode:
           {has("roadmap") && <a href="#roadmap">Roadmap</a>}
           {has("faq") && <a href="#faq">FAQ</a>}
         </nav>
-        <div className="ss-nav-cta" data-el="wallet"><WalletButton chain={spec.chain} token={spec.token} walletconnect={walletconnect} /></div>
+        <div className="ss-nav-cta" data-el="wallet"><WalletButton chain={spec.chain} token={spec.token} walletconnect={walletconnect} privy={privy} /></div>
       </div>
       {fxOf(spec.theme).ticker && <Ticker token={spec.token} ticker={spec.ticker} tagline={spec.tagline} chain={spec.chain} mode={mode} />}
     </header>
@@ -211,11 +211,11 @@ function Socials({ b, spec }: { b: Block; spec: SiteSpec }) {
   );
 }
 
-function BlockView({ b, spec, mode, walletconnect, credit }: { b: Block; spec: SiteSpec; mode: Mode; walletconnect: string | null; credit: string | null }) {
+function BlockView({ b, spec, mode, walletconnect, privy, credit }: { b: Block; spec: SiteSpec; mode: Mode; walletconnect: string | null; privy: string | null; credit: string | null }) {
   const p = b.props as P;
   const count = mode === "live" && fxOf(spec.theme).count !== false;
   switch (b.type) {
-    case "nav": return <Nav b={b} spec={spec} mode={mode} walletconnect={walletconnect} />;
+    case "nav": return <Nav b={b} spec={spec} mode={mode} walletconnect={walletconnect} privy={privy} />;
     case "hero": return <Hero b={b} spec={spec} />;
     case "stats":
       return <Section b={b}><div className="ss-wrap"><LiveStats count={count} token={spec.token} items={arr<string>(p.items).length ? arr<string>(p.items) : ["price", "marketCap", "liquidity", "volume24h"]} mode={mode} /></div></Section>;
@@ -306,10 +306,10 @@ function BlockView({ b, spec, mode, walletconnect, credit }: { b: Block; spec: S
 }
 
 /**
- * walletconnect: the project's WalletConnect project ID (public by design: WalletConnect checks the site's domain).
+ * walletconnect / privy: the project's WalletConnect project ID and Privy App ID (public by design: both check the site's domain).
  * credit: where the free plan's "Built with sitesmith" line links (lib/credit.ts), or null for none.
  */
-export function Site({ spec, mode, walletconnect = null, credit = null }: { spec: SiteSpec; mode: Mode; walletconnect?: string | null; credit?: string | null }) {
+export function Site({ spec, mode, walletconnect = null, privy = null, credit = null }: { spec: SiteSpec; mode: Mode; walletconnect?: string | null; privy?: string | null; credit?: string | null }) {
   const t = spec.theme;
   const fx = fxOf(t);
   return (
@@ -324,7 +324,7 @@ export function Site({ spec, mode, walletconnect = null, credit = null }: { spec
         data-transition={fx.transition ?? "none"} data-stagger={fx.stagger === false ? undefined : ""} data-intro={fx.intro === false ? undefined : ""} data-nav={fx.nav ?? "compact"}
       >
         {mode === "live" && fx.progress && <div className="ss-progress" aria-hidden="true" />}
-        {spec.blocks.map((b) => <BlockView key={b.id} b={b} spec={spec} mode={mode} walletconnect={walletconnect} credit={credit} />)}
+        {spec.blocks.map((b) => <BlockView key={b.id} b={b} spec={spec} mode={mode} walletconnect={walletconnect} privy={privy} credit={credit} />)}
         {credit && !spec.blocks.some((b) => b.type === "footer") && <div className="ss-wrap ss-credit"><a className="ss-built" href={credit} target="_blank" rel="noopener">Built with <b>sitesmith</b></a></div>}
         <MotionFx mode={mode} toTop={fx.toTop !== false} progress={!!fx.progress} nav={(fx.nav ?? "compact") === "compact"} />
       </div>

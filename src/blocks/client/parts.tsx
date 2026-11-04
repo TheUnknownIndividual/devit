@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRightLeft, ArrowUp, Check, Copy, Globe2, Loader2 } from "lucide-react";
 import { CHAINS, isEvm, type Chain, type TokenInfo } from "@/lib/spec";
 import { venue } from "@/lib/venues";
-import { explorerTx, sendEvm, sendNear, sendSolana, short, useWallets } from "./wallet";
+import { explorerTx, familyOf, sendEvm, sendNear, sendSolana, short, useWallets } from "./wallet";
 import { WalletButton } from "./connect";
 import type { BuiltTx } from "@/lib/swap";
 import { ago, num, pct, usd } from "../format";
@@ -335,7 +335,7 @@ function SameChain({ chain, token, ticker }: { chain: Chain; token: TokenInfo | 
 
   if (!token) return <p className="ss-muted" style={{ margin: 0 }}>The buy box goes live once the site knows the token's contract address.</p>;
   const wantKind = chain === "solana" ? "solana" : chain === "near" ? "near" : "evm";
-  const wrongWallet = connected && connected.wallet.kind !== wantKind;
+  const wrongWallet = connected && familyOf(connected.wallet) !== wantKind;
   const canSwap = !!q?.swap && !!connected && !wrongWallet;
   const fallback = venue(chain === "solana" ? "jupiter" : chain === "bsc" ? "pancakeswap" : chain === "near" ? null : "uniswap");
   const handoff = curveUrl ?? (fallback?.buy ? fallback.buy(token.address, chain) : `https://www.neartrade.lol/token/${encodeURIComponent(token.address)}`);

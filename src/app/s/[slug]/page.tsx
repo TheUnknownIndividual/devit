@@ -47,7 +47,7 @@ export default async function Published({ params, searchParams }: Props) {
   if (gate === "link") notFound();
   if (gate === "password") return <PasswordGate slug={slug} to={l.via ? "/" : `/s/${slug}`} error={(await searchParams).e} />;
   const spec = (l.p.publishedSpec ?? l.p.spec)!;
-  return <Site spec={spec} mode="live" walletconnect={l.p.integrations.walletconnectProjectId ?? null} credit={await siteCredit(l.p)} />;
+  return <Site spec={spec} mode="live" walletconnect={l.p.integrations.walletconnectProjectId ?? null} privy={l.p.integrations.privyAppId ?? null} credit={await siteCredit(l.p)} />;
 }
 
 function PasswordGate({ slug, to, error }: { slug: string; to: string; error?: string }) {
