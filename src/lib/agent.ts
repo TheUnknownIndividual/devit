@@ -10,6 +10,7 @@ import { orderLike, refBlockOrder, refLine, themeFromRef, themeForRef } from "./
 import { nudgeTheme, pickStyleRefs, themeOfPicks, type StyleRef } from "./style-library";
 import { THEMES, THEME_LABELS, THEME_NOTES, colorFromText, fitAccent, fxOf, readableOn, referenceIn, restyle, themeNamed } from "./themes";
 import { updateProject } from "./store";
+import { readTreasury, treasuryAccountsIn, validAccount, type TreasuryData } from "./treasury";
 import { BLOCK_LABELS, CHAINS, THEME_IDS, newId, type Asset, type Block, type BlockType, type Chain, type PendingComment, type Project, type RefRead, type Research, type SiteSpec, type ThemeFx, type Theme, type ThemeId, type TokenInfo, type TokenLink } from "./spec";
 
 // The build pipeline: prompt → intent → chain data → style → copy → blocks.
@@ -269,7 +270,7 @@ function block(type: BlockType, props: Record<string, unknown>): Block {
   return { id: `${type}-${newId(5)}`, type, props };
 }
 
-function layout(copy: Copy, token: TokenInfo | null, wants: Set<BlockType>, themeId: ThemeId, r: Research | null): Block[] {
+function layout(copy: Copy, token: TokenInfo | null, wants: Set<BlockType>, themeId: ThemeId, r: Research | null, treasury: string[] = []): Block[] {
   const hasPair = !!token?.pairAddress;
   // Each style leads with what its kind of site leads with: a terminal puts the chart and tape first,
   // wallet apps and glass DeFi a big centred headline, brutalist sites a huge one.
@@ -294,7 +295,7 @@ function layout(copy: Copy, token: TokenInfo | null, wants: Set<BlockType>, them
   blocks.push(block("how", { title: "How to buy", steps: copy.how }));
   if (wants.has("tokenomics")) blocks.push(block("tokenomics", { title: "Tokenomics", style: "bar", rows: [{ label: "[LIQUIDITY]", pct: 80 }, { label: "[COMMUNITY]", pct: 15 }, { label: "[TEAM]", pct: 5 }] }));
   if (wants.has("holders")) blocks.push(block("holders", { title: themeId === "retro" ? "Hi-scores" : "Holders" }));
-  if (wants.has("treasury")) blocks.push(block("treasury", { title: "Treasury", body: "Balances of the community multisig, read live.", account: "" }));
+  if (wants.has("treasury")) blocks.push(block("treasury", { title: "Treasury", body: treasury.length ? "Everything the treasury holds and spends, read straight from the chain." : "Balances of the community multisig, read live.", accounts: treasury }));
   if (wants.has("roadmap") || themeId === "clean" || themeId === "retro") blocks.push(block("roadmap", { title: themeId === "retro" ? "Levels" : "Roadmap", items: copy.roadmap }));
   blocks.push(block("faq", { title: "FAQ", items: copy.faq }));
   if (r?.x?.posts.length) blocks.push(block("posts", { title: themeId === "cozy" ? `from @${r.x.profile.handle}` : `From @${r.x.profile.handle}`, count: 3 }));
@@ -417,7 +418,10 @@ export async function runBuild(id: string): Promise<void> {
     const r = found as Research | null;
     const base = THEMES[c.theme];
     let theme = c.accent ? { ...base, accent: c.accent, accentText: readableOn(c.accent) } : { ...base };
-    let blocks = layout(c.copy, token, intent.wants, c.theme, r);
+    // A DAO named in the request or found by research gets the treasury block, wired to its account.
+    const treasury = treasuryAccountsIn([prompt, r?.website?.url, r?.website?.excerpt, ...(r?.links ?? []).map((l) => l.url), ...(r?.descriptions ?? []).map((d) => d.text)].filter(Boolean).join("\n"));
+    if (treasury.length) intent.wants.add("treasury");
+    let blocks = layout(c.copy, token, intent.wants, c.theme, r, treasury);
     // A reference's look over the style, the team's brand colour (or a colour they named) kept; its section order.
     if (refs.length) {
       const brand = intent.accent ?? (r?.brand ? c.accent : null);
@@ -432,6 +436,7 @@ export async function runBuild(id: string): Promise<void> {
       links: r ? siteLinks(r) : undefined,
       x: r?.x ? { profile: r.x.profile, posts: r.x.posts.slice(0, 6) } : null,
     };
+    await hydrateTreasury(spec);
     return blocks.filter((b) => b.type !== "nav" && b.type !== "footer").map((b) => BLOCK_LABELS[b.type].toLowerCase()).join(", ");
   });
 
@@ -671,7 +676,7 @@ export function difficulty(comments: PendingComment[], offlineDoes: (c: PendingC
   return "light";
 }
 
-export async function applyComments(project: Project, comments: PendingComment[]): Promise<{ spec: SiteSpec; message: string; via: string }> {
+async function applyCommentsRaw(project: Project, comments: PendingComment[]): Promise<{ spec: SiteSpec; message: string; via: string }> {
   const spec = project.spec!;
   const assets = new Map((project.assets ?? []).map((a) => [a.id, a]));
   const tier = difficulty(comments, (c) => offlineEdit(spec, [c]).done.length === 1);
@@ -684,6 +689,7 @@ export async function applyComments(project: Project, comments: PendingComment[]
       "theme.radius is the corner radius of cards and blocks in px (0 square, 8 subtle, 20 rounded, 32 very rounded); the site shares one radius.",
       "theme.fx changes effects only: bg none|grid|dots|glow|orbs|stripes, surface outline|soft|glass|offset, motion snappy|calm|bouncy, density compact|regular|airy, ticker (slogan strip under the nav), pill (pill buttons), reveal rise|fade|scale|blur|slide|none (how sections come in on scroll), hover lift|scale|glow|none (cards and buttons under the cursor), parallax (hero art drifts as the page scrolls), transition none|fade|stack|wave|angle (how one section crosses into the next: colour blend, overlapping rounded sheets, wave edge, slanted seam), stagger (cards/steps/stats come in one by one), intro (hero text enters in sequence on load), nav plain|compact (nav blurs and tightens on scroll), progress (scroll progress bar), count (stat numbers count up), toTop (back-to-top button). \"Add scroll animations\" = reveal rise + stagger + transition + intro + count; \"less motion\" = motion calm, reveal fade, transition none/fade, stagger/parallax/progress off; \"no animations\" = reveal none and every motion key off. Send only the keys that change.",
       "Comments can come with images the team uploaded (id, url, size). Use one by its url: props.image on a hero or story block shows it as that block's art; logo (top level) sets the site's logo. Never invent image urls.",
+      "treasury block props: {title, body, accounts:[NEAR account or *.sputnik-dao.near, max 3]}. It reads balances, transfers and DAO proposals live from the chain; set only accounts the team gave, never invent one. Keep props.snapshot as it is.",
       "Never invent prices, holder counts or tokenomics numbers; use [PLACEHOLDER] text for facts you don't have.",
     ].join("\n");
     const imagesOf = (c: PendingComment) => (c.assets ?? []).map((id) => assets.get(id)).filter((a): a is Asset => !!a).map((a) => ({ id: a.id, url: a.url, name: a.name, w: a.w, h: a.h }));
@@ -719,4 +725,47 @@ export async function applyComments(project: Project, comments: PendingComment[]
   const skipped = [...new Set(r.skipped)];
   if (skipped.length) parts.push(`The offline editor couldn't do: ${skipped.map((s) => `"${s}"`).join(", ")}. Set NEAR_AI_API_KEY (or ANTHROPIC_API_KEY / OPENAI_API_KEY) in .env.local for free-form edits, or try wording like: button should say "Get it", make it bigger, rounder corners, move up, remove, make it blue.`);
   return { spec: r.spec, message: parts.join(" "), via: "offline editor" };
+}
+
+// ---------- treasury ----------
+
+/** Reads each treasury block's accounts once so the page renders with figures at once (cached data; the live page refreshes it). */
+export async function hydrateTreasury(spec: SiteSpec): Promise<void> {
+  await Promise.all(spec.blocks.filter((b) => b.type === "treasury").map(async (b) => {
+    const accounts = [...(Array.isArray(b.props.accounts) ? (b.props.accounts as string[]) : []), ...(typeof b.props.account === "string" && b.props.account ? [b.props.account] : [])].filter((a, i, l) => l.indexOf(a) === i).slice(0, 3);
+    const snap = b.props.snapshot as TreasuryData | undefined;
+    if (!accounts.length) { delete b.props.snapshot; return; }
+    if (snap && snap.accounts.map((a) => a.account).join() === accounts.join()) return;
+    const d = await readTreasury(accounts);
+    if (d.accounts.some((a) => !a.error)) b.props.snapshot = d; else delete b.props.snapshot;
+  }));
+}
+
+const NEAR_NAME = /\b[a-z0-9][a-z0-9_-]*(?:\.[a-z0-9_-]+)*\.near\b/gi;
+
+/** "add our treasury foo.sputnik-dao.near": a comment naming a treasury account sets it on the treasury block (added if the site has none). */
+function treasuryComment(spec: SiteSpec, c: PendingComment): boolean {
+  if (!/\b(treasury|dao|multisig|grants?|transparen\w*)\b/i.test(c.text)) return false;
+  const found = [...new Set((c.text.toLowerCase().match(NEAR_NAME) ?? []).filter(validAccount))].slice(0, 3);
+  if (!found.length) return false;
+  let tb = spec.blocks.find((b) => b.type === "treasury");
+  if (!tb) {
+    tb = block("treasury", { title: "Treasury", body: "Everything the treasury holds and spends, read straight from the chain.", accounts: [] });
+    const at = spec.blocks.findIndex((b) => b.type === "faq" || b.type === "footer");
+    spec.blocks.splice(at < 0 ? spec.blocks.length : at, 0, tb);
+  }
+  const cur = Array.isArray(tb.props.accounts) ? (tb.props.accounts as string[]) : [];
+  tb.props.accounts = (/\b(replace|instead|change|switch)\b/i.test(c.text) ? found : [...cur, ...found]).filter((a, i, l) => l.indexOf(a) === i).slice(0, 3);
+  delete tb.props.account;
+  return true;
+}
+
+export async function applyComments(project: Project, comments: PendingComment[]): Promise<{ spec: SiteSpec; message: string; via: string }> {
+  const next: SiteSpec = structuredClone(project.spec!);
+  const mine = comments.filter((c) => treasuryComment(next, c));
+  const rest = comments.filter((c) => !mine.includes(c));
+  const res = rest.length ? await applyCommentsRaw({ ...project, spec: next }, rest) : { spec: next, message: "", via: "offline editor" };
+  await hydrateTreasury(res.spec);
+  if (mine.length) res.message = `Treasury set to ${(res.spec.blocks.find((b) => b.type === "treasury")?.props.accounts as string[]).join(", ")}.${res.message ? ` ${res.message}` : ""}`;
+  return res;
 }

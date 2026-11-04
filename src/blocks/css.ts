@@ -350,4 +350,32 @@ export const SITE_CSS = `
 @keyframes ssFlashDown{from{color:#ef4444;text-shadow:0 0 12px rgba(239,68,68,.5)}}
 @media (prefers-reduced-motion:reduce){[data-ss-mode=live] *{animation:none!important;transition:none!important}.ss-progress{display:none}[data-ss-mode=live] .ss-sec.ss-wait{opacity:1;transform:none}}
 [data-ss-mode=preview] *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+/* treasury */
+.ss-tr{display:grid;gap:36px}.ss-tr>*{min-width:0}
+.ss-tr-acc{display:grid;gap:16px}.ss-tr-acc>*{min-width:0}
+.ss-tr-body{margin:-12px 0 24px;max-width:640px}
+.ss-tr-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;margin-bottom:14px;font-size:14px;min-width:0}
+.ss-tr-name{font-size:15px;font-weight:700;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.ss-tr-name:hover,.ss-tr-link:hover{text-decoration:underline}
+.ss-tr-link{text-decoration:underline}
+.ss-tr-h{font-family:var(--font-display);font-size:18px;margin:0 0 8px}
+.ss-tr-row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--border);font-size:14px}
+.ss-tr-row:hover{color:var(--accent)}
+.ss-tr-l{display:grid;place-items:center;min-width:28px;color:var(--muted)}
+.ss-tr-m,.ss-tr-r{display:flex;flex-direction:column;min-width:0}
+.ss-tr-m>*,.ss-tr-r>*{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ss-tr-m b{display:flex;align-items:center;gap:5px}
+.ss-tr-r{text-align:right;align-items:flex-end;font-variant-numeric:tabular-nums}
+.ss-tr-m span,.ss-tr-r span{font-size:12px}
+.ss-tr-coin{width:28px;height:28px;border-radius:50%;object-fit:cover;background:var(--bg);border:1px solid var(--border)}
+.ss-tr-coin-i{display:grid;place-items:center;font-weight:800;font-size:13px;color:var(--accent)}
+.ss-tr-id{font-family:var(--font-mono);font-size:12px;color:var(--muted)}
+.ss-tr-status{font-size:12px;font-weight:700;padding:2px 10px;border:1px solid var(--border);border-radius:var(--r-sm)}
+.ss-tr-status[data-s=approved]{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+.ss-tr-status[data-s=voting]{border-color:var(--text)}
+.ss-tr-empty{margin:6px 0 0;font-size:14px}
+.ss-tr-note{margin:10px 0 0;font-size:12px}
+.ss-tr-row:first-of-type{border-top:0}
+.ss-tr-acc .ss-stat .v{font-size:26px}
+@media(max-width:759px){.ss-tr-acc .ss-stat .v{font-size:20px}.ss-tr-row{grid-template-columns:28px minmax(0,1fr) auto;gap:10px}}
 `;
