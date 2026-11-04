@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { tokenContext } from "@/lib/chain";
-import type { Chain } from "@/lib/spec";
+import { CHAIN_IDS, type Chain } from "@/lib/spec";
 
-const CHAINS = new Set(["near", "solana", "ethereum", "robinhood"]);
+const CHAINS = new Set<string>(CHAIN_IDS);
 
 // Live figures for published sites and the builder. Cached briefly so a busy page doesn't hammer the sources.
 const cache = new Map<string, { at: number; body: unknown }>();

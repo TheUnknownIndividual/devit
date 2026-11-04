@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { CHAIN_IDS } from "@/lib/spec";
 import { intentQuote, PAY_WITH } from "@/lib/intents";
 
 // Stand-in addresses for preview quotes, before the buyer has connected a wallet. Never used for a real deposit.
@@ -9,15 +10,16 @@ const DRY_ADDR: Record<string, string> = {
   base: "0x1111111111111111111111111111111111111111",
   arb: "0x1111111111111111111111111111111111111111",
   hood: "0x1111111111111111111111111111111111111111",
+  bsc: "0x1111111111111111111111111111111111111111",
   btc: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
   near: "intents.near",
 };
-const CHAIN_KEY = { near: "near", solana: "sol", ethereum: "eth", robinhood: "hood" } as const;
+const CHAIN_KEY = { near: "near", solana: "sol", ethereum: "eth", base: "base", bsc: "bsc", robinhood: "hood" } as const;
 
 const Body = z.object({
   pay: z.enum(PAY_WITH.map((p) => p.key) as [string, ...string[]]),
   amount: z.number().positive().max(1e7),
-  chain: z.enum(["near", "solana", "ethereum", "robinhood"]),
+  chain: z.enum(CHAIN_IDS),
   token: z.string().max(120).nullable(),
   recipient: z.string().max(120).optional(),
   refundTo: z.string().max(120).optional(),

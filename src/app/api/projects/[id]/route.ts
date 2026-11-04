@@ -4,7 +4,7 @@ import { getProject, updateProject } from "@/lib/store";
 import { readableOn, restyle } from "@/lib/themes";
 import { publicProject } from "@/lib/public";
 import { isPublicHttps } from "@/lib/net";
-import { THEME_IDS } from "@/lib/spec";
+import { CHAIN_IDS, THEME_IDS } from "@/lib/spec";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -14,7 +14,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 }
 
 const Patch = z.object({
-  chain: z.enum(["near", "solana", "ethereum", "robinhood"]).optional(),
+  chain: z.enum(CHAIN_IDS).optional(),
   rpcUrl: z.union([z.literal(""), z.string().max(400).refine(isPublicHttps, "Use a public https RPC URL")]).optional(),
   walletconnectProjectId: z.union([z.literal(""), z.string().regex(/^[0-9a-f]{32}$/i)]).optional(),
   privyAppId: z.union([z.literal(""), z.string().regex(/^[a-z0-9]{20,32}$/i)]).optional(),

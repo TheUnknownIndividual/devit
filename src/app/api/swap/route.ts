@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { CHAIN_IDS } from "@/lib/spec";
 import { build, SwapError } from "@/lib/swap";
 
 // Builds the unsigned buy transaction for a visitor's wallet. Nothing is signed or sent here.
@@ -9,7 +10,7 @@ const SOL = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const EVM = /^0x[0-9a-fA-F]{40}$/;
 
 const Body = z.object({
-  chain: z.enum(["near", "solana", "ethereum", "robinhood"]),
+  chain: z.enum(CHAIN_IDS),
   token: z.string().min(2).max(64),
   amount: z.number().positive().max(1e6),
   decimals: z.number().int().min(0).max(36),

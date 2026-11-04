@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { askJson, llmAvailable } from "./llm";
 import { tokenContext } from "./chain";
+import { readToken, venue, venueBrief, venueLine, venuesNamed, withoutVenueMentions } from "./venues";
 import { readIntent, type Intent } from "./intent";
 import { research } from "./research";
 import { readReference } from "./reference";
@@ -71,6 +72,26 @@ const CopySchema = z.object({
   roadmap: z.array(z.object({ when: z.string().max(16), title: z.string().max(48), body: z.string().max(160) })).min(2).max(4),
   story: z.object({ title: z.string().max(40), body: z.string().max(700), points: z.array(z.string().max(180)).max(4) }).nullable().optional(),
 });
+
+/** Where the token trades, in words a buyer follows: its launchpad and pool when we know them. */
+function tradesAt(token: TokenInfo | null, chainName: string): string {
+  const tv = token?.venue;
+  const pad = venue(tv?.launchpad);
+  const dex = venue(tv?.dex)?.name ?? (token?.dexId ? venueLine({ dexId: token.dexId })?.replace(/^Trades on /, "") : null);
+  if (pad && tv?.stage === "curve") return `It launched on ${pad.name} and still trades on its bonding curve${pad.graduatesTo ? `; when the curve fills it graduates to ${venue(pad.graduatesTo)?.name}` : ""}. ${pad.routable === false ? `The buy box sends you to ${pad.name} until then.` : "The buy box on this page buys straight from the curve."}`;
+  if (pad && tv?.stage === "graduated") return `It launched on ${pad.name} and has graduated to ${dex ?? "a DEX pool"} on ${chainName}. The buy box on this page routes your order there.`;
+  if (pad) return `It launched on ${pad.name}${dex ? ` and trades on ${dex}` : ""} on ${chainName}. The buy box on this page routes your order there.`;
+  return dex ? `On ${dex} on ${chainName}. The buy box on this page routes your order there.` : `On ${chainName}. The buy box on this page finds the best route.`;
+}
+
+/** A still-on-the-curve token gets one question about the curve. */
+function curveFaq(token: TokenInfo | null, ticker: string): Copy["faq"] {
+  const tv = token?.venue;
+  const pad = venue(tv?.launchpad);
+  if (!pad || tv?.stage !== "curve") return [];
+  const how = pad.how.split(/(?<=\.)\s+/).slice(0, 2).join(" ");
+  return [{ q: "What's the bonding curve?", a: `${how}${tv.progress != null ? ` $${ticker}'s curve is ${Math.round(tv.progress * 100)}% sold.` : ""}`.slice(0, 400) }];
+}
 
 function walletWord(chain: Chain): string {
   return chain === "solana" ? "Phantom, Solflare or Backpack" : chain === "near" ? "HOT, Meteor or Intear" : "MetaMask, Rabby or any WalletConnect wallet";
@@ -151,7 +172,8 @@ function offlineCopy(intent: Intent, token: TokenInfo | null, chain: Chain, r: R
       { title: `Buy $${ticker}`, body: "Type an amount in the buy box, check the quote and confirm in your wallet." },
     ],
     faq: [
-      { q: `Where does $${ticker} trade?`, a: token?.dexId ? `On ${token.dexId} on ${chainName}. The buy box on this page routes your order there.` : `On ${chainName}. The buy box on this page finds the best route.` },
+      { q: `Where does $${ticker} trade?`, a: tradesAt(token, chainName) },
+      ...curveFaq(token, ticker),
       { q: `Can I buy without ${native}?`, a: "Yes. Choose \"Any chain\" in the buy box and pay from Solana, Ethereum, Bitcoin or NEAR. It arrives in your wallet as the token." },
       { q: "Where do the numbers come from?", a: `Price, market cap and holders are read live${token?.sources.length ? ` from ${token.sources.join(", ")}` : " from the chain"} each time the page opens.` },
     ],
@@ -160,6 +182,21 @@ function offlineCopy(intent: Intent, token: TokenInfo | null, chain: Chain, r: R
       { when: "Now", title: "[YOUR NEXT GOAL]", body: "Replace with what the community is working on." },
       { when: "Next", title: "[LATER GOAL]", body: "Replace with what comes after." },
     ],
+  };
+}
+
+/** The venue facts the writer gets: the token's own launchpad and pool, else the ones the request names. */
+function venueFor(token: TokenInfo | null, prompt: string) {
+  const tv = token?.venue;
+  const named = tv?.launchpad || tv?.dex ? [] : venuesNamed(prompt).slice(0, 2);
+  const how = venueBrief(tv, named);
+  if (!how) return null;
+  const pad = venue(tv?.launchpad);
+  return {
+    launchpad: pad?.name ?? null, dex: venue(tv?.dex)?.name ?? null, stage: tv?.stage ?? null,
+    curveSold: tv?.progress != null ? `${Math.round(tv.progress * 100)}%` : null,
+    buyOnLaunchpad: tv?.stage === "curve" && pad?.routable === false ? pad.name : null,
+    how,
   };
 }
 
@@ -174,7 +211,8 @@ async function writeCopy(prompt: string, intent: Intent, token: TokenInfo | null
     "Write in the team's own voice as measured from their posts (capitals or lowercase, emoji habits, sign-off, pet words). Reuse their phrases; never copy a whole post.",
     "story: the lore in 2-4 sentences from their own descriptions (what it is, where the name or mascot comes from). points: real utility only if the research names it, else []. If there's nothing to go on, story is null.",
     "Never invent partnerships, listings, numbers or utility the research doesn't state.",
-    "how: buying happens in the buy box on this site (Buy section, it also takes other coins from any chain). Never send people to another DEX or app, and never put the contract address in the text (the site shows it with a copy button).",
+    "how: buying happens in the buy box on this site (Buy section, it also takes other coins from any chain). Never send people to another DEX or app, and never put the contract address in the text (the site shows it with a copy button). Exception: when venue.buyOnLaunchpad is set, the buy box links to that launchpad while the token is on its curve, so say that.",
+    "venue: where the token launched and trades, with how that launchpad or DEX works. Use it so How to buy and the FAQ are accurate (still on a bonding curve and buys go into the curve, or graduated to a pool), and give it one FAQ. Never contradict it or add figures it doesn't give.",
     "You may get reference sites the team likes: match their mood and how much they say per section (punchy or wordy, jokey or serious), never their words, names or claims.",
     "JSON keys: name, ticker, tagline, theme, accent (#rrggbb, optional), headline (<=8 words), subhead, cta (<=3 words), how[3]{title,body}, faq[3]{q,a}, roadmap[3]{when,title,body}, story{title,body,points[]}|null.",
   ].join("\n");
@@ -182,6 +220,7 @@ async function writeCopy(prompt: string, intent: Intent, token: TokenInfo | null
     request: prompt,
     chain: CHAINS[chain].name,
     token: token ? { name: token.name, symbol: token.symbol, dex: token.dexId } : null,
+    venue: venueFor(token, prompt),
     suggestedTheme: intent.theme,
     research: r ? {
       descriptions: r.descriptions.map((d) => ({ source: d.source, text: d.text.slice(0, 900) })),
@@ -219,7 +258,7 @@ function layout(copy: Copy, token: TokenInfo | null, wants: Set<BlockType>, them
   const blocks: Block[] = [
     block("nav", {}),
     block("hero", { headline: copy.headline, subhead: copy.subhead, cta: copy.cta, ...hero }),
-    block("stats", { items: ["price", "marketCap", token?.holders != null ? "holders" : "liquidity", "volume24h"] }),
+    block("stats", { items: ["price", "marketCap", token?.venue?.stage === "curve" && token.venue.progress != null ? "curve" : token?.holders != null ? "holders" : "liquidity", "volume24h"] }),
   ];
   const chart = hasPair || wants.has("chart") ? block("chart", { title: "Chart" }) : null;
   const trades = hasPair || wants.has("trades") ? block("trades", { title: themeId === "retro" ? "Live buys" : "Live trades" }) : null;
@@ -270,17 +309,17 @@ export async function runBuild(id: string): Promise<void> {
   const given = start.socials ?? {};
 
   await step(id, "intent", "Reading your request", async () => {
-    const bits = [intent.ticker ? `$${intent.ticker}` : null, intent.address ? "contract address found" : null, intent.chain ? CHAINS[intent.chain].name : null, given.x ? `@${given.x.replace(/^@/, "").split("/").pop()}` : null].filter(Boolean);
+    const bits = [intent.ticker ? `$${intent.ticker}` : null, intent.address ? "contract address found" : null, intent.chain ? CHAINS[intent.chain].name : null, venue(intent.venue) ? `${venue(intent.venue)!.name} ${venuesNamed(prompt).includes(intent.venue!) || readToken(prompt)?.link?.venue === intent.venue ? "named" : "address"}` : null, given.x ? `@${given.x.replace(/^@/, "").split("/").pop()}` : null].filter(Boolean);
     return bits.length ? bits.join(" · ") : "No token yet, building from the description";
   });
 
   await step(id, "chain", "Reading the chain", async () => {
     if (!intent.address) return { skipped: "No contract address yet" };
     token = await tokenContext(intent.address, intent.chain ?? undefined, start.network.rpcUrl);
-    if (!token) throw new Error("Couldn't find that token on NEAR, Solana, Ethereum or Robinhood Chain");
+    if (!token) throw new Error("Couldn't find that token on NEAR, Solana, Ethereum, Base, BNB Chain or Robinhood Chain");
     const t: TokenInfo = token;
     chain = t.chain;
-    const facts = [t.name, `$${t.symbol}`, CHAINS[t.chain].name, t.holders != null ? `${t.holders.toLocaleString("en-US")} holders` : null].filter(Boolean);
+    const facts = [t.name, `$${t.symbol}`, CHAINS[t.chain].name, t.holders != null ? `${t.holders.toLocaleString("en-US")} holders` : null, venueLine(t)].filter(Boolean);
     return `${facts.join(" · ")} (via ${t.sources.join(", ") || "chain"})`;
   });
 
@@ -311,13 +350,13 @@ export async function runBuild(id: string): Promise<void> {
     for (const t of read.flatMap(refBlockOrder)) if (["tokenomics", "roadmap", "faq", "holders"].includes(t)) intent.wants.add(t);
     return read.map((x) => `${x.host} · ${x.notes.slice(0, 5).join(", ")}`).join(" | ");
   });
-  if (refs.length && !start.style && !themeNamed(withoutRefsText(prompt))) {
+  if (refs.length && !start.style && !themeNamed(withoutVenueMentions(withoutRefsText(prompt)))) {
     const t = themeForRef(refs[0]);
     if (t) intent = { ...intent, theme: t };
   }
 
   // Their voice picks the style when neither the landing page nor the sentence did.
-  if (!start.style && !themeNamed(prompt) && !refs.length) {
+  if (!start.style && !themeNamed(withoutVenueMentions(prompt)) && !refs.length) {
     const t = themeFromResearch(found);
     if (t) intent = { ...intent, theme: t };
   }
@@ -364,9 +403,14 @@ export async function runBuild(id: string): Promise<void> {
   });
 
   await step(id, "wallet", "Wiring wallet and buy box", async () => {
-    const venue = chain === "solana" ? "in-site swaps through Jupiter" : chain === "near" ? "in-site swaps on every launchpad and Rhea through neartrade" : "in-site swaps through KyberSwap";
+    const t = token as TokenInfo | null;
+    const pad = venue(t?.venue?.launchpad);
+    const onCurve = t?.venue?.stage === "curve" && pad;
+    const route = onCurve && pad.routable === false && t.venue?.buyUrl
+      ? `buys open ${pad.name} while $${t.symbol} is on its curve`
+      : chain === "solana" ? `in-site swaps through Jupiter${onCurve ? ` (straight into the ${pad.name} curve)` : ""}` : chain === "near" ? "in-site swaps on every launchpad and Rhea through neartrade" : "in-site swaps through KyberSwap";
     const wallets = chain === "solana" ? "Phantom, Solflare, Backpack" : chain === "near" ? "HOT, Meteor, Intear" : "MetaMask, Rabby, Coinbase";
-    return `${wallets} · ${venue} · any-chain buys through NEAR Intents`;
+    return `${wallets} · ${route} · any-chain buys through NEAR Intents`;
   });
 
   await updateProject(id, (p) => {

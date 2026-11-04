@@ -1,12 +1,17 @@
 // The site is data, not code: the agent writes a SiteSpec and src/blocks renders it.
 // Every block keeps a stable id so a comment on the preview maps to exactly one block.
 
-export type Chain = "near" | "solana" | "ethereum" | "robinhood";
+export type Chain = "near" | "solana" | "ethereum" | "base" | "bsc" | "robinhood";
+
+export const CHAIN_IDS = ["near", "solana", "ethereum", "base", "bsc", "robinhood"] as const satisfies readonly Chain[];
+export const isEvm = (c: Chain) => c === "ethereum" || c === "base" || c === "bsc" || c === "robinhood";
 
 export const CHAINS: Record<Chain, { name: string; short: string; native: string; explorer: string }> = {
   near: { name: "NEAR", short: "NEAR", native: "NEAR", explorer: "https://nearblocks.io/token/" },
   solana: { name: "Solana", short: "SOL", native: "SOL", explorer: "https://solscan.io/token/" },
   ethereum: { name: "Ethereum", short: "ETH", native: "ETH", explorer: "https://etherscan.io/token/" },
+  base: { name: "Base", short: "Base", native: "ETH", explorer: "https://basescan.org/token/" },
+  bsc: { name: "BNB Chain", short: "BNB", native: "BNB", explorer: "https://bscscan.com/token/" },
   robinhood: { name: "Robinhood Chain", short: "Robinhood", native: "ETH", explorer: "https://robinhoodchain.blockscout.com/token/" },
 };
 
@@ -81,6 +86,20 @@ export interface TokenInfo {
   dexId: string | null;
   /** Where each figure came from, shown to the builder so nothing looks invented. */
   sources: string[];
+  /** Where it launched and trades (lib/venues.ts). Missing on sites built before venues were read. */
+  venue?: TokenVenue;
+}
+
+/** A token's launchpad and pool, as venue ids from lib/venues.ts. */
+export interface TokenVenue {
+  launchpad: string | null;
+  dex: string | null;
+  /** curve: still on the launchpad's bonding curve; graduated: moved to a pool; pool: launched straight into one. */
+  stage: "curve" | "graduated" | "pool" | null;
+  /** Share of the curve already bought (0–1), where the launchpad shows it on chain. */
+  progress: number | null;
+  /** The launchpad's own page, where a buy goes while our router can't reach the curve. */
+  buyUrl: string | null;
 }
 
 export type BlockType =

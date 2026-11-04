@@ -28,8 +28,10 @@ export type Wallet = EvmWallet | SolWallet | NearWallet;
 
 export interface Connected { wallet: Wallet; address: string }
 
-const EVM_CHAIN: Partial<Record<Chain, { id: string; name: string; rpc: string; explorer: string }>> = {
+const EVM_CHAIN: Partial<Record<Chain, { id: string; name: string; rpc: string; explorer: string; native?: string }>> = {
   ethereum: { id: "0x1", name: "Ethereum", rpc: "https://ethereum-rpc.publicnode.com", explorer: "https://etherscan.io" },
+  base: { id: "0x2105", name: "Base", rpc: "https://mainnet.base.org", explorer: "https://basescan.org" },
+  bsc: { id: "0x38", name: "BNB Smart Chain", rpc: "https://bsc-dataseed.bnbchain.org", explorer: "https://bscscan.com", native: "BNB" },
   robinhood: { id: "0x1237", name: "Robinhood Chain", rpc: "https://rpc.mainnet.chain.robinhood.com", explorer: "https://robinhoodchain.blockscout.com" },
 };
 
@@ -124,7 +126,7 @@ export async function connect(w: Wallet, chain: Chain): Promise<Connected> {
       } catch (e) {
         // 4902: the wallet doesn't know this chain yet; offer to add it.
         if ((e as { code?: number }).code === 4902) {
-          await w.provider.request({ method: "wallet_addEthereumChain", params: [{ chainId: c.id, chainName: c.name, rpcUrls: [c.rpc], blockExplorerUrls: [c.explorer], nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 } }] });
+          await w.provider.request({ method: "wallet_addEthereumChain", params: [{ chainId: c.id, chainName: c.name, rpcUrls: [c.rpc], blockExplorerUrls: [c.explorer], nativeCurrency: c.native ? { name: c.native, symbol: c.native, decimals: 18 } : { name: "Ether", symbol: "ETH", decimals: 18 } }] });
         }
       }
     }
