@@ -146,11 +146,31 @@ export const SITE_CSS = `
 
 /* wallet modal */
 .ss-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:grid;place-items:center;padding:16px}
-.ss-modal{width:100%;max-width:380px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
-.ss-modal h3{margin:0 0 4px;font-size:18px;font-family:var(--font-display)}
-.ss-wallet{display:flex;align-items:center;gap:12px;width:100%;height:56px;padding:0 14px;margin-top:8px;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;font-weight:600;font-size:15px;font-family:var(--font-body);text-align:left}
-.ss-wallet img,.ss-wallet .ss-wi{width:28px;height:28px;border-radius:7px;flex-shrink:0}
-.ss-wallet small{margin-left:auto;color:var(--muted);font-weight:500;font-size:12px}
+.ss-modal{position:relative;width:100%;max-width:380px;max-height:calc(100dvh - 32px);overflow-y:auto;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+.ss-modal h3{margin:0 0 4px;padding-right:40px;font-size:18px;font-family:var(--font-display)}
+.ss-modal-x{position:absolute;top:12px;right:12px;width:36px;height:36px;display:grid;place-items:center;border:0;border-radius:var(--r-sm);background:transparent;color:var(--muted);cursor:pointer}
+.ss-modal-x:hover{color:var(--text);background:var(--bg)}
+.ss-modal-back{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0;margin-bottom:8px;border:0;background:transparent;color:var(--muted);font-family:var(--font-body);font-size:13px;font-weight:600;cursor:pointer}
+.ss-modal .ss-ca{display:flex;width:100%}
+.ss-wallet{display:flex;align-items:center;gap:12px;width:100%;height:56px;padding:0 14px;margin-top:8px;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;font-weight:600;font-size:15px;font-family:var(--font-body);text-align:left;transition:border-color .15s}
+.ss-wallet:hover:not(:disabled){border-color:var(--accent)}
+.ss-wallet:disabled{cursor:progress;opacity:.75}
+.ss-wallet[aria-disabled=true]{pointer-events:none;opacity:.5}
+.ss-wallet img,.ss-wallet .ss-wi{width:28px;height:28px;border-radius:7px;flex-shrink:0;object-fit:contain}
+.ss-wallet .ss-wi,.ss-acct .ss-wi{display:grid;place-items:center;background:var(--surface);color:var(--muted);border:1px solid var(--border)}
+.ss-wallet small{margin-left:auto;color:var(--muted);font-weight:500;font-size:12px;white-space:nowrap}
+.ss-wallet small.on{color:var(--accent);font-weight:700}
+.ss-wsep{margin:16px 0 0;font-size:12px;color:var(--muted)}
+.ss-qr{position:relative;margin:16px auto 0;width:100%;max-width:260px;aspect-ratio:1;display:grid;background:#fff;border-radius:var(--r-sm);padding:14px}
+.ss-qr-code,.ss-qr-code svg{display:block;width:100%;height:100%}
+.ss-qr img{position:absolute;left:50%;top:50%;width:46px;height:46px;transform:translate(-50%,-50%);background:#fff;border-radius:12px;padding:5px}
+.ss-acct{display:flex;align-items:center;gap:12px;padding-right:40px}
+.ss-acct img,.ss-acct .ss-wi{width:40px;height:40px;border-radius:10px;flex-shrink:0;object-fit:contain}
+.ss-chip{gap:8px;max-width:100%}
+.ss-upper .ss-chip .ss-mono{text-transform:none}
+.ss-chip-bal{color:var(--muted);font-weight:600}
+.ss-chip-warn{display:inline-flex;align-items:center;gap:4px;color:#f59e0b;font-weight:700}
+@media(max-width:359px){.ss-chip-bal{display:none}}
 
 /* theme flourishes */
 [data-ss-theme=degen] .ss-card,[data-ss-theme=degen] .ss-btn-ghost{border-width:2px}

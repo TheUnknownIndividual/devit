@@ -36,7 +36,7 @@ function Logo({ spec, size = 36 }: { spec: SiteSpec; size?: number }) {
   );
 }
 
-function Nav({ b, spec, mode, walletconnect }: { b: Block; spec: SiteSpec; mode: Mode; walletconnect: boolean }) {
+function Nav({ b, spec, mode, walletconnect }: { b: Block; spec: SiteSpec; mode: Mode; walletconnect: string | null }) {
   const has = (t: string) => spec.blocks.some((x) => x.type === t);
   return (
     <header data-block-id={b.id} data-block-type="nav" data-block-label="Navigation" className="ss-nav">
@@ -192,7 +192,7 @@ function Socials({ b, spec }: { b: Block; spec: SiteSpec }) {
   );
 }
 
-function BlockView({ b, spec, mode, walletconnect }: { b: Block; spec: SiteSpec; mode: Mode; walletconnect: boolean }) {
+function BlockView({ b, spec, mode, walletconnect }: { b: Block; spec: SiteSpec; mode: Mode; walletconnect: string | null }) {
   const p = b.props as P;
   const count = mode === "live" && fxOf(spec.theme).count !== false;
   switch (b.type) {
@@ -297,7 +297,8 @@ function BlockView({ b, spec, mode, walletconnect }: { b: Block; spec: SiteSpec;
   }
 }
 
-export function Site({ spec, mode, walletconnect = false }: { spec: SiteSpec; mode: Mode; walletconnect?: boolean }) {
+/** walletconnect: the project's WalletConnect project ID (public by design: WalletConnect checks the site's domain). */
+export function Site({ spec, mode, walletconnect = null }: { spec: SiteSpec; mode: Mode; walletconnect?: string | null }) {
   const t = spec.theme;
   const fx = fxOf(t);
   return (

@@ -20,7 +20,8 @@ export default {
     if (host === new URL(env.ORIGIN).hostname || host === `www.${env.SITES_DOMAIN}`) return fetch(req);
 
     const isPage = url.pathname === "/";
-    const isAsset = url.pathname.startsWith("/_next/static/");
+    // Wallet logos in public/wallets keep their names, so they cache like build assets.
+    const isAsset = url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/wallets/");
     const cacheable = req.method === "GET" && (isPage || isAsset);
     const key = new Request(`https://${host}${url.pathname}${url.search}`);
     if (cacheable) {
