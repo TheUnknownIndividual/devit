@@ -178,7 +178,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
       <header className="flex h-14 shrink-0 items-center gap-2 border-b border-white/[0.07] px-3">
         <Link href="/" className="btn btn-ghost btn-icon" aria-label="Home"><LogoMark size={20} /></Link>
         <ProjectName name={title} ticker={p.spec?.ticker ?? null} editable={canEdit} onSave={(name) => call("", { name }, "patch", "PATCH")} />
-        {!canEdit && <span className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-1.5 text-[11px] text-zinc-400"><Eye size={12} /> View only</span>}
+        {!canEdit && <span className="hidden h-6 shrink-0 items-center sm:inline-flex gap-1 rounded-md border border-white/10 bg-white/[0.04] px-1.5 text-[11px] text-zinc-400"><Eye size={12} /> View only</span>}
         {building && <span className="hidden items-center gap-1.5 text-[12px] text-zinc-400 sm:flex"><Loader2 size={13} className="animate-spin text-sel" /> Building</span>}
 
         <div className="mx-auto hidden items-center gap-1 rounded-[11px] border border-white/[0.07] bg-ink-900 p-0.5 md:flex" role="radiogroup" aria-label="Preview size">
