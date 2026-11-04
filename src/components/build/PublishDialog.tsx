@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowUpRight, Check, CheckCircle2, Copy, Crown, Globe, L
 import { Dialog } from "@/components/ui/Dialog";
 import { BrandIcon, BRANDS } from "@/components/brand";
 import type { PublicProject } from "@/lib/public";
+import { DomainSection, VisibilitySection } from "./PublishPro";
 
 const suggest = (p: PublicProject) => (p.published?.slug || p.spec?.ticker || p.spec?.name || "my-site").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) || "my-site";
 
@@ -69,6 +70,9 @@ export function PublishDialog({ open, onClose, project, onSaved }: { open: boole
           </div>
           <p className="mt-2 text-[12px] text-zinc-500">{project.sitesDomain ? <>Live at https://{slug || "…"}{suffix} the moment you publish. Updates show within a minute.</> : <>Served at /s/{slug || "…"} for now. Subdomains switch on once the sites domain is set.</>}</p>
         </div>
+
+        <VisibilitySection projectId={project.id} open={open} />
+        <DomainSection projectId={project.id} open={open} />
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-[12px] border border-sel/60 bg-sel/[0.06] p-3.5">

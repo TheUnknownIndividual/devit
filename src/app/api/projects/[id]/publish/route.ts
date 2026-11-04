@@ -5,6 +5,7 @@ import { newId } from "@/lib/spec";
 import { publicProject } from "@/lib/public";
 import { RESERVED_SLUGS as RESERVED, siteUrl } from "@/lib/sites";
 import { editable } from "@/lib/accounts";
+import { syncRouting } from "@/lib/routing";
 
 const Body = z.object({ slug: z.string().trim().toLowerCase().regex(/^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/) });
 
@@ -31,5 +32,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     q.messages.push({ id: newId(), role: "agent", text: first ? `Published at ${siteUrl(slug)}.` : `Updated the live site at ${siteUrl(slug)}.`, at: Date.now() });
   });
   if (!p) return NextResponse.json({ error: "not found" }, { status: 404 });
+  await syncRouting(p);
   return NextResponse.json(publicProject(p));
 }

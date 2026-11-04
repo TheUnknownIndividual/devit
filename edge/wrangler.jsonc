@@ -6,7 +6,10 @@
   "observability": { "enabled": true },
   // Every subdomain of the sites domain goes to this Worker. Replace example.xyz with the real domain
   // (the zone must be on the same Cloudflare account) and add a proxied wildcard DNS record: * → 192.0.2.1.
+  // Custom domains (Cloudflare for SaaS): the */* route also makes this Worker the origin of every custom hostname
+  // on the zone. Use it instead of the wildcard route once custom hostnames are switched on (see README).
   "routes": [{ "pattern": "*.example.xyz/*", "zone_name": "example.xyz" }],
+  // "routes": [{ "pattern": "*/*", "zone_name": "example.xyz" }],
   "vars": {
     "SITES_DOMAIN": "example.xyz",
     // Where the builder app runs, reachable from Cloudflare.

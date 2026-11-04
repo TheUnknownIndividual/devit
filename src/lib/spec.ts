@@ -280,7 +280,34 @@ export interface Project {
   published: { slug: string; at: number } | null;
   /** The spec as of the last publish; edits stay in the builder until the next one. */
   publishedSpec?: SiteSpec;
+  /** Who may open the published site (Pro). Missing is public. Link and password also keep the builder owner-only. */
+  access?: SiteAccess;
+  /** A custom domain for the published site (Pro), one per project. */
+  domain?: CustomDomain;
   version: number;
+}
+
+export interface SiteAccess {
+  mode: "public" | "link" | "password";
+  /** Private link: the secret in ?k=. */
+  key?: string;
+  /** Password: scrypt, "s1$salt$hash". */
+  pass?: string;
+  at: number;
+}
+
+export type DomainStatus = "pending" | "verified" | "live";
+export interface CustomDomain {
+  /** Lowercase ASCII (punycode). */
+  host: string;
+  /** Value of the TXT record at _sitesmith.<host> that proves the domain is theirs. */
+  token: string;
+  status: DomainStatus;
+  apex: boolean;
+  at: number;
+  checkedAt?: number;
+  /** Cloudflare for SaaS custom hostname, when the API is set up. */
+  cf?: { id: string; status: string; ssl: string; txt?: { name: string; value: string }; error?: string };
 }
 
 /** What the project is called in lists and the builder: a rename wins over the site's own name. */
