@@ -54,7 +54,7 @@ export default function Home() {
       <HowItWorks />
 
       <footer className="mx-auto flex max-w-[1240px] flex-wrap items-center justify-between gap-4 px-5 py-10 text-[13px] text-zinc-500">
-        <span>Built for NEAR HACKATHON 2026</span>
+        <span className="flex items-center gap-4"><span>Built for NEAR HACKATHON 2026</span><a href="/privacy" className="hover:text-zinc-300">Privacy</a><a href="/terms" className="hover:text-zinc-300">Terms</a></span>
         <span className="flex items-center gap-4">
           <span className="flex items-center gap-1.5"><BrandIcon icon={BRANDS.near} size={13} color="#a1a1aa" /> NEAR AI Cloud</span>
           <span className="flex items-center gap-1.5"><BrandIcon icon={BRANDS.near} size={13} color="#a1a1aa" /> NEAR Intents</span>
