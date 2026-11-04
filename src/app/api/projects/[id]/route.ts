@@ -3,6 +3,9 @@ import { z } from "zod";
 import { deleteProject, getProject, updateProject } from "@/lib/store";
 import { removeUploads } from "@/lib/uploads";
 import { editable } from "@/lib/access";
+import { canRead } from "@/lib/site-access";
+import { cfRemove } from "@/lib/domains";
+import { dropRouting } from "@/lib/routing";
 import { readableOn, restyle } from "@/lib/themes";
 import { publicProject } from "@/lib/public";
 import { isPublicHttps } from "@/lib/net";
@@ -11,7 +14,7 @@ import { CHAIN_IDS, THEME_IDS } from "@/lib/spec";
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const p = await getProject(id).catch(() => null);
-  if (!p) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!p || !(await canRead(p))) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json(publicProject(p), { headers: { "cache-control": "no-store" } });
 }
 
@@ -60,5 +63,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   if (g instanceof Response) return g;
   await deleteProject(id);
   await removeUploads(id).catch(() => undefined);
+  await dropRouting(id);
+  if (g.p.domain?.cf?.id) await cfRemove(g.p.domain.cf.id);
   return NextResponse.json({ ok: true });
 }

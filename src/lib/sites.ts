@@ -2,7 +2,7 @@
 // <slug>.<SITES_DOMAIN>, either by the Cloudflare Worker in edge/ or by any wildcard host pointed at this app.
 // Without it, sites stay at /s/<slug> on the builder's own origin.
 
-export const RESERVED_SLUGS = new Set(["www", "api", "app", "admin", "build", "preview", "docs", "help", "mail", "edge", "static"]);
+export const RESERVED_SLUGS = new Set(["www", "api", "app", "admin", "build", "preview", "docs", "help", "mail", "edge", "static", "sites"]);
 
 export function sitesDomain(): string | null {
   const d = process.env.SITES_DOMAIN?.trim().toLowerCase().replace(/^\.+|\.+$/g, "");
@@ -26,4 +26,4 @@ export function slugFromHost(host: string | null): string | null {
 }
 
 // What a published page may call on its own host. Everything else (the builder, project APIs) stays off site hosts.
-export const SITE_API = /^\/api\/(token|trades|quote|swap|balance|intents(\/status)?|rpc|assets)(\/|$)/;
+export const SITE_API = /^\/api\/(token|trades|quote|swap|balance|intents(\/status)?|rpc|assets|site-access)(\/|$)/;
