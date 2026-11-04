@@ -38,6 +38,16 @@ export const plan = (id: PlanId | undefined): Plan => PLANS.find((p) => p.id ===
 /** What one payment covers, in USD. */
 export const priceUsd = (p: Plan, cycle: Cycle) => (cycle === "yearly" ? p.yearly * 12 : p.monthly);
 
+/** Days one payment adds to a plan. */
+export const cycleDays = (cycle: Cycle) => (cycle === "yearly" ? 365 : 30);
+
+/** "Unlimited" builds still stop here in a day; past it is scripted or resold use. */
+export const FAIR_USE_BUILDS_PER_DAY = 100;
+/** Builds an hour from one IP, before and after a paid plan. */
+export const BUILDS_PER_HOUR = { free: 12, paid: 60 };
+/** How many builds run on our models at once; past it, free builds queue behind paid ones. */
+export const BUILD_SLOTS = 3;
+
 /** Rows of the comparison table: a label and each plan's value (true = included, false = not, text = the detail). */
 export const COMPARE: Array<{ label: string; values: Record<PlanId, string | boolean> }> = [
   { label: "Builds", values: { free: "5 a day", pro: "Unlimited*", team: "Unlimited*" } },

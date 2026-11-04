@@ -4,13 +4,17 @@ import { TopBar } from "@/components/account/TopBar";
 import { PlanCards } from "@/components/pricing/PlanCards";
 import { BrandIcon, BRANDS } from "@/components/brand";
 import { COMPARE, FAQ, PLANS } from "@/lib/plans";
-import { activePlan, viewer } from "@/lib/accounts";
+import { publicUser, viewer } from "@/lib/accounts";
+import { isOpen } from "@/lib/billing";
+import { planOf } from "@/lib/entitlements";
+import { Payments } from "@/components/pricing/Payments";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Pricing · sitesmith" };
 
 export default async function Pricing() {
   const { user } = await viewer();
+  const open = user?.payments?.filter((x) => isOpen(x)) ?? [];
   return (
     <div className="min-h-screen bg-ink-950">
       <TopBar />
@@ -23,7 +27,14 @@ export default async function Pricing() {
           <p className="mt-3 flex items-center gap-2 text-[12.5px] text-zinc-500"><BrandIcon icon={BRANDS.near} size={13} color="#a1a1aa" /> Settles in USDC on NEAR. SOL, ETH, BTC, USDC, USDT and NEAR accepted.</p>
         </div>
 
-        <PlanCards current={user ? activePlan(user) : null} paymentsOn={!!process.env.PAYMENTS_NEAR_ACCOUNT?.trim()} />
+        {user && open.length > 0 && (
+          <section className="mt-8 max-w-[620px]" aria-labelledby="pending">
+            <h2 id="pending" className="mb-2 text-[13px] font-medium text-zinc-300">Payments on the way</h2>
+            <Payments initial={publicUser(user).payments} only="open" />
+          </section>
+        )}
+
+        <PlanCards current={user ? await planOf(user) : null} paymentsOn={!!process.env.PAYMENTS_NEAR_ACCOUNT?.trim()} />
 
         <section className="mt-16" aria-labelledby="compare">
           <h2 id="compare" className="text-[18px] font-semibold text-white">Compare plans</h2>

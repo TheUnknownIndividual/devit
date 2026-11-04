@@ -697,7 +697,7 @@ async function applyCommentsRaw(project: Project, comments: PendingComment[]): P
     const res = await askJson(system, user, (v) => {
       const p = EditSchema.safeParse(v);
       return p.success ? p.data : null;
-    }, tier);
+    }, tier, "edit");
     if (res) {
       const next: SiteSpec = structuredClone(spec);
       if (res.value.logo) next.logo = res.value.logo;

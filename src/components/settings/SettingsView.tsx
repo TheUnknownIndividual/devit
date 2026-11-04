@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
-import { AlertTriangle, ArrowUpRight, Check, CheckCircle2, Fingerprint, KeyRound, Loader2, LogOut, Mail, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { useCallback, useState, type ReactNode } from "react";
+import { AlertTriangle, ArrowUpRight, Check, CheckCircle2, ChevronDown, Fingerprint, KeyRound, Loader2, LogOut, Mail, Plus, ShieldCheck, Trash2, UserCog } from "lucide-react";
 import { BrandIcon, BRANDS } from "@/components/brand";
 import { Avatar } from "@/components/account/AccountMenu";
 import { SignInDialog } from "@/components/account/SignInDialog";
 import { refreshSession, setSessionUser } from "@/components/account/session";
+import { Payments } from "@/components/pricing/Payments";
+import { Menu } from "@/components/ui/Menu";
 import type { PublicUser } from "@/lib/accounts";
 import { KEY_LABELS } from "@/lib/apikeys";
 import type { KeyId } from "@/lib/keyscope";
-import { PLANS } from "@/lib/plans";
+import { PLANS, type PlanId } from "@/lib/plans";
 
 const SECTIONS = [["account", "Account"], ["methods", "Sign-in methods"], ["keys", "API keys"], ["plan", "Plan"]] as const;
 const MODEL_KEYS: KeyId[] = ["nearai", "anthropic", "openai", "openrouter"];
@@ -24,14 +26,15 @@ async function send(method: string, path: string, body?: unknown) {
   return { ok: r.ok, j: await r.json().catch(() => ({})) };
 }
 
-export function SettingsView({ initial, usage }: { initial: PublicUser; usage: { today: number; cap: number | null } }) {
+/** usage.cap: the plan's builds a day; fairUse: the cap behind "unlimited". admin: env ADMINS lists this account. */
+export function SettingsView({ initial, usage, admin = false }: { initial: PublicUser; usage: { today: number; cap: number | null; fairUse: number }; admin?: boolean }) {
   const router = useRouter();
   const [user, setUser] = useState(initial);
   const [name, setName] = useState(initial.name ?? "");
   const [saving, setSaving] = useState(false);
   const [linking, setLinking] = useState(false);
   const [methodErr, setMethodErr] = useState<string | null>(null);
-  const update = (u: PublicUser | null | undefined) => { if (u) { setUser(u); setSessionUser(u); } };
+  const update = useCallback((u: PublicUser | null | undefined) => { if (u) { setUser(u); setSessionUser(u); } }, []);
   const hasOwnModel = MODEL_KEYS.some((k) => user.keys[k]?.use);
   const plan = PLANS.find((p) => p.id === user.plan) ?? PLANS[0];
 
@@ -108,16 +111,64 @@ export function SettingsView({ initial, usage }: { initial: PublicUser; usage: {
             <div className="min-w-0 flex-1">
               <div className="text-[15px] font-semibold text-white">{plan.name}</div>
               <div className="mt-0.5 text-[12.5px] text-zinc-400">
-                {usage.cap == null ? "Unlimited builds within fair use" : `${Math.min(usage.today, usage.cap)} of ${usage.cap} builds used today`}
+                {usage.cap == null ? `Unlimited builds within fair use · ${usage.today} today of ${usage.fairUse}` : `${Math.min(usage.today, usage.cap)} of ${usage.cap} builds used today`}
                 {hasOwnModel && " · builds on your own key don't count"}
-                {user.planUntil ? ` · runs until ${day(user.planUntil)}` : ""}
               </div>
+              {user.plan !== "free" && (
+                <div className="mt-0.5 text-[12.5px] text-zinc-400">{user.planUntil ? `Paid through ${day(user.planUntil)}. Pay again before then to add time; nothing renews by itself.` : "No end date."}</div>
+              )}
               {usage.cap != null && <div className="mt-2 h-1.5 max-w-[320px] overflow-hidden rounded-sm bg-white/[0.06]"><div className="h-full bg-lime" style={{ width: `${Math.min(100, (usage.today / usage.cap) * 100)}%` }} /></div>}
             </div>
-            <Link href="/pricing" className="btn btn-outline">{user.plan === "free" ? "Upgrade" : "Change plan"} <ArrowUpRight size={14} /></Link>
+            <Link href="/pricing" className="btn btn-outline">{user.plan === "free" ? "Upgrade" : "Extend or change"} <ArrowUpRight size={14} /></Link>
           </div>
+          <h3 className="mb-2 mt-5 text-[12px] font-medium text-zinc-400">Payments</h3>
+          <Payments initial={user.payments} onUser={update} />
+          {user.grants.length > 0 && (
+            <p className="mt-2 text-[11.5px] text-zinc-500">
+              Set by support: {user.grants.slice(-3).reverse().map((g) => `${PLANS.find((p) => p.id === g.plan)?.name ?? g.plan}${g.days ? ` for ${g.days} days` : ""} on ${day(g.at)}`).join(" · ")}
+            </p>
+          )}
+          {admin && <GrantPlan self={user} onSelf={update} />}
         </Section>
       </div>
+    </div>
+  );
+}
+
+/** Admins only (env ADMINS): set any account's plan by hand, for support and testing. Same as `pnpm grant-plan`. */
+function GrantPlan({ self, onSelf }: { self: PublicUser; onSelf: (u: PublicUser) => void }) {
+  const [who, setWho] = useState(self.id);
+  const [planId, setPlanId] = useState<PlanId>("pro");
+  const [days, setDays] = useState("30");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function grant() {
+    setBusy(true); setNote(null);
+    const { ok, j } = await send("POST", "/api/billing/grant", { user: who.trim(), plan: planId, days: planId === "free" ? null : Math.max(1, Math.floor(Number(days) || 30)) });
+    setBusy(false);
+    if (!ok) return setNote({ ok: false, text: j.error ?? "Didn't work." });
+    if (j.self) onSelf(j.self);
+    setNote({ ok: true, text: `${j.id} is on ${PLANS.find((p) => p.id === j.plan)?.name ?? j.plan}${j.planUntil ? ` until ${day(j.planUntil)}` : ""}.` });
+  }
+
+  return (
+    <div className="mt-5 rounded-[12px] border border-white/[0.08] bg-ink-850 p-3">
+      <h3 className="flex items-center gap-2 text-[12px] font-medium text-zinc-400"><UserCog size={13} /> Grant plan (admin)</h3>
+      <form className="mt-2 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); void grant(); }}>
+        <input className="field h-9 min-w-[200px] flex-1 font-mono text-[12.5px]" value={who} spellCheck={false} aria-label="Account id or email" placeholder="Account id or email" onChange={(e) => setWho(e.target.value)} />
+        <Menu
+          label="Plan"
+          width={160}
+          value={planId}
+          onPick={setPlanId}
+          items={PLANS.map((p) => ({ value: p.id, label: p.name }))}
+          trigger={() => <button type="button" className="btn btn-outline h-9 w-[96px] justify-between">{PLANS.find((p) => p.id === planId)?.name}<ChevronDown size={14} /></button>}
+        />
+        <input className="field h-9 w-[84px] text-[12.5px]" inputMode="numeric" value={planId === "free" ? "" : days} disabled={planId === "free"} aria-label="Days" placeholder="Days" onChange={(e) => setDays(e.target.value.replace(/\D/g, "").slice(0, 4))} />
+        <button type="submit" className="btn btn-outline h-9" disabled={busy || who.trim().length < 3}>{busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Grant</button>
+      </form>
+      {note && <p role="status" className={`mt-2 text-[12px] ${note.ok ? "text-lime" : "text-amber-200"}`}>{note.text}</p>}
     </div>
   );
 }

@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, Check, CheckCircle2, Copy, Loader2, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, CheckCircle2, Copy, Loader2, Wallet } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
-import { openSignIn, useSession } from "@/components/account/session";
+import { openSignIn, setSessionUser, useSession } from "@/components/account/session";
 import { PLANS, priceUsd, type Cycle, type Plan, type PlanId } from "@/lib/plans";
 
 export function PlanCards({ current, paymentsOn }: { current: PlanId | null; paymentsOn: boolean }) {
@@ -27,7 +27,7 @@ export function PlanCards({ current, paymentsOn }: { current: PlanId | null; pay
           const price = cycle === "yearly" ? p.yearly : p.monthly;
           const isCurrent = current === p.id;
           return (
-            <div key={p.id} className={`flex flex-col rounded-2xl border bg-ink-900 p-5 ${p.id === "pro" ? "border-lime/40" : "border-white/[0.08]"}`}>
+            <div key={p.id} id={p.id} className={`flex scroll-mt-6 flex-col rounded-2xl border bg-ink-900 p-5 ${p.id === "pro" ? "border-lime/40" : "border-white/[0.08]"}`}>
               <div className="flex items-center justify-between">
                 <h2 className="text-[16px] font-semibold text-white">{p.name}</h2>
                 {p.id === "pro" && <span className="rounded-md bg-lime/10 px-1.5 py-0.5 text-[11px] font-medium text-lime">Most picked</span>}
@@ -74,19 +74,24 @@ function PayDialog({ plan, cycle, onClose }: { plan: Plan; cycle: Cycle; onClose
   const [error, setError] = useState<string | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<{ outcome: string; received: number | null } | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => { fetch("/api/intents").then((r) => r.json()).then((j) => setCoins(j.payWith ?? [])).catch(() => undefined); }, []);
 
-  // Poll the deposit until 1-Click settles it (or the dialog closes).
+  // Poll the deposit until 1-Click is done with it (or the dialog closes). The server turns the plan on.
+  const done = status === "SUCCESS" || status === "REFUNDED" || status === "FAILED";
   useEffect(() => {
-    if (!quote || status === "SUCCESS") return;
+    if (!quote || done) return;
     const h = setInterval(async () => {
       const j = await fetch(`/api/billing?depositAddress=${encodeURIComponent(quote.depositAddress)}`, { cache: "no-store" }).then((r) => r.json()).catch(() => null);
       if (j?.status) setStatus(j.status);
+      if (j?.outcome) setOutcome({ outcome: j.outcome, received: j.received ?? null });
+      if (j?.user) setSessionUser(j.user);
     }, 8000);
     return () => clearInterval(h);
-  }, [quote, status]);
+  }, [quote, done]);
+  const short = status === "SUCCESS" && outcome?.outcome === "short";
 
   const coin = coins.find((c) => c.key === pay);
 
@@ -131,8 +136,8 @@ function PayDialog({ plan, cycle, onClose }: { plan: Plan; cycle: Cycle; onClose
               </button>
             </div>
             <p className="flex items-center gap-2 text-[12.5px] text-zinc-400">
-              {status === "SUCCESS" ? <CheckCircle2 size={14} className="text-lime" /> : <Loader2 size={14} className="animate-spin" />}
-              {WORDS[status ?? "PENDING_DEPOSIT"] ?? status}
+              {short ? <AlertTriangle size={14} className="text-amber-200" /> : status === "SUCCESS" ? <CheckCircle2 size={14} className="text-lime" /> : done ? <AlertTriangle size={14} className="text-zinc-400" /> : <Loader2 size={14} className="animate-spin" />}
+              {short ? `Only $${outcome?.received ?? 0} of $${quote.usd} arrived, so the plan isn't on. Get in touch and we'll sort it out.` : WORDS[status ?? "PENDING_DEPOSIT"] ?? status}
             </p>
             <p className="text-[11.5px] text-zinc-500">This address is for this payment only and expires in an hour. Keep this window open, or come back to Settings; the plan turns on once the swap lands.</p>
           </>

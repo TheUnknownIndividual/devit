@@ -2,7 +2,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { Chain } from "./spec";
 
 // The API keys and RPCs of whoever owns the project being worked on. A build or edit runs inside runWithKeys, and
-// llm.ts / chain.ts / research.ts read it from here, so their signatures stay as they were.
+// llm.ts / chain.ts / research.ts read it from here, so their signatures stay as they were. The same scope carries
+// whether the owner's plan has priority models (entitlements "priorityModels"), for llm.ts to pick the model size.
 
 export const KEY_IDS = ["nearai", "anthropic", "openai", "openrouter", "helius", "rpc:near", "rpc:solana", "rpc:ethereum", "rpc:robinhood"] as const;
 export type KeyId = (typeof KEY_IDS)[number];
@@ -17,12 +18,13 @@ export interface OwnerKeys {
   rpc?: Partial<Record<Chain, string>>;
 }
 
-const store = new AsyncLocalStorage<OwnerKeys>();
+const store = new AsyncLocalStorage<{ keys: OwnerKeys; priority: boolean }>();
 
-export function runWithKeys<T>(keys: OwnerKeys | null, fn: () => T): T {
-  return keys ? store.run(keys, fn) : fn();
+export function runWithKeys<T>(keys: OwnerKeys | null, fn: () => T, priority = false): T {
+  return keys || priority ? store.run({ keys: keys ?? {}, priority }, fn) : fn();
 }
 
-export const ownerKeys = (): OwnerKeys => store.getStore() ?? {};
+export const ownerKeys = (): OwnerKeys => store.getStore()?.keys ?? {};
+export const priorityModels = (): boolean => store.getStore()?.priority ?? false;
 
 export const hasOwnLlm = (k: OwnerKeys | null) => !!k && LLM_KEYS.some((id) => !!k[id]);

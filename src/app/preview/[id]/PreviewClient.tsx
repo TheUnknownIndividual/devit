@@ -60,7 +60,7 @@ function underArea(box: Area): Array<{ blockId: string; label: string; element: 
   return out.length ? out : blocks.map((b) => ({ blockId: b.getAttribute("data-block-id")!, label: b.getAttribute("data-block-label") ?? "Block", element: null }));
 }
 
-export function PreviewClient({ initial, walletconnect }: { initial: SiteSpec; walletconnect: string | null }) {
+export function PreviewClient({ initial, walletconnect, credit }: { initial: SiteSpec; walletconnect: string | null; credit: string | null }) {
   const [spec, setSpec] = useState(initial);
   const [selectOn, setSelectOn] = useState(true);
   // The hovered element itself, not a box: the outline is measured on every render, so it moves with the page.
@@ -258,7 +258,7 @@ export function PreviewClient({ initial, walletconnect }: { initial: SiteSpec; w
   return (
     <>
       <div ref={root} style={{ cursor: selectOn ? "default" : undefined }}>
-        <Site spec={spec} mode="preview" walletconnect={walletconnect} />
+        <Site spec={spec} mode="preview" walletconnect={walletconnect} credit={credit} />
       </div>
       <div aria-hidden="true" style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 2147483000 }}>
         {area && (
