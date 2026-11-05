@@ -26,4 +26,4 @@ export function slugFromHost(host: string | null): string | null {
 }
 
 // What a published page may call on its own host. Everything else (the builder, project APIs) stays off site hosts.
-export const SITE_API = /^\/api\/(token|trades|quote|swap|balance|intents(\/status)?|rpc|assets|site-access)(\/|$)/;
+export const SITE_API = /^\/api\/(token|trades|quote|swap|balance|intents(\/status)?|relay(\/status)?|rpc|assets|site-access)(\/|$)/;
