@@ -1,6 +1,6 @@
 import { ArrowRight, Check, Globe, Loader2, MessageSquare, MousePointer2, Wallet } from "lucide-react";
 import { BrandIcon, BRANDS, BrandLogo, ChainIcon, LogoStack, LOGOS } from "@/components/brand";
-import { TemplateCards } from "./TemplateCards";
+import { StyleShowcase } from "./StyleShowcase";
 
 const STEPS = [
   { t: "Reading the chain", d: "$WOOF · price, holders", s: "done" },
@@ -85,8 +85,8 @@ export function HowItWorks() {
 
       <section id="templates" className="scroll-mt-20 pt-20">
         <h2 data-reveal className="text-[28px] font-semibold tracking-[-0.02em] text-white">Start from a style</h2>
-        <p data-reveal style={{ "--d": 1 } as React.CSSProperties} className="mt-2 max-w-[560px] text-[15px] text-zinc-400">Pick one and it fills the prompt. Change anything after with a comment.</p>
-        <div className="mt-8"><TemplateCards /></div>
+        <p data-reveal style={{ "--d": 1 } as React.CSSProperties} className="mt-2 max-w-[560px] text-[15px] text-zinc-400">Real sites, built from the same blocks yours will be. Pick one and it fills the prompt; change anything after with a comment.</p>
+        <div data-reveal style={{ "--d": 2 } as React.CSSProperties} className="mt-8"><StyleShowcase /></div>
       </section>
 
       <section id="integrations" className="scroll-mt-20 pt-20">

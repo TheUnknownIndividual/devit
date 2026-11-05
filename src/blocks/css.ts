@@ -349,6 +349,16 @@ export const SITE_CSS = `
 @keyframes ssMarquee{to{transform:translateX(-50%)}}
 @keyframes ssFloat{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-12px) rotate(-1.5deg)}}
 @keyframes ssDrift{from{transform:translate(0,0) scale(1)}to{transform:translate(-4%,3%) scale(1.06)}}
+/* showcase demo chart + trade rows */
+.ss-demo-chart{display:flex;flex-direction:column;padding:16px 18px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);overflow:hidden}
+.ss-demo-chart-head{display:flex;align-items:baseline;gap:8px;font-size:14px;font-variant-numeric:tabular-nums}
+.ss-demo-chart svg{flex:1;width:100%;min-height:0;margin-top:10px}
+[data-ss-mode=live] .ss-demo-line{stroke-dasharray:2400;animation:ssDraw 1.6s cubic-bezier(.22,1,.36,1) both}
+[data-ss-mode=live] .ss-demo-dot{animation:ssPulse 2.4s ease-out infinite;transform-box:fill-box;transform-origin:center}
+[data-ss-mode=live] .ss-row-in{animation:ssRowIn .5s cubic-bezier(.22,1,.36,1)}
+@keyframes ssDraw{from{stroke-dashoffset:2400}to{stroke-dashoffset:0}}
+@keyframes ssPulse{0%{opacity:1}50%{opacity:.35}100%{opacity:1}}
+@keyframes ssRowIn{from{opacity:0;transform:translateY(-6px);background:color-mix(in srgb,var(--accent) 14%,transparent)}}
 @keyframes ssFlashUp{from{color:#22c55e;text-shadow:0 0 12px rgba(34,197,94,.5)}}
 @keyframes ssFlashDown{from{color:#ef4444;text-shadow:0 0 12px rgba(239,68,68,.5)}}
 @media (prefers-reduced-motion:reduce){[data-ss-mode=live] *{animation:none!important;transition:none!important}.ss-progress{display:none}[data-ss-mode=live] .ss-sec.ss-wait{opacity:1;transform:none}}

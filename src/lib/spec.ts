@@ -102,6 +102,8 @@ export interface TokenInfo {
   sources: string[];
   /** Where it launched and trades (lib/venues.ts). Missing on sites built before venues were read. */
   venue?: TokenVenue;
+  /** A made-up token for the style showcase: numbers move on their own and nothing is fetched. */
+  demo?: boolean;
 }
 
 /** A token's launchpad and pool, as venue ids from lib/venues.ts. */

@@ -39,6 +39,15 @@ export function useLiveToken(initial: TokenInfo | null, mode: Mode): TokenInfo |
   useEffect(() => setT(initial), [initial]);
   useEffect(() => {
     if (mode !== "live" || !initial) return;
+    if (initial.demo) {
+      // The showcase's made-up token drifts a little every couple of seconds so the flashes and counters have something to do.
+      const h = setInterval(() => setT((x) => {
+        if (!x?.priceUsd) return x;
+        const k = 1 + (Math.random() - 0.46) * 0.012;
+        return { ...x, priceUsd: x.priceUsd * k, marketCap: x.marketCap != null ? x.marketCap * k : null, volume24h: x.volume24h != null ? x.volume24h + Math.random() * 900 : null, change24h: x.change24h != null ? x.change24h + (k - 1) * 100 : null };
+      }), 2400);
+      return () => clearInterval(h);
+    }
     let stop = false;
     const tick = async () => {
       const r = await fetch(`/api/token?chain=${initial.chain}&address=${encodeURIComponent(initial.address)}`).catch(() => null);
@@ -226,10 +235,21 @@ export function MotionFx({ mode, toTop = true, progress = false, nav = true }: {
 
 interface Trade { side: "buy" | "sell"; usd: number; who: string; at: number }
 
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+/** A made-up wallet for the showcase's trades. */
+function demoWho(): string { return Array.from({ length: 44 }, () => B58[Math.floor(Math.random() * B58.length)]).join(""); }
+
 export function LiveTrades({ token, mode }: { token: TokenInfo | null; mode: Mode }) {
   const [trades, setTrades] = useState<Trade[] | null>(null);
   useEffect(() => {
     if (!token?.pairAddress) return;
+    if (token.demo) {
+      const one = (at: number): Trade => ({ side: Math.random() < 0.62 ? "buy" : "sell", usd: Math.round(40 + Math.random() ** 2 * 4200), who: demoWho(), at });
+      setTrades(Array.from({ length: 8 }, (_, i) => one(Date.now() - (i + 1) * 23_000)));
+      if (mode !== "live") return;
+      const h = setInterval(() => setTrades((x) => [one(Date.now()), ...(x ?? [])].slice(0, 8)), 2600);
+      return () => clearInterval(h);
+    }
     let stop = false;
     const tick = async () => {
       const r = await fetch(`/api/trades?chain=${token.chain}&pool=${encodeURIComponent(token.pairAddress!)}`).catch(() => null);
@@ -239,7 +259,7 @@ export function LiveTrades({ token, mode }: { token: TokenInfo | null; mode: Mod
     if (mode !== "live") return () => { stop = true; };
     const h = setInterval(tick, 12_000);
     return () => { stop = true; clearInterval(h); };
-  }, [token?.chain, token?.pairAddress, mode]);
+  }, [token?.chain, token?.pairAddress, token?.demo, mode]);
 
   if (!token?.pairAddress) return <div className="ss-card ss-muted">Trades show here once the token has a trading pair.</div>;
   if (!trades) return <div className="ss-card ss-muted">Loading trades…</div>;
@@ -249,7 +269,7 @@ export function LiveTrades({ token, mode }: { token: TokenInfo | null; mode: Mod
       <table className="ss-trades">
         <tbody>
           {trades.slice(0, 8).map((t, i) => (
-            <tr key={`${t.at}-${i}`}>
+            <tr key={`${t.at}-${t.who}`} className={token.demo && i === 0 ? "ss-row-in" : undefined}>
               <td className={t.side === "buy" ? "ss-up" : "ss-down"} style={{ fontWeight: 700, width: 60 }}>{t.side === "buy" ? "Buy" : "Sell"}</td>
               <td style={{ fontWeight: 700 }}>{usd(t.usd)}</td>
               <td className="ss-mono ss-muted">{short(t.who)}</td>
@@ -265,6 +285,7 @@ export function LiveTrades({ token, mode }: { token: TokenInfo | null; mode: Mod
 // ---------- chart ----------
 
 export function Chart({ token, mode, dark }: { token: TokenInfo | null; mode: Mode; dark: boolean }) {
+  if (token?.demo) return <DemoChart token={token} mode={mode} />;
   if (!token?.pairAddress) return <div className="ss-chart"><div className="ss-chart-ph">The chart appears once the token has a trading pair.</div></div>;
   if (mode === "preview") {
     // A still in the preview: the live embed is heavy and animates. "Open live" shows the real one.
@@ -325,6 +346,12 @@ function SameChain({ chain, token, ticker }: { chain: Chain; token: TokenInfo | 
     if (!token || viaPad) return;
     const a = Number(amount);
     if (!(a > 0)) { setQ(null); return; }
+    if (token.demo) {
+      // Showcase token: a made-up quote from the moving demo price, nothing is asked of a router.
+      const nativeUsd = chain === "solana" ? 160 : chain === "near" ? 3.2 : 3400;
+      setQ(token.priceUsd ? { out: (a * nativeUsd) / token.priceUsd, venue: "sample quote", swap: false } : null);
+      return;
+    }
     const h = setTimeout(async () => {
       const acct = chain === "near" && connected?.wallet.kind === "near" ? `&account=${encodeURIComponent(connected.address)}` : "";
       const r = await fetch(`/api/quote?chain=${chain}&token=${encodeURIComponent(token.address)}&amount=${a}&decimals=${token.decimals ?? 6}${acct}`).catch(() => null);
@@ -338,7 +365,7 @@ function SameChain({ chain, token, ticker }: { chain: Chain; token: TokenInfo | 
   const wrongWallet = connected && familyOf(connected.wallet) !== wantKind;
   const canSwap = !!q?.swap && !!connected && !wrongWallet;
   const fallback = venue(chain === "solana" ? "jupiter" : chain === "bsc" ? "pancakeswap" : chain === "near" ? null : "uniswap");
-  const handoff = curveUrl ?? (fallback?.buy ? fallback.buy(token.address, chain) : `https://www.neartrade.lol/token/${encodeURIComponent(token.address)}`);
+  const handoff = token.demo ? null : curveUrl ?? (fallback?.buy ? fallback.buy(token.address, chain) : `https://www.neartrade.lol/token/${encodeURIComponent(token.address)}`);
   const handoffName = curveUrl && pad ? pad.name : fallback?.name ?? "neartrade";
 
   async function buy() {
@@ -387,6 +414,11 @@ function SameChain({ chain, token, ticker }: { chain: Chain; token: TokenInfo | 
         </button>
       )}
       {wrongWallet && <div className="ss-note" style={{ marginTop: 10 }}>Connect a {CHAINS[chain].name} wallet to buy here.</div>}
+      {token.demo && (
+        <button type="button" className="ss-btn" style={{ width: "100%", marginTop: 14 }} title="This is a sample site with a made-up token">
+          <ArrowRightLeft size={16} /> Buy ${ticker}
+        </button>
+      )}
       {handoff && (
         <a className={q?.swap ? "ss-note" : "ss-btn"} style={q?.swap ? { display: "block", marginTop: 10, textAlign: "center", textDecoration: "underline" } : { width: "100%", marginTop: 14 }} href={handoff} target="_blank" rel="noreferrer">
           {!q?.swap && <ArrowRightLeft size={16} />} {q?.swap ? `Or buy on ${handoffName}` : `Buy $${ticker} on ${handoffName}`}
@@ -408,7 +440,7 @@ function AnyChain({ chain, token, ticker }: { chain: Chain; token: TokenInfo | n
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
-  useEffect(() => { void fetch("/api/intents").then((r) => r.json()).then((j: { payWith: PayOption[] }) => setPays(j.payWith)).catch(() => undefined); }, []);
+  useEffect(() => { if (token?.demo) { setPays([{ key: "eth:ETH", label: "ETH", chain: "Ethereum" }, { key: "sol:SOL", label: "SOL", chain: "Solana" }, { key: "eth:USDC", label: "USDC", chain: "Ethereum" }]); return; } void fetch("/api/intents").then((r) => r.json()).then((j: { payWith: PayOption[] }) => setPays(j.payWith)).catch(() => undefined); }, []);
   useEffect(() => { if (connected && !recipient) setRecipient(connected.address); }, [connected, recipient]);
 
   // Dry quote as you type: shows what arrives without asking for addresses.
@@ -416,13 +448,14 @@ function AnyChain({ chain, token, ticker }: { chain: Chain; token: TokenInfo | n
     const a = Number(amount);
     if (!(a > 0)) { setQ(null); return; }
     setErr(null);
+    if (token?.demo) return;
     const h = setTimeout(async () => {
       const r = await fetch("/api/intents", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pay, amount: a, chain, token: token?.address ?? null }) }).catch(() => null);
       const j = r ? await r.json() : { error: "No quote right now" };
       if ("error" in j) { setErr(j.error); setQ(null); } else setQ(j);
     }, 450);
     return () => clearTimeout(h);
-  }, [pay, amount, chain, token?.address]);
+  }, [pay, amount, chain, token?.address, token?.demo]);
 
   useEffect(() => {
     if (!q?.depositAddress || q.dry) return;
@@ -485,3 +518,41 @@ function AnyChain({ chain, token, ticker }: { chain: Chain; token: TokenInfo | n
   );
 }
 
+// ---------- showcase chart ----------
+
+/** The showcase's chart: a seeded random walk drawn as an area, with a new candle every couple of seconds on live pages. */
+function DemoChart({ token, mode }: { token: TokenInfo; mode: Mode }) {
+  const N = 72;
+  const [pts, setPts] = useState<number[]>(() => {
+    let seed = [...token.symbol].reduce((a, c) => a * 31 + c.charCodeAt(0), 7) >>> 0;
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+    const out = [50];
+    for (let i = 1; i < N; i++) out.push(Math.max(8, Math.min(92, out[i - 1] + (rnd() - 0.42) * 7)));
+    return out;
+  });
+  useEffect(() => {
+    if (mode !== "live") return;
+    const h = setInterval(() => setPts((p) => [...p.slice(1), Math.max(8, Math.min(92, p[p.length - 1] + (Math.random() - 0.45) * 6))]), 2400);
+    return () => clearInterval(h);
+  }, [mode]);
+  const x = (i: number) => (i / (N - 1)) * 400;
+  const y = (v: number) => 150 - (v / 100) * 140;
+  const line = pts.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(" ");
+  const last = pts[pts.length - 1];
+  const up = last >= pts[0];
+  return (
+    <div className="ss-chart ss-demo-chart" data-el="chart">
+      <div className="ss-demo-chart-head">
+        <b>${token.symbol}</b><span className="ss-muted">/ USD · 15m</span>
+        <span className={up ? "ss-up" : "ss-down"} style={{ marginLeft: "auto" }}>{usd(token.priceUsd)}</span>
+      </div>
+      <svg viewBox="0 0 400 160" preserveAspectRatio="none" aria-hidden="true">
+        <defs><linearGradient id={`ssg-${token.symbol}`} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="var(--accent)" stopOpacity=".32" /><stop offset="1" stopColor="var(--accent)" stopOpacity="0" /></linearGradient></defs>
+        {[40, 80, 120].map((g) => <line key={g} x1="0" x2="400" y1={g} y2={g} stroke="var(--border)" strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
+        <path d={`${line} L400 160 L0 160 Z`} fill={`url(#ssg-${token.symbol})`} />
+        <path className="ss-demo-line" d={line} fill="none" stroke="var(--accent)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+        <circle cx={x(N - 1)} cy={y(last)} r="3.5" fill="var(--accent)" className="ss-demo-dot" />
+      </svg>
+    </div>
+  );
+}
