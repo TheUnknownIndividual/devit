@@ -104,9 +104,7 @@ export function StyleShowcase() {
               onClick={() => pick(i)}
               className={`relative flex h-10 shrink-0 items-center gap-2 overflow-hidden rounded-full border pl-1.5 pr-3.5 text-[13px] transition-[background-color,border-color,color,transform] duration-200 [transition-timing-function:var(--ease-out)] active:scale-[.97] ${on ? "border-white/20 bg-white/[0.09] text-white" : "border-white/[0.08] bg-white/[0.02] text-zinc-400 hover:border-white/15 hover:text-zinc-200"}`}
             >
-              <span aria-hidden className="grid size-7 place-items-center rounded-full border border-white/10" style={{ background: s.bg }}>
-                <span className="size-2.5 rounded-full" style={{ background: s.accent }} />
-              </span>
+              <img src={s.logo} alt="" aria-hidden className="size-7 rounded-full object-cover ring-1 ring-white/10" />
               {THEME_LABELS[s.id as ThemeId]}
               {on && !reduced && (
                 <span

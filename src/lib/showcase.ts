@@ -181,6 +181,20 @@ const SAMPLES: Sample[] = [
   },
 ];
 
+// Hand-drawn marks for the made-up tokens, so the samples look like real launches rather than letter monograms.
+const svg = (body: string) => `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">${body}</svg>`)}`;
+const PIX = ["..XXXX..", ".XXXXXX.", "XX.XX.XX", "XXXXXXXX", "XXXXXXXX", "X.XXXX.X", "X.X..X.X", "..X..X.."];
+const MARKS: Record<ThemeId, string> = {
+  degen: svg(`<circle cx="60" cy="60" r="60" fill="#FFE600"/><path d="M40 36C26 34 17 50 21 67c2 10 13 10 16 1l6-28z" fill="#0B0B0B"/><path d="M80 36c14-2 23 14 19 31-2 10-13 10-16 1l-6-28z" fill="#0B0B0B"/><ellipse cx="60" cy="64" rx="27" ry="29" fill="#fff" stroke="#0B0B0B" stroke-width="4.5"/><circle cx="49" cy="58" r="4.6" fill="#0B0B0B"/><circle cx="71" cy="58" r="4.6" fill="#0B0B0B"/><circle cx="50.5" cy="56.5" r="1.4" fill="#fff"/><circle cx="72.5" cy="56.5" r="1.4" fill="#fff"/><ellipse cx="60" cy="71" rx="7" ry="5" fill="#0B0B0B"/><path d="M57 81q3 11 6 0z" fill="#FF4D6D"/><path d="M51 79q9 7 18 0" stroke="#0B0B0B" stroke-width="3.5" fill="none" stroke-linecap="round"/>`),
+  clean: svg(`<rect width="120" height="120" rx="30" fill="#1A6B47"/><path d="M60 92V58" stroke="#fff" stroke-width="6" stroke-linecap="round"/><path d="M60 62c0-18-13-29-31-29 0 18 13 29 31 29z" fill="#fff"/><path d="M60 54c0-16 12-27 31-27 0 16-12 27-31 27z" fill="#BFE6CF"/><path d="M42 92h36" stroke="#fff" stroke-width="6" stroke-linecap="round"/>`),
+  retro: svg(`<rect width="120" height="120" fill="#140C2B"/>${PIX.flatMap((row, y) => [...row].map((c, x) => (c === "X" ? `<rect x="${20 + x * 10}" y="${22 + y * 10}" width="10" height="10" fill="#FF4FD8"/>` : ""))).join("")}<rect x="40" y="42" width="10" height="10" fill="#7CF7FF"/><rect x="70" y="42" width="10" height="10" fill="#7CF7FF"/>`),
+  cozy: svg(`<rect width="120" height="120" rx="32" fill="#E4EFCB"/><ellipse cx="60" cy="74" rx="40" ry="28" fill="#8BC36A" stroke="#1F2A14" stroke-width="4"/><circle cx="40" cy="46" r="15" fill="#8BC36A" stroke="#1F2A14" stroke-width="4"/><circle cx="80" cy="46" r="15" fill="#8BC36A" stroke="#1F2A14" stroke-width="4"/><circle cx="40" cy="46" r="7" fill="#1F2A14"/><circle cx="80" cy="46" r="7" fill="#1F2A14"/><circle cx="42.5" cy="43.5" r="2.2" fill="#fff"/><circle cx="82.5" cy="43.5" r="2.2" fill="#fff"/><path d="M44 78q16 11 32 0" stroke="#1F2A14" stroke-width="4" fill="none" stroke-linecap="round"/><circle cx="33" cy="80" r="5" fill="#F4A7A0" opacity=".85"/><circle cx="87" cy="80" r="5" fill="#F4A7A0" opacity=".85"/>`),
+  terminal: svg(`<rect width="120" height="120" rx="24" fill="#0E1220"/><rect x="17" y="30" width="86" height="58" rx="9" fill="#151B30" stroke="#5B7CFF" stroke-width="5"/><rect x="30" y="43" width="60" height="22" rx="11" fill="#5B7CFF" fill-opacity=".18"/><circle cx="44" cy="54" r="7" fill="none" stroke="#5B7CFF" stroke-width="4"/><circle cx="76" cy="54" r="7" fill="none" stroke="#5B7CFF" stroke-width="4"/><path d="M51 54h18" stroke="#5B7CFF" stroke-width="3"/><path d="M35 88l6-11h38l6 11" fill="none" stroke="#5B7CFF" stroke-width="5" stroke-linejoin="round"/><path d="M24 104l14-7 10 4 14-10 12 5 14-11 12 4" stroke="#22C55E" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`),
+  app: svg(`<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#A08BFF"/><stop offset="1" stop-color="#6A4BF0"/></linearGradient></defs><rect width="120" height="120" rx="36" fill="url(#g)"/><path d="M60 62c-14 0-24 12-24 22 0 8 7 11 13 9 4-1 7-3 11-3s7 2 11 3c6 2 13-1 13-9 0-10-10-22-24-22z" fill="#fff"/><ellipse cx="35" cy="57" rx="8" ry="10" transform="rotate(-18 35 57)" fill="#fff"/><ellipse cx="50" cy="39" rx="8" ry="11" transform="rotate(-6 50 39)" fill="#fff"/><ellipse cx="70" cy="39" rx="8" ry="11" transform="rotate(6 70 39)" fill="#fff"/><ellipse cx="85" cy="57" rx="8" ry="10" transform="rotate(18 85 57)" fill="#fff"/>`),
+  brutal: svg(`<rect x="3" y="3" width="114" height="114" fill="#E5FF1A" stroke="#0A0A0A" stroke-width="6"/><path d="M66 14L28 66h26l-8 40 42-56H60z" fill="#0A0A0A" transform="translate(6 6)"/><path d="M66 14L28 66h26l-8 40 42-56H60z" fill="#fff" stroke="#0A0A0A" stroke-width="5" stroke-linejoin="round"/>`),
+  glass: svg(`<defs><radialGradient id="a" cx=".25" cy=".25" r=".8"><stop offset="0" stop-color="#FC72FF"/><stop offset="1" stop-color="#FC72FF" stop-opacity="0"/></radialGradient><radialGradient id="b" cx=".85" cy=".85" r=".75"><stop offset="0" stop-color="#5B8CFF"/><stop offset="1" stop-color="#5B8CFF" stop-opacity="0"/></radialGradient></defs><rect width="120" height="120" rx="32" fill="#150B22"/><rect width="120" height="120" rx="32" fill="url(#a)"/><rect width="120" height="120" rx="32" fill="url(#b)"/><path d="M24 50c12-12 24-12 36 0s24 12 36 0" stroke="#fff" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M24 72c12-12 24-12 36 0s24 12 36 0" stroke="#fff" stroke-opacity=".55" stroke-width="7" fill="none" stroke-linecap="round"/>`),
+};
+
 let n = 0;
 const block = (type: BlockType, props: Record<string, unknown> = {}): Block => ({ id: `${type}-s${++n}`, type, props });
 
@@ -191,7 +205,7 @@ const HERO: Partial<Record<ThemeId, { layout: string; size: string }>> = {
 function token(x: Sample): TokenInfo {
   return {
     chain: x.chain, address: x.address, name: x.name, symbol: x.ticker, decimals: x.chain === "solana" ? 6 : 18,
-    logo: null, header: null, description: x.tagline, links: [],
+    logo: MARKS[x.theme], header: null, description: x.tagline, links: [],
     priceUsd: x.price, marketCap: x.price * x.supply, liquidityUsd: x.price * x.supply * 0.11, volume24h: x.price * x.supply * 0.34,
     change24h: x.change, holders: x.holders, supply: x.supply, pairAddress: `sample-${x.ticker.toLowerCase()}`, pairUrl: null, dexId: null,
     sources: [], demo: true,
@@ -220,7 +234,7 @@ function build(x: Sample): SiteSpec {
   blocks.push(block("footer", { disclaimer: `This is a sample site made with sitesmith. $${x.ticker} is made up and can't be bought.` }));
   return {
     name: x.name, ticker: x.ticker, tagline: x.tagline, chain: x.chain, theme: { ...t, fx: t.fx ? { ...t.fx } : undefined },
-    token: token(x), blocks,
+    token: token(x), blocks, logo: MARKS[x.theme],
     links: [{ type: "x", label: "X", url: "#x" }, { type: "telegram", label: "Telegram", url: "#telegram" }],
   };
 }
@@ -230,5 +244,5 @@ export const SHOWCASE: Record<ThemeId, SiteSpec> = Object.fromEntries(SAMPLES.ma
 /** What the landing's chips need, without shipping eight whole specs to the browser. */
 export const SHOWCASE_LIST = SAMPLES.map((x) => ({
   id: x.theme, ticker: x.ticker, name: x.name, chain: x.chain, accent: THEMES[x.theme].accent, dark: THEMES[x.theme].dark,
-  bg: THEMES[x.theme].bg, prompt: x.prompt,
+  bg: THEMES[x.theme].bg, prompt: x.prompt, logo: MARKS[x.theme],
 }));

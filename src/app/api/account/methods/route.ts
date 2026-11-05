@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { publicUser, removeMethod, viewer } from "@/lib/accounts";
 
-const Body = z.object({ kind: z.enum(["passkey", "email", "google", "solana", "evm", "near"]), id: z.string().max(400) });
+const Body = z.object({ kind: z.enum(["passkey", "email", "google", "apple", "solana", "evm", "near"]), id: z.string().max(400) });
 
 /** Unlinks one sign-in method. The last one stays, so nobody locks themselves out. */
 export async function DELETE(req: Request) {

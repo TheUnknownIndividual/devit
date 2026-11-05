@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useState, type ReactNode } from "react";
-import { AlertTriangle, ArrowUpRight, Check, CheckCircle2, ChevronDown, Fingerprint, KeyRound, Loader2, LogOut, Mail, Plus, ShieldCheck, Trash2, UserCog } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Check, CheckCircle2, ChevronDown, Fingerprint, ImageUp, KeyRound, Loader2, LogOut, Mail, Plus, ShieldCheck, Trash2, UserCog } from "lucide-react";
 import { BrandIcon, BRANDS } from "@/components/brand";
 import { Avatar } from "@/components/account/AccountMenu";
 import { SignInDialog } from "@/components/account/SignInDialog";
@@ -47,6 +47,39 @@ export function SettingsView({ initial, usage, admin = false, teams }: { initial
     update(j.user);
   }
 
+  const [pic, setPic] = useState(false);
+  const [picErr, setPicErr] = useState<string | null>(null);
+
+  // Crops to a centred square and re-encodes at 256px in the browser, so only a small clean image is sent.
+  async function uploadPicture(f: File) {
+    setPicErr(null);
+    setPic(true);
+    try {
+      const bmp = await createImageBitmap(f);
+      const side = Math.min(bmp.width, bmp.height);
+      const c = document.createElement("canvas");
+      c.width = c.height = 256;
+      c.getContext("2d")!.drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, 256, 256);
+      const blob = await new Promise<Blob | null>((ok) => c.toBlob(ok, "image/webp", 0.86));
+      if (!blob) throw new Error("This browser couldn't read that picture.");
+      const r = await fetch("/api/account/avatar", { method: "POST", body: blob });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error ?? "Couldn't save the picture.");
+      update(j.user);
+    } catch (e) {
+      setPicErr((e as Error).message || "Couldn't read that picture.");
+    } finally {
+      setPic(false);
+    }
+  }
+
+  async function resetPicture() {
+    setPic(true);
+    const { j } = await send("DELETE", "/api/account/avatar");
+    setPic(false);
+    update(j.user);
+  }
+
   async function unlink(kind: string, id: string) {
     setMethodErr(null);
     const { ok, j } = await send("DELETE", "/api/account/methods", { kind, id });
@@ -64,13 +97,20 @@ export function SettingsView({ initial, usage, admin = false, teams }: { initial
 
       <div className="min-w-0 space-y-6">
         <Section id="account" title="Account">
-          <div className="flex items-center gap-3">
-            <Avatar initial={user.initial} size={40} />
-            <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <Avatar initial={user.initial} src={user.avatar} seed={user.avatarSeed} size={48} />
+            <div className="min-w-0 flex-1">
               <div className="truncate text-[14px] font-medium text-white">{user.name || user.email || user.methods[0]?.label}</div>
               <div className="text-[12px] text-zinc-500">Member since {day(user.createdAt)}</div>
             </div>
+            <label className={`btn btn-outline h-9 cursor-pointer ${pic ? "pointer-events-none opacity-60" : ""}`}>
+              {pic ? <Loader2 size={14} className="animate-spin" /> : <ImageUp size={14} />} Change picture
+              <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void uploadPicture(f); }} />
+            </label>
+            {user.ownAvatar && <button type="button" className="btn btn-ghost h-9" disabled={pic} onClick={() => void resetPicture()}>Use default</button>}
           </div>
+          {picErr && <p role="alert" className="mt-2 text-[12.5px] text-amber-200">{picErr}</p>}
+          {!user.ownAvatar && <p className="mt-2 text-[12px] text-zinc-500">{user.avatar ? "Showing your Google picture." : user.methods.some((m) => m.kind === "evm" || m.kind === "solana" || m.kind === "near") ? "Drawn from your wallet address, like MetaMask does." : "Drawn from your account, until you pick a picture."}</p>}
           <form className="mt-4 flex max-w-[460px] gap-2" onSubmit={(e) => { e.preventDefault(); void saveName(); }}>
             <input className="field" value={name} maxLength={60} placeholder="Your name" aria-label="Name" onChange={(e) => setName(e.target.value)} />
             <button type="submit" className="btn btn-outline h-10" disabled={saving || name === (user.name ?? "")}>{saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Save</button>
@@ -192,7 +232,8 @@ function Section({ id, title, hint, children }: { id: string; title: string; hin
 function MethodIcon({ kind }: { kind: string }) {
   const c = "grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/[0.05] text-zinc-300";
   if (kind === "passkey") return <span className={c}><Fingerprint size={15} /></span>;
-  if (kind === "email" || kind === "google") return <span className={c}><Mail size={15} /></span>;
+  if (kind === "email") return <span className={c}><Mail size={15} /></span>;
+  if (kind === "google" || kind === "apple") return <span className={c}><BrandIcon icon={kind === "google" ? BRANDS.google : BRANDS.apple} size={14} color="#d4d4d8" /></span>;
   const icon = kind === "solana" ? BRANDS.solana : kind === "evm" ? BRANDS.ethereum : BRANDS.near;
   return <span className={c}><BrandIcon icon={icon} size={14} color="#d4d4d8" /></span>;
 }

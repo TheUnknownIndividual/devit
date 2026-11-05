@@ -22,7 +22,7 @@ export const SESSION_COOKIE = "ss_session";
 export const ANON_COOKIE = "ss_anon";
 const SESSION_DAYS = 30;
 
-export type MethodKind = "passkey" | "email" | "google" | "solana" | "evm" | "near";
+export type MethodKind = "passkey" | "email" | "google" | "apple" | "solana" | "evm" | "near";
 export interface Method {
   kind: MethodKind;
   /** Credential id, lowercased email, Google account id (sub), or wallet address / account id. */
@@ -47,6 +47,10 @@ export interface User {
   planUntil?: number;
   payments?: Payment[];
   grants?: Grant[];
+  /** The picture the sign-in provider gave us (Google); shown unless the user uploaded their own. */
+  picture?: string | null;
+  /** A picture the user uploaded in Settings (/api/avatar/<id>); wins over everything. */
+  avatar?: string | null;
 }
 
 // ---------- files ----------
@@ -94,7 +98,7 @@ export async function userByMethod(kind: MethodKind, id: string): Promise<User |
 }
 
 async function createUser(m: Method): Promise<User> {
-  const u: User = { id: newUserId(), name: null, email: m.kind === "email" ? m.id : m.kind === "google" ? m.label : null, createdAt: Date.now(), methods: [m], keys: {}, plan: "free" };
+  const u: User = { id: newUserId(), name: null, email: m.kind === "email" ? m.id : (m.kind === "google" || m.kind === "apple") && m.label.includes("@") ? m.label : null, createdAt: Date.now(), methods: [m], keys: {}, plan: "free" };
   await writeJson(`users/${u.id}.json`, u);
   await writeJson(methodKey(m.kind, m.id), { userId: u.id });
   return u;
@@ -104,7 +108,7 @@ export async function addMethod(userId: string, m: Method): Promise<User | null>
   const u = await updateUser(userId, (u) => {
     u.methods = [...u.methods.filter((x) => !(x.kind === m.kind && x.id === m.id)), m];
     if (m.kind === "email" && !u.email) u.email = m.id;
-    if (m.kind === "google" && !u.email) u.email = m.label;
+    if ((m.kind === "google" || m.kind === "apple") && !u.email && m.label.includes("@")) u.email = m.label;
   });
   if (u) await writeJson(methodKey(m.kind, m.id), { userId });
   return u;
@@ -130,10 +134,16 @@ export function initialOf(u: Pick<User, "name" | "email" | "methods">): string {
   return (s.match(/[A-Za-z0-9]/)?.[0] ?? "?").toUpperCase();
 }
 
+/** What the generated picture is drawn from: the first wallet (so it matches MetaMask's icon for that address), else the account id. */
+export function avatarSeed(u: Pick<User, "id" | "methods">): string {
+  return u.methods.find((m) => m.kind === "evm")?.id ?? u.methods.find((m) => m.kind === "solana" || m.kind === "near")?.id ?? u.id;
+}
+
 /** What the browser may know about an account: never sealed keys or passkey material. */
 export function publicUser(u: User) {
   return {
-    id: u.id, name: u.name, email: u.email, createdAt: u.createdAt, initial: initialOf(u), plan: activePlan(u), planUntil: u.planUntil ?? null,
+    id: u.id, name: u.name, email: u.email, createdAt: u.createdAt, initial: initialOf(u),
+    avatar: u.avatar ?? u.picture ?? null, ownAvatar: !!u.avatar, avatarSeed: avatarSeed(u), plan: activePlan(u), planUntil: u.planUntil ?? null,
     payments: (u.payments ?? []).map((x) => ({ depositAddress: x.depositAddress, plan: x.plan, cycle: x.cycle, usd: x.usd, pay: x.pay, at: x.at, status: x.status ?? null, received: x.received ?? null, settledAt: x.settledAt ?? null })),
     grants: (u.grants ?? []).map((g) => ({ plan: g.plan, days: g.days, at: g.at })),
     methods: u.methods.map((m) => ({ kind: m.kind, id: m.kind === "passkey" ? m.id.slice(0, 12) : m.id, fullId: m.id, label: m.label, at: m.at })),

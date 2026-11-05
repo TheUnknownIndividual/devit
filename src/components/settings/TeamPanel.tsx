@@ -143,7 +143,7 @@ export function TeamPanel({ initial, canCreate, me }: { initial: TeamView[]; can
           <ul className="divide-y divide-white/[0.06] rounded-[12px] border border-white/[0.08]">
             {t.members.map((m) => (
               <li key={m.userId} className="flex min-h-[52px] flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
-                <Avatar initial={m.initial} size={28} />
+                <Avatar initial={m.initial} src={m.avatar} seed={m.avatarSeed} size={28} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px] text-white">{m.name}{m.userId === me && <span className="text-zinc-500"> (you)</span>}</div>
                   <div className="truncate text-[11.5px] text-zinc-500">{m.email && m.email !== m.name ? `${m.email} · ` : ""}joined {day(m.joinedAt)}</div>

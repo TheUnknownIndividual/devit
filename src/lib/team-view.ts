@@ -1,4 +1,4 @@
-import { getUser, initialOf, viewer, type User } from "./accounts";
+import { avatarSeed, getUser, initialOf, viewer, type User } from "./accounts";
 import { teamActive, teamSeats } from "./entitlements";
 import { getTeam, live, roleIn, seatsUsed, type Role, type Team } from "./teams";
 
@@ -9,7 +9,7 @@ export async function teamView(t: Team, me: User) {
   const role = roleIn(t, me.id)!;
   const members = await Promise.all(t.members.map(async (m) => {
     const u = await getUser(m.userId);
-    return { userId: m.userId, role: m.role, joinedAt: m.joinedAt, name: u?.name || u?.email || u?.methods[0]?.label || "Former account", email: u?.email ?? null, initial: u ? initialOf(u) : "?" };
+    return { userId: m.userId, role: m.role, joinedAt: m.joinedAt, name: u?.name || u?.email || u?.methods[0]?.label || "Former account", email: u?.email ?? null, initial: u ? initialOf(u) : "?", avatar: u ? u.avatar ?? u.picture ?? null : null, avatarSeed: u ? avatarSeed(u) : m.userId };
   }));
   return {
     id: t.id, name: t.name, ownerId: t.ownerId, createdAt: t.createdAt, role, active: await teamActive(t),

@@ -21,7 +21,7 @@ export const callbackUrl = (req: NextRequest) => `${publicOrigin(req)}/api/auth/
 /** Only paths on this site, never another host. */
 export const safeNext = (n: string | null | undefined) => (n && n.startsWith("/") && !n.startsWith("//") && !n.startsWith("/\\") ? n.slice(0, 300) : "/");
 
-export interface GoogleUser { sub: string; email: string; name: string | null }
+export interface GoogleUser { sub: string; email: string; name: string | null; picture: string | null }
 
 export async function exchange(code: string, verifier: string, redirectUri: string, nonce: string): Promise<GoogleUser> {
   const r = await fetch("https://oauth2.googleapis.com/token", {
@@ -37,5 +37,5 @@ export async function exchange(code: string, verifier: string, redirectUri: stri
   const ok = (c.iss === "https://accounts.google.com" || c.iss === "accounts.google.com") && c.aud === process.env.GOOGLE_CLIENT_ID && typeof c.exp === "number" && c.exp * 1000 > Date.now() && c.nonce === nonce;
   if (!ok || typeof c.sub !== "string") throw new Error("Google's answer didn't check out.");
   if (c.email_verified !== true || typeof c.email !== "string") throw new Error("That Google account has no verified email.");
-  return { sub: c.sub, email: c.email.toLowerCase(), name: typeof c.name === "string" ? c.name.slice(0, 80) : null };
+  return { sub: c.sub, email: c.email.toLowerCase(), name: typeof c.name === "string" ? c.name.slice(0, 80) : null, picture: typeof c.picture === "string" && /^https:\/\/[a-z0-9.-]+\.googleusercontent\.com\//.test(c.picture) ? c.picture.slice(0, 500) : null };
 }

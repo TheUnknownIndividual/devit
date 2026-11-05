@@ -13,7 +13,7 @@ import { evmWallets, signInEvm, signInNear, signInSolana, solanaWallets, type Ev
 // the server answers with the account, signed in or with the method added.
 
 type Done = (r: { user: PublicUser; linked: boolean }) => void;
-type Busy = null | "passkey" | "passkey-new" | "email" | "code" | "google" | "solana" | "evm" | "near";
+type Busy = null | "passkey" | "passkey-new" | "email" | "code" | "google" | "apple" | "solana" | "evm" | "near";
 
 export function SignInDialog({ open, onClose, onDone, link = false }: { open: boolean; onClose: () => void; onDone: Done; link?: boolean }) {
   const [busy, setBusy] = useState<Busy>(null);
@@ -24,7 +24,7 @@ export function SignInDialog({ open, onClose, onDone, link = false }: { open: bo
   const [pick, setPick] = useState<null | "solana" | "evm">(null);
   const [sol, setSol] = useState<SolWallet[]>([]);
   const [evm, setEvm] = useState<EvmChoice[]>([]);
-  const [offers, setOffers] = useState<{ google: boolean; email: boolean }>({ google: false, email: true });
+  const [offers, setOffers] = useState<{ google: boolean; apple: boolean; email: boolean }>({ google: false, apple: false, email: true });
 
   useEffect(() => {
     if (!open) return;
@@ -72,6 +72,11 @@ export function SignInDialog({ open, onClose, onDone, link = false }: { open: bo
   const verifyCode = () => run("code", () => post("/api/auth/email", { step: "verify", email, code }));
 
   // A full-page hop to Google and back to this page, signed in (or with Google added, from Settings).
+  function apple() {
+    setBusy("apple");
+    window.location.href = `/api/auth/apple?next=${encodeURIComponent(location.pathname + location.search)}`;
+  }
+
   function google() {
     setBusy("google");
     window.location.href = `/api/auth/google?next=${encodeURIComponent(location.pathname + location.search)}`;
@@ -131,7 +136,12 @@ export function SignInDialog({ open, onClose, onDone, link = false }: { open: bo
                 {busy === "google" ? <Loader2 size={16} className="animate-spin" /> : <GoogleMark />} {link ? "Add Google" : "Continue with Google"}
               </button>
             )}
-            {offers.google && !offers.email && <Divider />}
+            {offers.apple && (
+              <button type="button" className="btn btn-lg w-full border border-white bg-white text-black hover:bg-zinc-200" disabled={!!busy} onClick={apple}>
+                {busy === "apple" ? <Loader2 size={16} className="animate-spin" /> : <BrandIcon icon={BRANDS.apple} size={16} color="#000" />} {link ? "Add Apple" : "Continue with Apple"}
+              </button>
+            )}
+            {(offers.google || offers.apple) && !offers.email && <Divider />}
 
             {offers.email && (<>
             <section className="space-y-2">

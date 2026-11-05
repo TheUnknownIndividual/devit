@@ -1,4 +1,4 @@
-import { siBitcoin, siBnbchain, siCloudflare, siCoinbase, siDiscord, siEthereum, siFigma, siGithub, siNear, siRobinhood, siSolana, siTelegram, siWalletconnect, siX } from "simple-icons";
+import { siApple, siGoogle, siBitcoin, siBnbchain, siCloudflare, siCoinbase, siDiscord, siEthereum, siFigma, siGithub, siNear, siRobinhood, siSolana, siTelegram, siWalletconnect, siX } from "simple-icons";
 import type { Chain } from "@/lib/spec";
 
 // Brand marks from simple-icons (CC0). Wallets that simple-icons doesn't carry (MetaMask, Phantom) show the
@@ -16,6 +16,7 @@ export function BrandIcon({ icon, size = 16, color, className }: { icon: Si; siz
 
 export const BRANDS = {
   github: siGithub, figma: siFigma, walletconnect: siWalletconnect, solana: siSolana, ethereum: siEthereum, near: siNear,
+  apple: siApple, google: siGoogle,
   robinhood: siRobinhood, x: siX, telegram: siTelegram, discord: siDiscord, coinbase: siCoinbase, bitcoin: siBitcoin, cloudflare: siCloudflare,
 };
 

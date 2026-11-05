@@ -1,12 +1,10 @@
 import Link from "next/link";
-import { FolderOpen } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { PromptBox } from "@/components/landing/PromptBox";
 import { BrandIcon, BRANDS } from "@/components/brand";
 import { HowItWorks } from "@/components/landing/HowItWorks";
-import { GetStarted } from "@/components/landing/GetStarted";
+import { HeaderActions } from "@/components/landing/HeaderActions";
 import { MotionFx } from "@/components/fx/MotionFx";
-import { AccountMenu } from "@/components/account/AccountMenu";
 
 export default function Home() {
   return (
@@ -20,11 +18,7 @@ export default function Home() {
           <a href="#integrations" className="btn btn-ghost">Integrations</a>
           <Link href="/pricing" className="btn btn-ghost">Pricing</Link>
         </nav>
-        <div className="flex items-center gap-2">
-          <Link href="/projects" className="btn btn-ghost"><FolderOpen size={15} className="tilt" /> <span className="hidden sm:inline">My sites</span></Link>
-          <GetStarted />
-          <AccountMenu />
-        </div>
+        <HeaderActions />
       </header>
 
       {/* overflow-clip, not hidden: a hidden box can still be scrolled by scrollIntoView/focus, which slid the hero up inside itself. */}

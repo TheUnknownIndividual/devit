@@ -16,7 +16,8 @@ export async function GET(req: NextRequest) {
     const g = await exchange(q.get("code") ?? "", s.verifier, callbackUrl(req), s.nonce);
     const out = await completeMethod({ kind: "google", id: g.sub, label: g.email, at: Date.now() });
     if ("error" in out) return fail(out.error);
-    if (g.name && !out.user.name) await updateUser(out.user.id, (u) => { u.name ??= g.name; });
+    // Google's picture is kept fresh on every sign-in; an uploaded one still wins (publicUser).
+    if ((g.name && !out.user.name) || g.picture) await updateUser(out.user.id, (u) => { u.name ??= g.name; if (g.picture) u.picture = g.picture; });
     return back(s.next);
   } catch (e) {
     return fail((e as Error).message);
