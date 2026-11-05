@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import type { ModelChoice } from "./models";
 import type { Chain } from "./spec";
 
 // The API keys and RPCs of whoever owns the project being worked on. A build or edit runs inside runWithKeys, and
@@ -18,13 +19,15 @@ export interface OwnerKeys {
   rpc?: Partial<Record<Chain, string>>;
 }
 
-const store = new AsyncLocalStorage<{ keys: OwnerKeys; priority: boolean }>();
+const store = new AsyncLocalStorage<{ keys: OwnerKeys; priority: boolean; model: ModelChoice }>();
 
-export function runWithKeys<T>(keys: OwnerKeys | null, fn: () => T, priority = false): T {
-  return keys || priority ? store.run({ keys: keys ?? {}, priority }, fn) : fn();
+/** model: what the person picked in the chat box ("auto" unless they chose one). */
+export function runWithKeys<T>(keys: OwnerKeys | null, fn: () => T, priority = false, model: ModelChoice = "auto"): T {
+  return keys || priority || model !== "auto" ? store.run({ keys: keys ?? {}, priority, model }, fn) : fn();
 }
 
 export const ownerKeys = (): OwnerKeys => store.getStore()?.keys ?? {};
 export const priorityModels = (): boolean => store.getStore()?.priority ?? false;
+export const pickedModel = (): ModelChoice => store.getStore()?.model ?? "auto";
 
 export const hasOwnLlm = (k: OwnerKeys | null) => !!k && LLM_KEYS.some((id) => !!k[id]);

@@ -47,10 +47,12 @@ export default async function Projects({ searchParams }: { searchParams: Promise
     <div className="min-h-screen bg-ink-950">
       <TopBar>
         {v.user && <WorkspaceSwitcher current={team?.id ?? null} teams={teams.map((t) => ({ id: t.id, name: t.name }))} />}
-        <Link href="/" className="btn btn-primary"><Plus size={15} /> <span className="hidden sm:inline">New site</span></Link>
       </TopBar>
       <main className="mx-auto max-w-[1040px] px-5 pb-20 pt-8">
-        <h1 className="truncate text-[24px] font-semibold tracking-[-0.02em] text-white">{team ? team.name : "Projects"}</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="truncate text-[24px] font-semibold tracking-[-0.02em] text-white">{team ? team.name : "Projects"}</h1>
+          <Link href="/#start" className="btn btn-primary shrink-0"><Plus size={15} /> New project</Link>
+        </div>
         {!v.user && <SignInNudge count={rows.length} />}
         {lapsed && <p className="mt-3 rounded-[12px] border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3 text-[13px] text-amber-200">This team&apos;s plan has run out. Everyone can still open its projects; only each project&apos;s own owner can change it until the owner renews.</p>}
         {rows.length === 0 ? (

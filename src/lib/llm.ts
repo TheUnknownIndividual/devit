@@ -10,7 +10,8 @@
 // keys the owner's plan decides: priority models (Pro/Team) get the big model for every call, free owners' edits and
 // comments run on the small one, and builds keep the big one.
 
-import { hasOwnLlm, ownerKeys, priorityModels } from "./keyscope";
+import { hasOwnLlm, ownerKeys, pickedModel, priorityModels } from "./keyscope";
+import type { ModelChoice } from "./models";
 
 export interface LlmResult { text: string; via: string }
 
@@ -39,10 +40,27 @@ export function llmAvailable(): boolean {
   return !!(process.env.NEAR_AI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY) || hasOwnLlm(ownerKeys());
 }
 
-type Call = (system: string, user: string, timeoutMs: number, tier: Tier, key: string) => Promise<LlmResult | null>;
+type Call = (system: string, user: string, timeoutMs: number, tier: Tier, key: string, model?: string) => Promise<LlmResult | null>;
 
-const nearAi: Call = async (system, user, timeoutMs, tier, key) => {
-  const model = MODELS.nearAi[tier];
+/** A picked model: which provider runs it and the exact model id (null: that provider's own default). */
+const PICKS: Record<Exclude<ModelChoice, "auto">, { provider: "nearai" | "anthropic" | "openai" | "openrouter"; model: string }> = {
+  glm: { provider: "nearai", model: NEAR_AI_MODEL },
+  "claude-sonnet": { provider: "anthropic", model: CLAUDE_MODEL },
+  "claude-haiku": { provider: "anthropic", model: CLAUDE_MODEL_LIGHT },
+  gpt: { provider: "openai", model: OPENAI_MODEL },
+  openrouter: { provider: "openrouter", model: OPENROUTER_MODEL },
+};
+
+/** Which picks can run right now: on the server's keys or the person's own. */
+export function modelAvailability(own: Partial<Record<"nearai" | "anthropic" | "openai" | "openrouter", boolean>>): Record<ModelChoice, boolean> {
+  const server = { nearai: !!process.env.NEAR_AI_API_KEY, anthropic: !!process.env.ANTHROPIC_API_KEY, openai: !!process.env.OPENAI_API_KEY, openrouter: false };
+  const out = { auto: true } as Record<ModelChoice, boolean>;
+  for (const [id, p] of Object.entries(PICKS)) out[id as ModelChoice] = server[p.provider] || !!own[p.provider];
+  return out;
+}
+
+const nearAi: Call = async (system, user, timeoutMs, tier, key, picked) => {
+  const model = picked ?? MODELS.nearAi[tier];
   try {
     const r = await fetch(`${NEAR_AI_URL}/chat/completions`, {
       method: "POST",
@@ -64,8 +82,8 @@ const nearAi: Call = async (system, user, timeoutMs, tier, key) => {
   }
 };
 
-const claude: Call = async (system, user, timeoutMs, tier, key) => {
-  const model = MODELS.claude[tier];
+const claude: Call = async (system, user, timeoutMs, tier, key, picked) => {
+  const model = picked ?? MODELS.claude[tier];
   try {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -82,8 +100,8 @@ const claude: Call = async (system, user, timeoutMs, tier, key) => {
   }
 };
 
-const openai: Call = async (system, user, timeoutMs, tier, key) => {
-  const model = MODELS.openai[tier];
+const openai: Call = async (system, user, timeoutMs, tier, key, picked) => {
+  const model = picked ?? MODELS.openai[tier];
   try {
     const effort = tier === "light" ? "low" : process.env.OPENAI_REASONING_EFFORT;
     const r = await fetch(`${OPENAI_URL}/chat/completions`, {
@@ -106,8 +124,8 @@ const openai: Call = async (system, user, timeoutMs, tier, key) => {
   }
 };
 
-const openrouter: Call = async (system, user, timeoutMs, tier, key) => {
-  const model = MODELS.openrouter[tier];
+const openrouter: Call = async (system, user, timeoutMs, tier, key, picked) => {
+  const model = picked ?? MODELS.openrouter[tier];
   try {
     const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -124,12 +142,18 @@ const openrouter: Call = async (system, user, timeoutMs, tier, key) => {
   }
 };
 
-/** Who to ask, in order: the owner's own keys, then the server's. */
-function providers(): Array<{ call: Call; key: string; own: boolean }> {
+type Provider = { call: Call; key: string; own: boolean; id: "nearai" | "anthropic" | "openai" | "openrouter"; model?: string };
+
+/** Who to ask, in order: the picked model first (own key, then ours), then the owner's own keys, then the server's. */
+function providers(): Provider[] {
   const k = ownerKeys();
-  const own = ([[nearAi, k.nearai], [claude, k.anthropic], [openai, k.openai], [openrouter, k.openrouter]] as const).filter(([, key]) => !!key).map(([call, key]) => ({ call, key: key!, own: true }));
-  const ours = ([[nearAi, process.env.NEAR_AI_API_KEY], [claude, process.env.ANTHROPIC_API_KEY], [openai, process.env.OPENAI_API_KEY]] as const).filter(([, key]) => !!key).map(([call, key]) => ({ call, key: key!, own: false }));
-  return [...own, ...ours];
+  const own: Provider[] = ([[nearAi, k.nearai, "nearai"], [claude, k.anthropic, "anthropic"], [openai, k.openai, "openai"], [openrouter, k.openrouter, "openrouter"]] as const).filter(([, key]) => !!key).map(([call, key, id]) => ({ call, key: key!, own: true, id }));
+  const ours: Provider[] = ([[nearAi, process.env.NEAR_AI_API_KEY, "nearai"], [claude, process.env.ANTHROPIC_API_KEY, "anthropic"], [openai, process.env.OPENAI_API_KEY, "openai"]] as const).filter(([, key]) => !!key).map(([call, key, id]) => ({ call, key: key!, own: false, id }));
+  const choice = pickedModel();
+  if (choice === "auto") return [...own, ...ours];
+  const pick = PICKS[choice];
+  const first = [...own, ...ours].filter((x) => x.id === pick.provider).map((x) => ({ ...x, model: pick.model }));
+  return [...first, ...own, ...ours];
 }
 
 function parse<T>(text: string, validate: (v: unknown) => T | null): T | null {
@@ -148,9 +172,11 @@ function parse<T>(text: string, validate: (v: unknown) => T | null): T | null {
 export async function askJson<T>(system: string, user: string, validate: (v: unknown) => T | null, tier: Tier = "heavy", use: "build" | "edit" = "build"): Promise<{ value: T; via: string } | null> {
   const sys = system + "\nReply with one JSON object only, no prose, no code fences.";
   const ours: Tier = priorityModels() ? "heavy" : use === "edit" ? "light" : tier;
-  for (const { call, key, own } of providers()) {
-    for (const t of (own ? tier : ours) === "light" ? (["light", "heavy"] as const) : (["heavy"] as const)) {
-      const res = await call(sys, user, t === "light" ? 25_000 : 60_000, t, key);
+  for (const { call, key, own, model } of providers()) {
+    // A picked model runs as picked, once; the rest size themselves to the job.
+    const tiers = model ? (["heavy"] as const) : (own ? tier : ours) === "light" ? (["light", "heavy"] as const) : (["heavy"] as const);
+    for (const t of tiers) {
+      const res = await call(sys, user, t === "light" ? 25_000 : 60_000, t, key, model);
       if (!res) break;
       const v = parse(res.text, validate);
       if (v) return { value: v, via: own ? `${res.via} · your key` : res.via };

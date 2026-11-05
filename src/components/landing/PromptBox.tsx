@@ -1,5 +1,6 @@
 "use client";
 
+import { modelHeader } from "@/components/build/ModelPicker";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -217,7 +218,7 @@ export function PromptBox() {
     try {
       const r = await fetch("/api/projects", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...modelHeader() },
         body: JSON.stringify({
           prompt: text, chain, kind, address: address.trim() || undefined, style: style === "auto" ? undefined : style,
           socials: { x: socials.x.trim() || undefined, telegram: socials.telegram.trim() || undefined, website: socials.website.trim() || undefined },

@@ -13,6 +13,7 @@ import { overLimit } from "@/lib/net";
 import { ownerKeysFor } from "@/lib/accounts";
 import { editable } from "@/lib/access";
 import { runWithKeys } from "@/lib/keyscope";
+import { modelFrom } from "@/lib/models";
 import { projectEntitled } from "@/lib/entitlements";
 
 const Body = z.object({
@@ -42,7 +43,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const g = await editable(id);
   if (g instanceof Response) return g;
   // Model calls and chain reads run on the owner's own keys when they've added some.
-  return runWithKeys(await ownerKeysFor(g.p.ownerId), () => chat(req, ctx), await projectEntitled(g.p, "priorityModels"));
+  return runWithKeys(await ownerKeysFor(g.p.ownerId), () => chat(req, ctx), await projectEntitled(g.p, "priorityModels"), modelFrom(req));
 }
 
 async function chat(req: Request, ctx: { params: Promise<{ id: string }> }) {

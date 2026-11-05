@@ -8,6 +8,7 @@ import { buildsToday, countBuild, ensureAnon, ownerKeysFor, viewer } from "@/lib
 import { entitled, planOf } from "@/lib/entitlements";
 import { hasOwnLlm, runWithKeys } from "@/lib/keyscope";
 import { withBuildSlot } from "@/lib/buildqueue";
+import { modelFrom } from "@/lib/models";
 import { BUILDS_PER_HOUR, FAIR_USE_BUILDS_PER_DAY, plan } from "@/lib/plans";
 
 const Body = z.object({
@@ -56,6 +57,6 @@ export async function POST(req: Request) {
   const priority = await entitled(v.user, "priorityModels");
   let waited = false;
   const slot = () => withBuildSlot(priority, async () => { if (waited) await started(p.id); return runBuild(p.id); }, () => { waited = true; return queued(p.id); });
-  void runWithKeys(keys, () => (own ? runBuild(p.id) : slot()), priority).catch(() => undefined);
+  void runWithKeys(keys, () => (own ? runBuild(p.id) : slot()), priority, modelFrom(req)).catch(() => undefined);
   return NextResponse.json({ id: p.id });
 }

@@ -17,6 +17,7 @@ import type { FromBuilder, FromPreview } from "@/app/preview/[id]/PreviewClient"
 import { BuildSteps } from "./BuildSteps";
 import { IntegrationsDialog } from "./Integrations";
 import { RpcDialog } from "./RpcDialog";
+import { ModelPicker, modelHeader } from "./ModelPicker";
 import { PublishDialog } from "./PublishDialog";
 import { prepareImage, readDoc, type Doc } from "./attach";
 import { AccountMenu } from "@/components/account/AccountMenu";
@@ -138,7 +139,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
   async function call(path: string, body: unknown, kind: NonNullable<typeof busy>, method = "POST") {
     setBusy(kind);
     try {
-      const r = await fetch(`/api/projects/${p.id}${path}`, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const r = await fetch(`/api/projects/${p.id}${path}`, { method, headers: { "content-type": "application/json", ...modelHeader() }, body: JSON.stringify(body) });
       const j = await r.json();
       if (r.ok && j.id) setP(j as PublicProject);
       return r.ok;
@@ -344,6 +345,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
                   <MousePointer2 size={14} /> Select
                 </button>
                 <button type="button" className="btn btn-ghost btn-icon h-8 w-8" disabled={!ready || building || !canEdit} onClick={() => fileInput.current?.click()} aria-label="Add a picture or text file" title="Add a picture or text file"><ImagePlus size={15} /></button>
+                <ModelPicker disabled={!canEdit} />
                 <input ref={fileInput} type="file" multiple hidden accept="image/png,image/jpeg,image/webp,image/gif,.txt,.md,text/plain,text/markdown" onChange={(e) => { if (e.target.files) void attach(e.target.files); e.target.value = ""; }} />
                 <span className="ml-1 hidden text-[11.5px] text-zinc-500 lg:inline">{selected ? "Enter applies · Esc clears" : selectOn ? "Click or drag over blocks" : ""}</span>
                 <button type="button" className="btn btn-primary btn-icon ml-auto h-8 w-8" disabled={!canEdit || !text.trim() || !!busy || building || uploading > 0} onClick={submit} aria-label={selected ? "Apply" : "Send"}>

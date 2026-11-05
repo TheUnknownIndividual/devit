@@ -8,6 +8,7 @@ import { overLimit } from "@/lib/net";
 import { ownerKeysFor } from "@/lib/accounts";
 import { editable } from "@/lib/access";
 import { runWithKeys } from "@/lib/keyscope";
+import { modelFrom } from "@/lib/models";
 import { projectEntitled } from "@/lib/entitlements";
 
 const Body = z.object({
@@ -34,7 +35,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const own = new Set((p.assets ?? []).map((a) => a.id));
   const comments = parsed.data.comments.map((c) => ({ ...c, assets: c.assets?.filter((a) => own.has(a)) }));
   const urls = (p.assets ?? []).filter((a) => comments.some((c) => c.assets?.includes(a.id))).map((a) => a.url);
-  const res = await runWithKeys(await ownerKeysFor(p.ownerId), () => applyComments(p, comments), await projectEntitled(p, "priorityModels"));
+  const res = await runWithKeys(await ownerKeysFor(p.ownerId), () => applyComments(p, comments), await projectEntitled(p, "priorityModels"), modelFrom(req));
   const out = await updateProject(id, (q) => {
     if (!q.spec) return;
     q.history.push(structuredClone(q.spec));
