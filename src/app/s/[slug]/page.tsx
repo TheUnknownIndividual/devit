@@ -37,7 +37,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const robots = isPrivateSite(l.p) ? { index: false, follow: false } : undefined;
   if ((await siteGate(l.p, slug)) !== "open") return { title: "Private site", robots };
   const title = `${spec.name} ($${spec.ticker})`;
-  const description = siteDescription(spec).slice(0, 160);
+  const description = siteDescription(spec, 160);
   // The share image is served by the site's own host, so it works on a subdomain and on a custom domain alike.
   const og = l.via ? `${l.url}/og/${slug}` : `/og/${slug}`;
   return {

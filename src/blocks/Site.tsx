@@ -6,6 +6,7 @@ import { SITE_CSS, themeVars } from "./css";
 import { usd, num, ago } from "./format";
 import { BuyBox, Chart, Count, CopyCA, LiveStats, LiveTrades, MotionFx, Ticker, WalletButton, type Mode } from "./client/parts";
 import { Treasury } from "./client/treasury";
+import { SignupForm } from "./client/signup";
 import { fxOf } from "@/lib/themes";
 import type { TreasuryData } from "@/lib/treasury";
 
@@ -290,6 +291,22 @@ function BlockView({ b, spec, mode, walletconnect, privy, credit }: { b: Block; 
     case "socials": return <Socials b={b} spec={spec} />;
     case "story": return <Story b={b} spec={spec} />;
     case "posts": return <Posts b={b} spec={spec} />;
+    case "signup": {
+      const fields = p.fields === "wallet" || p.fields === "both" ? p.fields : "email";
+      return (
+        <Section b={b}>
+          <div className="ss-wrap">
+            <div className="ss-card ss-signup">
+              <div>
+                <Title text={s(p.title, "Join the waitlist")} />
+                {s(p.body) && <p className="ss-signup-body" data-el="body">{s(p.body)}</p>}
+              </div>
+              <SignupForm fields={fields} button={s(p.button, "Join")} success={s(p.success, "You're on the list.")} mode={mode} slug={s(p.slug) || undefined} />
+            </div>
+          </div>
+        </Section>
+      );
+    }
     case "footer":
       return (
         <footer data-block-id={b.id} data-block-type="footer" data-block-label="Footer" className="ss-foot">

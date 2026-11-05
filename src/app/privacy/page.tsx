@@ -26,7 +26,7 @@ export default function Privacy() {
       </section>
       <section>
         <h2>Published sites</h2>
-        <p>Sites you publish are public. Private sites are shown only to people you allow. Visitors to published sites may connect a wallet; that connection happens in their browser and their wallet, not on our servers.</p>
+        <p>Sites you publish are public. Private sites are shown only to people you allow. Visitors to published sites may connect a wallet; that connection happens in their browser and their wallet, not on our servers. If a site has a signup form, what a visitor enters (an email or wallet address) is saved to the database the site&apos;s team connected, or held on our server until they connect one; the team controls that list.</p>
       </section>
       <section>
         <h2>Cookies</h2>

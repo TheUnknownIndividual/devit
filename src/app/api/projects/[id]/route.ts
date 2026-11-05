@@ -3,6 +3,7 @@ import { z } from "zod";
 import { deleteProject, getProject, updateProject } from "@/lib/store";
 import { removeUploads } from "@/lib/uploads";
 import { editable } from "@/lib/access";
+import { dropLocal } from "@/lib/database";
 import { canRead } from "@/lib/site-access";
 import { cfRemove } from "@/lib/domains";
 import { dropRouting } from "@/lib/routing";
@@ -63,6 +64,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   if (g instanceof Response) return g;
   await deleteProject(id);
   await removeUploads(id).catch(() => undefined);
+  await dropLocal(id);
   await dropRouting(id);
   if (g.p.domain?.cf?.id) await cfRemove(g.p.domain.cf.id);
   return NextResponse.json({ ok: true });

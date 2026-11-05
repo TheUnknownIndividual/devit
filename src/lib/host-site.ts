@@ -9,7 +9,7 @@ import type { Project, SiteSpec } from "./spec";
 // Which published site a request's host is for, for the discovery files (robots, sitemap, llms.txt, OG image) that
 // each site host answers itself. "builder" means the host is ours, not a site's.
 
-export type HostSite = { kind: "builder" } | { kind: "none" } | { kind: "private" } | { kind: "site"; p: Project; spec: SiteSpec; url: string };
+export type HostSite = { kind: "builder" } | { kind: "none" } | { kind: "private"; p: Project; slug: string } | { kind: "site"; p: Project; spec: SiteSpec; url: string };
 
 export function requestHost(req: Request): string | null {
   const h = req.headers;
@@ -34,6 +34,6 @@ export async function siteForHost(req: Request): Promise<HostSite> {
   const spec = p?.publishedSpec ?? p?.spec;
   if (!p || !spec) return { kind: "none" };
   if (via === "custom" && !(await projectEntitled(p, "customDomain"))) return { kind: "none" };
-  if (isPrivateSite(p)) return { kind: "private" };
+  if (isPrivateSite(p)) return { kind: "private", p, slug };
   return { kind: "site", p, spec, url: publishedUrl(p, via, host) };
 }

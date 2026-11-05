@@ -34,6 +34,7 @@ const CHAIN_WORDS: Array<[Chain, RegExp]> = [
 const WANT_WORDS: Array<[BlockType, RegExp]> = [
   ["holders", /\bholders?\b/i], ["roadmap", /\broadmap|milestones?|plans?\b/i], ["treasury", /\btreasury|multisig|dao|grants?\b/i],
   ["faq", /\bfaq|questions\b/i], ["chart", /\bchart|price\b/i], ["trades", /\btrades|buys|live\b/i], ["tokenomics", /\btokenomics|supply|split\b/i],
+  ["signup", /\b(wait ?list|white ?list|allow ?list|sign ?-?ups?|newsletter|early access|mailing list|email list|pre-?register|presale list)\b/i],
 ];
 
 export function readIntent(prompt: string, fallbackChain: Chain): Intent {

@@ -120,13 +120,13 @@ export interface TokenVenue {
 
 export type BlockType =
   | "nav" | "hero" | "stats" | "buy" | "chart" | "trades" | "how"
-  | "tokenomics" | "holders" | "roadmap" | "treasury" | "socials" | "faq" | "footer" | "story" | "posts";
+  | "tokenomics" | "holders" | "roadmap" | "treasury" | "socials" | "faq" | "footer" | "story" | "posts" | "signup";
 
 export const BLOCK_LABELS: Record<BlockType, string> = {
   nav: "Navigation", hero: "Hero", stats: "Live stats", buy: "Buy box", chart: "Chart",
   trades: "Live trades", how: "How to buy", tokenomics: "Tokenomics", holders: "Holders",
   roadmap: "Roadmap", treasury: "Treasury", socials: "Socials", faq: "FAQ", footer: "Footer",
-  story: "Story", posts: "From X",
+  story: "Story", posts: "From X", signup: "Signup form",
 };
 
 export interface Block {
@@ -290,7 +290,23 @@ export interface Project {
   domain?: CustomDomain;
   /** The GitHub repo the code was exported to; later pushes commit to it. */
   github?: { repo: string; url: string; branch: string; sha: string; at: number };
+  /** Where the site's signup forms save entries (lib/database.ts). */
+  database?: ProjectDatabase;
   version: number;
+}
+
+export interface ProjectDatabase {
+  provider: "neon" | "supabase";
+  /** The database host, shown in the builder. */
+  host: string;
+  /** The credentials, sealed (lib/secrets.ts): a Neon connection string or a Supabase URL and service key. */
+  secret: string;
+  /** False until the signups table exists (Supabase: until the team runs the SQL once). */
+  ready: boolean;
+  /** Neon instant databases: the link that moves it into the team's Neon account, and when it expires unclaimed. */
+  claimUrl?: string;
+  expiresAt?: number;
+  at: number;
 }
 
 export interface SiteAccess {

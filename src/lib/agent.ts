@@ -297,6 +297,7 @@ function layout(copy: Copy, token: TokenInfo | null, wants: Set<BlockType>, them
   if (wants.has("holders")) blocks.push(block("holders", { title: themeId === "retro" ? "Hi-scores" : "Holders" }));
   if (wants.has("treasury")) blocks.push(block("treasury", { title: "Treasury", body: treasury.length ? "Everything the treasury holds and spends, read straight from the chain." : "Balances of the community multisig, read live.", accounts: treasury }));
   if (wants.has("roadmap") || themeId === "clean" || themeId === "retro") blocks.push(block("roadmap", { title: themeId === "retro" ? "Levels" : "Roadmap", items: copy.roadmap }));
+  if (wants.has("signup")) blocks.push(signupBlock(copy.ticker));
   blocks.push(block("faq", { title: "FAQ", items: copy.faq }));
   if (r?.x?.posts.length) blocks.push(block("posts", { title: themeId === "cozy" ? `from @${r.x.profile.handle}` : `From @${r.x.profile.handle}`, count: 3 }));
   blocks.push(block("socials", { title: "Join us" }));
@@ -690,6 +691,7 @@ async function applyCommentsRaw(project: Project, comments: PendingComment[]): P
       "theme.fx changes effects only: bg none|grid|dots|glow|orbs|stripes, surface outline|soft|glass|offset, motion snappy|calm|bouncy, density compact|regular|airy, ticker (slogan strip under the nav), pill (pill buttons), reveal rise|fade|scale|blur|slide|none (how sections come in on scroll), hover lift|scale|glow|none (cards and buttons under the cursor), parallax (hero art drifts as the page scrolls), transition none|fade|stack|wave|angle (how one section crosses into the next: colour blend, overlapping rounded sheets, wave edge, slanted seam), stagger (cards/steps/stats come in one by one), intro (hero text enters in sequence on load), nav plain|compact (nav blurs and tightens on scroll), progress (scroll progress bar), count (stat numbers count up), toTop (back-to-top button). \"Add scroll animations\" = reveal rise + stagger + transition + intro + count; \"less motion\" = motion calm, reveal fade, transition none/fade, stagger/parallax/progress off; \"no animations\" = reveal none and every motion key off. Send only the keys that change.",
       "Comments can come with images the team uploaded (id, url, size). Use one by its url: props.image on a hero or story block shows it as that block's art; logo (top level) sets the site's logo. Never invent image urls.",
       "treasury block props: {title, body, accounts:[NEAR account or *.sputnik-dao.near, max 3]}. It reads balances, transfers and DAO proposals live from the chain; set only accounts the team gave, never invent one. Keep props.snapshot as it is.",
+      "signup block props: {title, body, fields: email|wallet|both, button, success (shown after sending), kind: waitlist|whitelist|newsletter|contact}. Entries go to the project's database.",
       "Never invent prices, holder counts or tokenomics numbers; use [PLACEHOLDER] text for facts you don't have.",
     ].join("\n");
     const imagesOf = (c: PendingComment) => (c.assets ?? []).map((id) => assets.get(id)).filter((a): a is Asset => !!a).map((a) => ({ id: a.id, url: a.url, name: a.name, w: a.w, h: a.h }));
@@ -741,6 +743,36 @@ export async function hydrateTreasury(spec: SiteSpec): Promise<void> {
   }));
 }
 
+// ---------- signup form ----------
+
+const SIGNUP_WORDS = /\b(wait ?list|white ?list|allow ?list|sign ?-?ups?|newsletter|early access|mailing list|email list|pre-?register|presale list|collect (emails?|wallets?))\b/i;
+
+function signupFields(t: string): "email" | "wallet" | "both" {
+  const w = /\b(wallets?|addresses?|white ?list|allow ?list|presale)\b/i.test(t), e = /\b(e-?mails?|newsletter|mailing)\b/i.test(t);
+  return w && e ? "both" : w ? "wallet" : "email";
+}
+
+function signupBlock(ticker: string, text = ""): Block {
+  const fields = signupFields(text);
+  const wl = fields !== "email";
+  return block("signup", {
+    title: wl ? "Get on the whitelist" : "Join the waitlist",
+    body: wl ? `Drop your wallet to get on the $${ticker} list.` : `Be first to hear what's next for $${ticker}.`,
+    fields, button: wl ? "Add my wallet" : "Join", success: "You're on the list.", kind: wl ? "whitelist" : "waitlist",
+  });
+}
+
+/** "add a waitlist", "collect wallets for the whitelist": adds a signup form (or changes the one there). */
+function signupComment(spec: SiteSpec, c: PendingComment): boolean {
+  if (!SIGNUP_WORDS.test(c.text) || !/\b(add|put|need|want|include|collect|make|create|give)\b/i.test(c.text)) return false;
+  const cur = spec.blocks.find((b) => b.type === "signup");
+  if (cur) { cur.props.fields = signupFields(c.text); return true; }
+  const at = spec.blocks.findIndex((b) => b.id === c.blockId);
+  const foot = spec.blocks.findIndex((b) => b.type === "footer");
+  spec.blocks.splice(at >= 0 && spec.blocks[at].type !== "footer" ? at + 1 : foot < 0 ? spec.blocks.length : foot, 0, signupBlock(spec.ticker, c.text));
+  return true;
+}
+
 const NEAR_NAME = /\b[a-z0-9][a-z0-9_-]*(?:\.[a-z0-9_-]+)*\.near\b/gi;
 
 /** "add our treasury foo.sputnik-dao.near": a comment naming a treasury account sets it on the treasury block (added if the site has none). */
@@ -762,10 +794,13 @@ function treasuryComment(spec: SiteSpec, c: PendingComment): boolean {
 
 export async function applyComments(project: Project, comments: PendingComment[]): Promise<{ spec: SiteSpec; message: string; via: string }> {
   const next: SiteSpec = structuredClone(project.spec!);
-  const mine = comments.filter((c) => treasuryComment(next, c));
+  const treasury = comments.filter((c) => treasuryComment(next, c));
+  const forms = comments.filter((c) => !treasury.includes(c) && signupComment(next, c));
+  const mine = [...treasury, ...forms];
   const rest = comments.filter((c) => !mine.includes(c));
   const res = rest.length ? await applyCommentsRaw({ ...project, spec: next }, rest) : { spec: next, message: "", via: "offline editor" };
   await hydrateTreasury(res.spec);
-  if (mine.length) res.message = `Treasury set to ${(res.spec.blocks.find((b) => b.type === "treasury")?.props.accounts as string[]).join(", ")}.${res.message ? ` ${res.message}` : ""}`;
+  if (forms.length) res.message = `Added a signup form; entries show under Database in the toolbar.${res.message ? ` ${res.message}` : ""}`;
+  if (treasury.length) res.message = `Treasury set to ${(res.spec.blocks.find((b) => b.type === "treasury")?.props.accounts as string[]).join(", ")}.${res.message ? ` ${res.message}` : ""}`;
   return res;
 }

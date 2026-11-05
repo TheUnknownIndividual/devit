@@ -76,12 +76,22 @@ export function siteLogo(spec: SiteSpec): string | null {
   return l && /^https:\/\//.test(l) ? l : null;
 }
 
-export function siteDescription(spec: SiteSpec): string {
+/** Cut to max chars at a sentence end if one is near, else at a word, with an ellipsis. */
+export function clip(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max - 1);
+  const stop = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+  if (stop > max * 0.6) return cut.slice(0, stop + 1);
+  const sp = cut.lastIndexOf(" ");
+  return `${(sp > max * 0.5 ? cut.slice(0, sp) : cut).replace(/[\s,;:–—-]+$/, "")}…`;
+}
+
+export function siteDescription(spec: SiteSpec, max = 300): string {
   const lore = spec.blocks.find((b) => b.type === "story");
   const body = str(lore?.props.body);
   const base = spec.tagline || spec.token?.description || "";
   const d = [base, body && body !== base ? body : ""].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
-  return (d || `${spec.name} ($${spec.ticker}) on ${CHAINS[spec.chain].name}.`).slice(0, 300);
+  return clip(d || `${spec.name} ($${spec.ticker}) on ${CHAINS[spec.chain].name}.`, max);
 }
 
 export function siteFaq(spec: SiteSpec): Array<{ q: string; a: string }> {

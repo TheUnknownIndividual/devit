@@ -61,7 +61,8 @@ export async function exportFiles(p: Project, origin: string, credit: string | n
   for (const f of files) add(path.relative(ROOT, f), await readFile(f));
   for (const f of await readdir(path.join(ROOT, "public/wallets")).catch(() => [] as string[])) add(`public/wallets/${f}`, await readFile(path.join(ROOT, "public/wallets", f)));
 
-  const spec = { ...p.spec };
+  // Signup forms post to sitesmith through the /api rewrite; the slug tells it which site's list they're for.
+  const spec = { ...p.spec, blocks: p.spec.blocks.map((b) => (b.type === "signup" ? { ...b, props: { ...b.props, slug: p.published?.slug ?? p.slug } } : b)) };
   add("src/app/site.json", JSON.stringify(spec, null, 2));
   add("src/app/page.tsx", `import { Site } from "@/blocks/Site";
 import type { SiteSpec } from "@/lib/spec";
@@ -119,6 +120,10 @@ Built with [sitesmith](${origin}). This is the full site as a Next.js app.
 ## Live data
 
 Requests to \`/api/*\` (price, trades, swap quotes, NEAR Intents cross-chain buys) are forwarded to sitesmith by \`next.config.mjs\`. Set \`SITESMITH_API\` to use another sitesmith server.
+
+## Signup forms
+
+A signup block posts to \`/api/forms\`, which saves entries to the database connected in sitesmith (Database in the builder toolbar). Entries land in a \`sitesmith_signups\` table in your own Neon or Supabase Postgres, so you can also read them with your own \`DATABASE_URL\`. The site must be published on sitesmith for the form to take entries.
 
 ## Deploy
 

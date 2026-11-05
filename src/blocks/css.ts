@@ -33,6 +33,16 @@ export const SITE_CSS = `
 .ss-btn-ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
 .ss-input{height:48px;width:100%;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--bg);color:var(--text);padding:0 14px;font-size:16px;font-family:var(--font-body);outline:none}
 .ss-input:focus{border-color:var(--accent)}
+.ss-signup{display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:center;padding:clamp(24px,4vw,44px)}
+.ss-signup .ss-h2{margin-bottom:12px}
+.ss-signup-body{color:var(--muted);font-size:17px;margin:0;max-width:480px}
+.ss-signup-form{display:flex;flex-direction:column;gap:10px}
+.ss-signup-form .ss-btn{width:100%}
+.ss-hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+.ss-signup-done{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;color:var(--accent)}
+.ss-signup-err{color:#f87171;font-size:14px}
+.ss-signup-note{color:var(--muted);font-size:13px}
+@media (max-width:760px){.ss-signup{grid-template-columns:1fr;gap:20px}}
 .ss-grid{display:grid;gap:16px}.ss-grid>*{min-width:0}
 .ss-grid>*{min-width:0}
 @media(min-width:760px){.ss-g2{grid-template-columns:1fr 1fr}.ss-g3{grid-template-columns:repeat(3,1fr)}.ss-g4{grid-template-columns:repeat(4,1fr)}}

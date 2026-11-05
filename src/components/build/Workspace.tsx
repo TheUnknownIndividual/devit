@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowUp, ChevronDown, Crosshair, Eye, ExternalLink, Globe, Loader2, MessageSquare, Monitor, MousePointer2, Palette, Plug, Server,
-  FileText, ImagePlus, Smartphone, Tablet, Trash2, Undo2, X,
+  ArrowUp, ChevronDown, Crosshair, Eye, ExternalLink, Globe, Loader2, MessageSquare, Monitor, MousePointer2, Palette, Plug, Server, FileText, ImagePlus, Smartphone, Tablet, Trash2, Undo2, X, Database,
 } from "lucide-react";
 import { LogoMark } from "@/components/Logo";
 import { BRANDS, BrandIcon, ChainIcon } from "@/components/brand";
@@ -20,6 +19,7 @@ import { RpcDialog } from "./RpcDialog";
 import { ModelPicker, modelHeader } from "./ModelPicker";
 import { PublishDialog } from "./PublishDialog";
 import { ExportDialog } from "./ExportDialog";
+import { DatabaseDialog } from "./DatabaseDialog";
 import { prepareImage, readDoc, type Doc } from "./attach";
 import { AccountMenu } from "@/components/account/AccountMenu";
 
@@ -47,7 +47,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
   const fileInput = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState<null | "apply" | "chat" | "undo" | "patch">(null);
-  const [dialog, setDialog] = useState<null | "integrations" | "rpc" | "publish" | "export">(null);
+  const [dialog, setDialog] = useState<null | "integrations" | "rpc" | "publish" | "export" | "database">(null);
   // Back from connecting GitHub (?export=1): reopen the export dialog where it left off.
   useEffect(() => {
     const u = new URL(window.location.href);
@@ -228,6 +228,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
             />
           )}
           <button type="button" className="btn btn-outline" disabled={!canEdit} onClick={() => setDialog("integrations")}><Plug size={15} /><span className="hidden lg:inline">Integrations</span></button>
+          <button type="button" className="btn btn-outline btn-icon hidden sm:inline-flex" disabled={!canEdit} onClick={() => setDialog("database")} aria-label="Database" title="Database (signup form entries)"><Database size={15} /></button>
           <button type="button" className="btn btn-outline btn-icon hidden sm:inline-flex" disabled={!ready || !canEdit} onClick={() => setDialog("export")} aria-label="Export code" title="Export code (GitHub or zip)"><BrandIcon icon={BRANDS.github} size={15} color="currentColor" /></button>
           <span className="mx-0.5 hidden h-5 w-px bg-white/10 sm:block" />
           <button type="button" className="btn btn-ghost btn-icon hidden sm:inline-flex" disabled={!canEdit || !p.history.length || !!busy} onClick={() => void call("/undo", {}, "undo")} aria-label="Undo" title="Undo"><Undo2 size={16} /></button>
@@ -391,6 +392,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
       <RpcDialog key={`rpc-${dialog === "rpc"}`} open={dialog === "rpc"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
       <PublishDialog open={dialog === "publish"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
       <ExportDialog open={dialog === "export"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
+      <DatabaseDialog open={dialog === "database"} onClose={() => setDialog(null)} project={p} hasForm={!!p.spec?.blocks.some((b) => b.type === "signup")} />
     </div>
   );
 }
