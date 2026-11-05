@@ -7,7 +7,7 @@ import {
   FileText, ImagePlus, Smartphone, Tablet, Trash2, Undo2, X,
 } from "lucide-react";
 import { LogoMark } from "@/components/Logo";
-import { ChainIcon } from "@/components/brand";
+import { BRANDS, BrandIcon, ChainIcon } from "@/components/brand";
 import { ThemeSwatch } from "@/components/ThemeSwatch";
 import { Menu } from "@/components/ui/Menu";
 import { THEME_LABELS } from "@/lib/themes";
@@ -19,6 +19,7 @@ import { IntegrationsDialog } from "./Integrations";
 import { RpcDialog } from "./RpcDialog";
 import { ModelPicker, modelHeader } from "./ModelPicker";
 import { PublishDialog } from "./PublishDialog";
+import { ExportDialog } from "./ExportDialog";
 import { prepareImage, readDoc, type Doc } from "./attach";
 import { AccountMenu } from "@/components/account/AccountMenu";
 
@@ -46,7 +47,15 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
   const fileInput = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState<null | "apply" | "chat" | "undo" | "patch">(null);
-  const [dialog, setDialog] = useState<null | "integrations" | "rpc" | "publish">(null);
+  const [dialog, setDialog] = useState<null | "integrations" | "rpc" | "publish" | "export">(null);
+  // Back from connecting GitHub (?export=1): reopen the export dialog where it left off.
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    if (u.searchParams.get("export") !== "1") return;
+    u.searchParams.delete("export");
+    window.history.replaceState(null, "", u.pathname + u.search + u.hash);
+    setDialog("export");
+  }, []);
   const [mobileTab, setMobileTab] = useState<"chat" | "preview">("chat");
   const [frameReady, setFrameReady] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
@@ -219,6 +228,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
             />
           )}
           <button type="button" className="btn btn-outline" disabled={!canEdit} onClick={() => setDialog("integrations")}><Plug size={15} /><span className="hidden lg:inline">Integrations</span></button>
+          <button type="button" className="btn btn-outline btn-icon hidden sm:inline-flex" disabled={!ready || !canEdit} onClick={() => setDialog("export")} aria-label="Export code" title="Export code (GitHub or zip)"><BrandIcon icon={BRANDS.github} size={15} color="currentColor" /></button>
           <span className="mx-0.5 hidden h-5 w-px bg-white/10 sm:block" />
           <button type="button" className="btn btn-ghost btn-icon hidden sm:inline-flex" disabled={!canEdit || !p.history.length || !!busy} onClick={() => void call("/undo", {}, "undo")} aria-label="Undo" title="Undo"><Undo2 size={16} /></button>
           <a className={`btn btn-ghost btn-icon hidden sm:inline-flex ${ready ? "" : "pointer-events-none opacity-50"}`} href={`/live/${p.id}`} target="_blank" rel="noreferrer" aria-label="Open live" title="Open live"><ExternalLink size={16} /></a>
@@ -380,6 +390,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
       <IntegrationsDialog open={dialog === "integrations"} onClose={() => setDialog(null)} project={p} onSaved={setP} heliusOnServer={heliusOnServer} />
       <RpcDialog key={`rpc-${dialog === "rpc"}`} open={dialog === "rpc"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
       <PublishDialog open={dialog === "publish"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
+      <ExportDialog open={dialog === "export"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
     </div>
   );
 }

@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowRightLeft, ArrowUp, Check, Copy, Globe2, Loader2 } from "lucide-react";
+import { ArrowRightLeft, ArrowUp, Check, Copy, Globe2, Loader2, Shield } from "lucide-react";
 import { CHAINS, isEvm, type Chain, type TokenInfo } from "@/lib/spec";
 import { venue } from "@/lib/venues";
-import { explorerTx, familyOf, sendEvm, sendNear, sendSolana, short, useWallets } from "./wallet";
+import { explorerTx, familyOf, sendEvm, sendNear, sendSolana, short, useWallets, waitEvm } from "./wallet";
 import { WalletButton } from "./connect";
 import type { BuiltTx } from "@/lib/swap";
 import { ago, num, pct, usd } from "../format";
@@ -312,7 +312,7 @@ export function Chart({ token, mode, dark }: { token: TokenInfo | null; mode: Mo
 // ---------- buy ----------
 
 interface PayOption { key: string; label: string; chain: string }
-interface IntentQuote { depositAddress: string | null; amountIn: string; amountOut: string; amountOutUsd: string | null; timeEstimate: number | null; deliver: { symbol: string; direct: boolean }; dry: boolean }
+interface IntentQuote { depositAddress: string | null; amountIn: string; amountOut: string; amountOutUsd: string | null; timeEstimate: number | null; deliver: { symbol: string; direct: boolean }; dry: boolean; private?: boolean }
 
 export function BuyBox({ chain, token, ticker }: { chain: Chain; token: TokenInfo | null; ticker: string }) {
   const [tab, setTab] = useState<"same" | "any">("same");
@@ -428,9 +428,36 @@ function SameChain({ chain, token, ticker }: { chain: Chain; token: TokenInfo | 
   );
 }
 
+// "Any chain": two routes. NEAR Intents takes a deposit from any wallet on any chain it carries (Bitcoin included) and
+// can run it privately (Confidential Intents); Relay is signed in the buyer's own EVM wallet and lands the token itself
+// on EVM chains and Solana. NEAR sites only get NEAR Intents (Relay doesn't reach NEAR).
+const RELAY_CHAINS: Chain[] = ["ethereum", "base", "bsc", "robinhood", "solana"];
+const DEMO_USD: Record<string, number> = { ETH: 3400, SOL: 160, USDC: 1, USDT: 1, BNB: 600, BTC: 98000, NEAR: 3.2 };
+
 function AnyChain({ chain, token, ticker }: { chain: Chain; token: TokenInfo | null; ticker: string }) {
+  const relayOk = RELAY_CHAINS.includes(chain) && !!token;
+  const [route, setRoute] = useState<"intents" | "relay">("intents");
+  return (
+    <>
+      {relayOk && (
+        <div className="ss-route" role="radiogroup" aria-label="Route">
+          {([["intents", "NEAR Intents", "Any wallet, any chain"], ["relay", "Relay", "Sign in your wallet"]] as const).map(([k, name, sub]) => (
+            <button key={k} type="button" role="radio" aria-checked={route === k} onClick={() => setRoute(k)}>
+              <b>{name}</b><span>{sub}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {route === "relay" && relayOk ? <RelayRoute chain={chain} token={token!} ticker={ticker} /> : <IntentsRoute chain={chain} token={token} ticker={ticker} />}
+    </>
+  );
+}
+
+function IntentsRoute({ chain, token, ticker }: { chain: Chain; token: TokenInfo | null; ticker: string }) {
   const { connected } = useWallets();
   const [pays, setPays] = useState<PayOption[]>([]);
+  const [canPrivate, setCanPrivate] = useState(false);
+  const [priv, setPriv] = useState(false);
   const [pay, setPay] = useState("eth:ETH");
   const [amount, setAmount] = useState("0.01");
   const [recipient, setRecipient] = useState("");
@@ -440,22 +467,30 @@ function AnyChain({ chain, token, ticker }: { chain: Chain; token: TokenInfo | n
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
-  useEffect(() => { if (token?.demo) { setPays([{ key: "eth:ETH", label: "ETH", chain: "Ethereum" }, { key: "sol:SOL", label: "SOL", chain: "Solana" }, { key: "eth:USDC", label: "USDC", chain: "Ethereum" }]); return; } void fetch("/api/intents").then((r) => r.json()).then((j: { payWith: PayOption[] }) => setPays(j.payWith)).catch(() => undefined); }, []);
-  useEffect(() => { if (connected && !recipient) setRecipient(connected.address); }, [connected, recipient]);
+  useEffect(() => {
+    if (token?.demo) { setPays([{ key: "eth:ETH", label: "ETH", chain: "Ethereum" }, { key: "sol:SOL", label: "SOL", chain: "Solana" }, { key: "btc:BTC", label: "BTC", chain: "Bitcoin" }, { key: "base:USDC", label: "USDC", chain: "Base" }]); setCanPrivate(true); return; }
+    void fetch("/api/intents").then((r) => r.json()).then((j: { payWith: PayOption[]; private?: boolean }) => { setPays(j.payWith); setCanPrivate(!!j.private); }).catch(() => undefined);
+  }, [token?.demo]);
+  useEffect(() => { if (connected && !recipient && familyOf(connected.wallet) === (chain === "solana" ? "solana" : chain === "near" ? "near" : "evm")) setRecipient(connected.address); }, [connected, recipient, chain]);
 
   // Dry quote as you type: shows what arrives without asking for addresses.
   useEffect(() => {
     const a = Number(amount);
     if (!(a > 0)) { setQ(null); return; }
     setErr(null);
-    if (token?.demo) return;
+    if (token?.demo) {
+      const sym = pays.find((p) => p.key === pay)?.label ?? "ETH";
+      const out = token.priceUsd ? (a * (DEMO_USD[sym] ?? 1) * 0.995) / token.priceUsd : null;
+      setQ(out ? { depositAddress: null, amountIn: String(a), amountOut: num(out), amountOutUsd: String(a * (DEMO_USD[sym] ?? 1) * 0.995), timeEstimate: priv ? 40 : 20, deliver: { symbol: `$${ticker}`, direct: true }, dry: true, private: priv } : null);
+      return;
+    }
     const h = setTimeout(async () => {
-      const r = await fetch("/api/intents", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pay, amount: a, chain, token: token?.address ?? null }) }).catch(() => null);
+      const r = await fetch("/api/intents", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pay, amount: a, chain, token: token?.address ?? null, private: priv || undefined }) }).catch(() => null);
       const j = r ? await r.json() : { error: "No quote right now" };
       if ("error" in j) { setErr(j.error); setQ(null); } else setQ(j);
     }, 450);
     return () => clearTimeout(h);
-  }, [pay, amount, chain, token?.address, token?.demo]);
+  }, [pay, amount, chain, token?.address, token?.demo, token?.priceUsd, priv, pays, ticker]);
 
   useEffect(() => {
     if (!q?.depositAddress || q.dry) return;
@@ -469,7 +504,7 @@ function AnyChain({ chain, token, ticker }: { chain: Chain; token: TokenInfo | n
   async function getDeposit() {
     setBusy(true);
     setErr(null);
-    const r = await fetch("/api/intents", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pay, amount: Number(amount), chain, token: token?.address ?? null, recipient: recipient.trim(), refundTo: refund.trim() }) }).catch(() => null);
+    const r = await fetch("/api/intents", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pay, amount: Number(amount), chain, token: token?.address ?? null, recipient: recipient.trim(), refundTo: refund.trim(), private: priv || undefined }) }).catch(() => null);
     const j = r ? await r.json() : { error: "No quote right now" };
     setBusy(false);
     if ("error" in j) setErr(j.error); else setQ(j);
@@ -486,12 +521,18 @@ function AnyChain({ chain, token, ticker }: { chain: Chain; token: TokenInfo | n
         </select>
         <input className="ss-input" inputMode="decimal" aria-label="Amount" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} disabled={!!live} />
       </div>
+      {canPrivate && (
+        <button type="button" role="switch" aria-checked={priv} className="ss-private" disabled={!!live} onClick={() => setPriv((v) => !v)}>
+          <span className="ss-switch" aria-hidden><i /></span>
+          <span><b><Shield size={13} style={{ display: "inline", verticalAlign: -2, marginRight: 5 }} />Private buy</b><span className="ss-note" style={{ display: "block", marginTop: 2 }}>Runs through Confidential Intents, so the paying address and your {CHAINS[chain].name} wallet aren&apos;t linked on chain.</span></span>
+        </button>
+      )}
       {q && (
         <div className="ss-quote">
           Arrives as <b>{q.amountOut}</b> {q.deliver.symbol}{q.amountOutUsd ? <span className="ss-muted"> (≈ ${Number(q.amountOutUsd).toFixed(2)})</span> : null}
           <div className="ss-note">
             {q.deliver.direct ? `Delivered straight to your ${CHAINS[chain].name} wallet.` : `Delivered as ${q.deliver.symbol} on ${CHAINS[chain].name}; swap it for $${ticker} in the other tab.`}
-            {q.timeEstimate ? ` About ${Math.max(1, Math.round(q.timeEstimate / 60))} min.` : ""} Routed by NEAR Intents.
+            {q.timeEstimate ? ` About ${q.timeEstimate < 90 ? `${Math.max(5, Math.round(q.timeEstimate / 5) * 5)} s` : `${Math.round(q.timeEstimate / 60)} min`}.` : ""} {q.private ? "Private, routed by NEAR Intents." : "Routed by NEAR Intents."}
           </div>
         </div>
       )}
@@ -501,8 +542,8 @@ function AnyChain({ chain, token, ticker }: { chain: Chain; token: TokenInfo | n
           <input id="ss-to" className="ss-input ss-mono" style={{ fontSize: 13 }} value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder={connected ? "" : "Connect a wallet or paste an address"} />
           <label className="ss-label" htmlFor="ss-refund">Refund address on {payLabel?.chain ?? "the paying chain"}</label>
           <input id="ss-refund" className="ss-input ss-mono" style={{ fontSize: 13 }} value={refund} onChange={(e) => setRefund(e.target.value)} placeholder="Where funds go back if the swap can't fill" />
-          <button type="button" className="ss-btn" style={{ width: "100%", marginTop: 14 }} disabled={busy || !q || !recipient.trim() || !refund.trim()} onClick={() => void getDeposit()}>
-            <Globe2 size={16} /> {busy ? "Getting address…" : "Get deposit address"}
+          <button type="button" className="ss-btn" style={{ width: "100%", marginTop: 14 }} disabled={busy || !q || !recipient.trim() || !refund.trim() || !!token?.demo} title={token?.demo ? "This is a sample site with a made-up token" : undefined} onClick={() => void getDeposit()}>
+            {priv ? <Shield size={16} /> : <Globe2 size={16} />} {busy ? "Getting address…" : priv ? "Get private deposit address" : "Get deposit address"}
           </button>
         </>
       )}
@@ -512,6 +553,139 @@ function AnyChain({ chain, token, ticker }: { chain: Chain; token: TokenInfo | n
           <div style={{ marginTop: 10 }}><CopyCA address={q.depositAddress!} /></div>
           <div className="ss-note">Status: {status ?? "waiting for your deposit"}. This address is for this quote only.</div>
         </div>
+      )}
+      {err && <div className="ss-err">{err}</div>}
+    </>
+  );
+}
+
+interface RelayQ { requestId: string | null; amountOut: string; amountOutUsd: string | null; symbol: string; impactPct: number | null; timeEstimate: number | null; feesUsd: number | null; txs: Array<{ to: string; data: string; value: string; chainId: number; gas: string | null }>; walletChain: Chain }
+const RELAY_PAYS: PayOption[] = [
+  { key: "eth:ETH", label: "ETH", chain: "Ethereum" }, { key: "base:ETH", label: "ETH", chain: "Base" }, { key: "base:USDC", label: "USDC", chain: "Base" },
+  { key: "eth:USDC", label: "USDC", chain: "Ethereum" }, { key: "bsc:BNB", label: "BNB", chain: "BNB Chain" },
+];
+const hex = (v: string | null) => (v == null ? null : v.startsWith("0x") ? v : `0x${BigInt(v || "0").toString(16)}`);
+
+function RelayRoute({ chain, token, ticker }: { chain: Chain; token: TokenInfo; ticker: string }) {
+  const { connected } = useWallets();
+  const [pay, setPay] = useState(chain === "bsc" ? "bsc:BNB" : chain === "base" ? "base:ETH" : "eth:ETH");
+  const [amount, setAmount] = useState("0.01");
+  const [recipient, setRecipient] = useState("");
+  const [q, setQ] = useState<RelayQ | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [step, setStep] = useState<"idle" | "quoting" | "signing" | "sent">("idle");
+  const [n, setN] = useState<{ at: number; of: number } | null>(null);
+  const [tx, setTx] = useState<{ hash: string; chain: Chain } | null>(null);
+  const [status, setStatus] = useState<{ text: string | null; done: boolean; failed: boolean } | null>(null);
+  const evmOn = connected && familyOf(connected.wallet) === "evm";
+  const sameFamily = chain !== "solana";
+
+  useEffect(() => { if (connected && !recipient && familyOf(connected.wallet) === (chain === "solana" ? "solana" : "evm")) setRecipient(connected.address); }, [connected, recipient, chain]);
+
+  useEffect(() => {
+    const a = Number(amount);
+    if (!(a > 0) || step === "signing" || step === "sent") { if (!(a > 0)) setQ(null); return; }
+    setErr(null);
+    if (token.demo) {
+      const sym = RELAY_PAYS.find((p) => p.key === pay)?.label ?? "ETH";
+      const usdIn = a * (DEMO_USD[sym] ?? 1);
+      setQ(token.priceUsd ? { requestId: null, amountOut: num((usdIn * 0.993) / token.priceUsd), amountOutUsd: String(usdIn * 0.993), symbol: ticker, impactPct: -0.7, timeEstimate: 4, feesUsd: usdIn * 0.004, txs: [], walletChain: "ethereum" } : null);
+      return;
+    }
+    const h = setTimeout(async () => {
+      const r = await fetch("/api/relay", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pay, amount: a, chain, token: token.address }) }).catch(() => null);
+      const j = r ? await r.json() : { error: "No quote right now" };
+      if ("error" in j) { setErr(j.error); setQ(null); } else setQ(j);
+    }, 450);
+    return () => clearTimeout(h);
+  }, [pay, amount, chain, token.address, token.demo, token.priceUsd, ticker, step]);
+
+  useEffect(() => {
+    if (step !== "sent" || !q?.requestId || status?.done || status?.failed) return;
+    const h = setInterval(async () => {
+      const r = await fetch(`/api/relay/status?id=${q.requestId}`).catch(() => null);
+      if (!r?.ok) return;
+      const j = (await r.json()) as { status?: string | null; done?: boolean; failed?: boolean };
+      setStatus({ text: j.status ?? null, done: !!j.done, failed: !!j.failed });
+    }, 4000);
+    return () => clearInterval(h);
+  }, [step, q?.requestId, status?.done, status?.failed]);
+
+  async function buy() {
+    if (!evmOn || !connected) return;
+    setErr(null);
+    setStep("quoting");
+    try {
+      // A fresh quote for this wallet: Relay's transactions are made for the exact sender and recipient.
+      const r = await fetch("/api/relay", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pay, amount: Number(amount), chain, token: token.address, user: connected.address, recipient: recipient.trim() }) });
+      const j = (await r.json()) as RelayQ & { error?: string };
+      if (!r.ok || j.error || !j.txs.length) throw new Error(j.error || "Relay didn't return a route for this wallet.");
+      setQ(j);
+      setStep("signing");
+      let last = "";
+      for (let i = 0; i < j.txs.length; i++) {
+        setN({ at: i + 1, of: j.txs.length });
+        const t = j.txs[i];
+        last = await sendEvm(j.walletChain, { to: t.to, data: t.data, value: hex(t.value)!, gas: hex(t.gas) });
+        // An approval has to land before the deposit that spends it.
+        if (i < j.txs.length - 1 && !(await waitEvm(last))) throw new Error("The approval didn't go through.");
+      }
+      setTx({ hash: last, chain: j.walletChain });
+      setStatus({ text: "on its way", done: false, failed: false });
+      setStep("sent");
+    } catch (e) {
+      const m = (e as { message?: string }).message ?? "";
+      setErr((e as { code?: number }).code === 4001 || /reject|denied|cancel/i.test(m) ? "You cancelled in the wallet." : m || "The buy didn't go through.");
+      setStep("idle");
+    } finally {
+      setN(null);
+    }
+  }
+
+  const payLabel = RELAY_PAYS.find((p) => p.key === pay);
+  const locked = step === "quoting" || step === "signing" || step === "sent";
+  return (
+    <>
+      <label className="ss-label" htmlFor="ss-rpay">Pay with</label>
+      <div className="ss-row">
+        <select id="ss-rpay" className="ss-select" value={pay} onChange={(e) => setPay(e.target.value)} disabled={locked}>
+          {RELAY_PAYS.map((p) => <option key={p.key} value={p.key}>{p.label} on {p.chain}</option>)}
+        </select>
+        <input className="ss-input" inputMode="decimal" aria-label="Amount" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} disabled={locked} />
+      </div>
+      {q && (
+        <div className="ss-quote">
+          You get about <b>{q.amountOut}</b> ${ticker}{q.amountOutUsd ? <span className="ss-muted"> (≈ ${Number(q.amountOutUsd).toFixed(2)})</span> : null}
+          <div className="ss-note">
+            Straight to your {CHAINS[chain].name} wallet{q.timeEstimate ? `, about ${Math.max(2, q.timeEstimate)} s` : ""}.
+            {q.feesUsd ? ` Fees ≈ $${q.feesUsd.toFixed(2)}.` : ""}{q.impactPct != null && q.impactPct <= -0.1 ? ` Price impact ${Math.abs(q.impactPct).toFixed(2)}%.` : ""} Routed by Relay.
+          </div>
+        </div>
+      )}
+      {!sameFamily && step !== "sent" && (
+        <>
+          <label className="ss-label" htmlFor="ss-rto">Your Solana address</label>
+          <input id="ss-rto" className="ss-input ss-mono" style={{ fontSize: 13 }} value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder="Where the tokens land" />
+        </>
+      )}
+      {step === "sent" && tx ? (
+        <div className="ss-quote" style={{ borderColor: "var(--accent)" }}>
+          {status?.done ? <Check size={15} style={{ display: "inline", verticalAlign: -2, marginRight: 6 }} /> : <Loader2 size={15} className="ss-spin" style={{ display: "inline", verticalAlign: -2, marginRight: 6 }} />}
+          {status?.done ? `Done, $${ticker} is in your wallet.` : `Sent. ${status?.text ? `Status: ${status.text}.` : ""}`}{" "}
+          <a href={explorerTx(tx.chain, tx.hash)} target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>View the transaction</a>
+        </div>
+      ) : token.demo ? (
+        <button type="button" className="ss-btn" style={{ width: "100%", marginTop: 14 }} title="This is a sample site with a made-up token"><ArrowRightLeft size={16} /> Buy ${ticker} with {payLabel?.label}</button>
+      ) : !evmOn ? (
+        <div style={{ marginTop: 14 }}>
+          <WalletButton chain={q?.walletChain ?? "ethereum"} token={token} block />
+          <div className="ss-note" style={{ marginTop: 8 }}>Connect the wallet that holds your {payLabel?.label} on {payLabel?.chain}.</div>
+        </div>
+      ) : (
+        <button type="button" className="ss-btn" style={{ width: "100%", marginTop: 14 }} disabled={locked || !q || !(Number(amount) > 0) || !recipient.trim()} onClick={() => void buy()}>
+          {locked ? <Loader2 size={16} className="ss-spin" /> : <ArrowRightLeft size={16} />}
+          {step === "quoting" ? "Preparing…" : step === "signing" ? `Confirm in your wallet${n && n.of > 1 ? ` (${n.at} of ${n.of})` : ""}` : `Buy $${ticker} with ${payLabel?.label}`}
+        </button>
       )}
       {err && <div className="ss-err">{err}</div>}
     </>

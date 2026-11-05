@@ -114,3 +114,25 @@ Use this as the menu when a site, the builder or a block needs to "feel like" a 
 3. **RPC latency in builder settings:** ping each endpoint and colour the ms, as Jupiter does.
 4. **Chart timeframes:** 1H / 1D / 1W / All pills and a Price/MCap toggle on the chart block.
 5. **Skeleton shimmer:** use it instead of "—" while live data loads.
+
+## bolt.new and lovable: what they have that we don't (2026-11-05)
+
+Crawled with `scripts/ui-study.mjs`: bolt.new home, pricing and its editor (it renders view-only without a login); lovable.dev pricing, templates and login (its home page answers 403 to headless browsers). Signed-in pages (project list, project settings, the full editor) need an account on each site, which I can't make, so this list stops at what's public plus the editor bolt shows view-only.
+
+What we already match: chat beside a live preview with device sizes, undo, publish with custom domains and private links, teams and roles, your own model keys and a model picker, GitHub export and zip download (new today), style starters with real sample sites.
+
+Gaps, most useful first:
+
+1. **Plan mode** (bolt, the "Plan" toggle in the prompt box): the agent answers with an outline first and builds after you say go. For us: sections, style and token data as a checklist before the first build.
+2. **Code view** (bolt's Preview / `</>` switch): read the generated code in the builder. For us: the site's spec and block files, the same ones the export ships.
+3. **Version history with restore** (both): every change as a named point you can return to. We keep `history` but only offer one-step undo.
+4. **Direct text edits** (lovable "visual edits"): click a heading in the preview and type, no model call. Our select-and-comment always goes through the agent.
+5. **Templates gallery page** (lovable: 228, filtered by Apps, Websites and so on, each with "Use template"): we have 8 styles on the landing page only. A `/templates` page with chips and a remix button.
+6. **Start from somewhere** (bolt: "or start from Figma, GitHub, Team template"): import a repo or a design. Our closest is pasting a contract address and reference URLs.
+7. **Project type chooser under the prompt** (bolt: Website, Slides, App, Prototype): our kind (memecoin, dApp, NFT) is only read from the sentence.
+8. **Voice input** (bolt's mic in the prompt box).
+9. **Chat-only mode** (lovable): ask about the site without changing it.
+10. **Project knowledge** (lovable): standing instructions the agent reads on every change (tone, banned words, links).
+11. **Pricing details** (lovable): monthly/yearly toggle with "2 months free", a credits picker per plan, credit rollover and top-ups.
+12. **View-only shares with a clear banner** (bolt: "You have view-only access to this project"): we have view-only access for team viewers; a public share link of the builder itself is missing.
+13. **Site analytics and SEO settings** for published sites (lovable): visits, title, description, social image.

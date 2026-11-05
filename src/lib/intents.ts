@@ -33,6 +33,14 @@ export const PAY_WITH = [
   { key: "near:wNEAR", label: "NEAR", chain: "NEAR" },
 ] as const;
 
+/**
+ * Private buys: 1-Click's Confidential Intents ("confidentiality" on the quote) hide the link between the paying and the
+ * receiving address. 1-Click only quotes them for a partner key, so they're offered when ONECLICK_JWT is set.
+ * ONECLICK_PRIVATE_LEVEL=basic switches from the default "advanced".
+ */
+export const privateOn = () => !!process.env.ONECLICK_JWT;
+const privateLevel = () => (process.env.ONECLICK_PRIVATE_LEVEL === "basic" ? "basic" : "advanced");
+
 export async function destinationFor(chain: Chain, tokenAddress: string | null): Promise<{ asset: OneClickToken; direct: boolean } | null> {
   const list = await oneClickTokens();
   const key = CHAIN_KEY[chain];
@@ -52,9 +60,10 @@ export interface IntentQuote {
   timeEstimate: number | null;
   deliver: { symbol: string; direct: boolean };
   dry: boolean;
+  private: boolean;
 }
 
-export async function intentQuote(opts: { pay: string; amount: number; chain: Chain; token: string | null; recipient: string; refundTo: string; dry: boolean }): Promise<IntentQuote | { error: string }> {
+export async function intentQuote(opts: { pay: string; amount: number; chain: Chain; token: string | null; recipient: string; refundTo: string; dry: boolean; private?: boolean }): Promise<IntentQuote | { error: string }> {
   const list = await oneClickTokens();
   const [bc, sym] = opts.pay.split(":");
   const origin = list.find((x) => x.blockchain === bc && x.symbol === sym);
@@ -77,6 +86,10 @@ export async function intentQuote(opts: { pay: string; amount: number; chain: Ch
     deadline: new Date(Date.now() + 60 * 60_000).toISOString(),
     referral: "sitesmith",
   };
+  if (opts.private) {
+    if (!privateOn()) return { error: "Private buys aren't set up on this server." };
+    body.confidentiality = privateLevel();
+  }
   const fee = Number(process.env.ONECLICK_FEE_BPS || 0);
   if (fee > 0 && process.env.ONECLICK_FEE_RECIPIENT) body.appFees = [{ recipient: process.env.ONECLICK_FEE_RECIPIENT, fee }];
   const headers: Record<string, string> = { "content-type": "application/json" };
@@ -93,6 +106,7 @@ export async function intentQuote(opts: { pay: string; amount: number; chain: Ch
       timeEstimate: j.quote.timeEstimate ?? null,
       deliver: { symbol: dest.asset.symbol, direct: dest.direct },
       dry: opts.dry,
+      private: !!opts.private,
     };
   } catch {
     return { error: "NEAR Intents didn't answer in time" };

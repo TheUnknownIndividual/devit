@@ -13,7 +13,7 @@ import { evmWallets, signInEvm, signInNear, signInSolana, solanaWallets, type Ev
 // the server answers with the account, signed in or with the method added.
 
 type Done = (r: { user: PublicUser; linked: boolean }) => void;
-type Busy = null | "passkey" | "passkey-new" | "email" | "code" | "google" | "apple" | "solana" | "evm" | "near";
+type Busy = null | "passkey" | "passkey-new" | "email" | "code" | "google" | "apple" | "github" | "solana" | "evm" | "near";
 
 export function SignInDialog({ open, onClose, onDone, link = false }: { open: boolean; onClose: () => void; onDone: Done; link?: boolean }) {
   const [busy, setBusy] = useState<Busy>(null);
@@ -24,7 +24,7 @@ export function SignInDialog({ open, onClose, onDone, link = false }: { open: bo
   const [pick, setPick] = useState<null | "solana" | "evm">(null);
   const [sol, setSol] = useState<SolWallet[]>([]);
   const [evm, setEvm] = useState<EvmChoice[]>([]);
-  const [offers, setOffers] = useState<{ google: boolean; apple: boolean; email: boolean }>({ google: false, apple: false, email: true });
+  const [offers, setOffers] = useState<{ google: boolean; apple: boolean; github: boolean; email: boolean }>({ google: false, apple: false, github: false, email: true });
 
   useEffect(() => {
     if (!open) return;
@@ -71,15 +71,10 @@ export function SignInDialog({ open, onClose, onDone, link = false }: { open: bo
 
   const verifyCode = () => run("code", () => post("/api/auth/email", { step: "verify", email, code }));
 
-  // A full-page hop to Google and back to this page, signed in (or with Google added, from Settings).
-  function apple() {
-    setBusy("apple");
-    window.location.href = `/api/auth/apple?next=${encodeURIComponent(location.pathname + location.search)}`;
-  }
-
-  function google() {
-    setBusy("google");
-    window.location.href = `/api/auth/google?next=${encodeURIComponent(location.pathname + location.search)}`;
+  // A full-page hop to the provider and back to this page, signed in (or with the method added, from Settings).
+  function oauth(kind: "google" | "apple" | "github") {
+    setBusy(kind);
+    window.location.href = `/api/auth/${kind}?next=${encodeURIComponent(location.pathname + location.search)}`;
   }
 
   function wallet(kind: "solana" | "evm" | "near") {
@@ -90,6 +85,12 @@ export function SignInDialog({ open, onClose, onDone, link = false }: { open: bo
     if (list.length === 1) return void run(kind, () => (kind === "solana" ? signInSolana(list[0] as SolWallet) : signInEvm(list[0] as EvmChoice)));
     setPick(kind);
   }
+
+  const providers = ([
+    offers.google && { kind: "google" as const, name: "Google", mark: <GoogleMark /> },
+    offers.github && { kind: "github" as const, name: "GitHub", mark: <BrandIcon icon={BRANDS.github} size={17} color="#fafafa" /> },
+    offers.apple && { kind: "apple" as const, name: "Apple", mark: <BrandIcon icon={BRANDS.apple} size={17} color="#fafafa" /> },
+  ]).filter((x): x is { kind: "google" | "github" | "apple"; name: string; mark: React.JSX.Element } => !!x);
 
   const title = link ? "Add a sign-in method" : "Sign in to sitesmith";
   return (
@@ -131,17 +132,21 @@ export function SignInDialog({ open, onClose, onDone, link = false }: { open: bo
 
             <Divider />
 
-            {offers.google && (
-              <button type="button" className="btn btn-outline btn-lg w-full" disabled={!!busy} onClick={google}>
-                {busy === "google" ? <Loader2 size={16} className="animate-spin" /> : <GoogleMark />} {link ? "Add Google" : "Continue with Google"}
+            {providers.length === 1 ? (
+              <button type="button" className="btn btn-outline btn-lg w-full" disabled={!!busy} onClick={() => oauth(providers[0].kind)}>
+                {busy === providers[0].kind ? <Loader2 size={16} className="animate-spin" /> : providers[0].mark} {link ? `Add ${providers[0].name}` : `Continue with ${providers[0].name}`}
               </button>
+            ) : providers.length > 1 && (
+              // Cursor's row: one square per provider, the mark alone, the name on hover and for screen readers.
+              <section className="grid gap-2" style={{ gridTemplateColumns: `repeat(${providers.length}, minmax(0, 1fr))` }}>
+                {providers.map((o) => (
+                  <button key={o.kind} type="button" className="btn btn-outline h-11 px-0" disabled={!!busy} onClick={() => oauth(o.kind)} aria-label={link ? `Add ${o.name}` : `Continue with ${o.name}`} title={o.name}>
+                    {busy === o.kind ? <Loader2 size={17} className="animate-spin" /> : o.mark}
+                  </button>
+                ))}
+              </section>
             )}
-            {offers.apple && (
-              <button type="button" className="btn btn-lg w-full border border-white bg-white text-black hover:bg-zinc-200" disabled={!!busy} onClick={apple}>
-                {busy === "apple" ? <Loader2 size={16} className="animate-spin" /> : <BrandIcon icon={BRANDS.apple} size={16} color="#000" />} {link ? "Add Apple" : "Continue with Apple"}
-              </button>
-            )}
-            {(offers.google || offers.apple) && !offers.email && <Divider />}
+            {providers.length > 0 && !offers.email && <Divider />}
 
             {offers.email && (<>
             <section className="space-y-2">

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { CHAIN_IDS } from "@/lib/spec";
-import { intentQuote, PAY_WITH } from "@/lib/intents";
+import { intentQuote, PAY_WITH, privateOn } from "@/lib/intents";
 
 // Stand-in addresses for preview quotes, before the buyer has connected a wallet. Never used for a real deposit.
 const DRY_ADDR: Record<string, string> = {
@@ -23,10 +23,11 @@ const Body = z.object({
   token: z.string().max(120).nullable(),
   recipient: z.string().max(120).optional(),
   refundTo: z.string().max(120).optional(),
+  private: z.boolean().optional(),
 });
 
 export async function GET() {
-  return NextResponse.json({ payWith: PAY_WITH });
+  return NextResponse.json({ payWith: PAY_WITH, private: privateOn() });
 }
 
 export async function POST(req: Request) {
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
   const b = parsed.data;
   const dry = !b.recipient || !b.refundTo;
   const q = await intentQuote({
-    pay: b.pay, amount: b.amount, chain: b.chain, token: b.token, dry,
+    pay: b.pay, amount: b.amount, chain: b.chain, token: b.token, dry, private: b.private,
     recipient: b.recipient || DRY_ADDR[CHAIN_KEY[b.chain]],
     refundTo: b.refundTo || DRY_ADDR[b.pay.split(":")[0]] || DRY_ADDR.eth,
   });

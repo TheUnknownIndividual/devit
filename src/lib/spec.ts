@@ -288,6 +288,8 @@ export interface Project {
   access?: SiteAccess;
   /** A custom domain for the published site (Pro), one per project. */
   domain?: CustomDomain;
+  /** The GitHub repo the code was exported to; later pushes commit to it. */
+  github?: { repo: string; url: string; branch: string; sha: string; at: number };
   version: number;
 }
 

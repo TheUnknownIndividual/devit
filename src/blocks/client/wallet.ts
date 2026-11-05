@@ -641,6 +641,19 @@ export async function sendEvm(chain: Chain, tx: { to: string; data: string; valu
   })) as string;
 }
 
+/** Waits until the connected EVM wallet's chain has mined a transaction (Relay's deposit can only follow its approval). */
+export async function waitEvm(hash: string, timeoutMs = 120_000): Promise<boolean> {
+  const p = eip1193(connected?.wallet);
+  if (!p) return false;
+  const end = Date.now() + timeoutMs;
+  while (Date.now() < end) {
+    const r = (await p.request({ method: "eth_getTransactionReceipt", params: [hash] }).catch(() => null)) as { status?: string } | null;
+    if (r?.status) return r.status === "0x1";
+    await new Promise((res) => setTimeout(res, 2000));
+  }
+  return false;
+}
+
 export function explorerTx(chain: Chain, id: string): string {
   if (chain === "solana") return `https://solscan.io/tx/${id}`;
   if (chain === "near") return `https://nearblocks.io/txns/${id}`;
