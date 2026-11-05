@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { PromptBox } from "@/components/landing/PromptBox";
@@ -5,6 +6,11 @@ import { BrandIcon, BRANDS } from "@/components/brand";
 import { HowItWorks } from "@/components/landing/HowItWorks";
 import { HeaderActions } from "@/components/landing/HeaderActions";
 import { MotionFx } from "@/components/fx/MotionFx";
+import { Faq } from "@/components/landing/Faq";
+import { JsonLd } from "@/components/JsonLd";
+import { builderJsonLd } from "@/lib/seo";
+
+export const metadata: Metadata = { alternates: { canonical: "/", types: { "text/plain": "/llms.txt" } } };
 
 export default function Home() {
   return (
@@ -46,9 +52,10 @@ export default function Home() {
       </section>
 
       <HowItWorks />
+      <Faq />
 
       <footer className="mx-auto flex max-w-[1240px] flex-wrap items-center justify-between gap-4 px-5 py-10 text-[13px] text-zinc-500">
-        <span className="flex items-center gap-4"><span>Built for NEAR HACKATHON 2026</span><a href="/privacy" className="hover:text-zinc-300">Privacy</a><a href="/terms" className="hover:text-zinc-300">Terms</a></span>
+        <span className="flex items-center gap-4"><span>Built for NEAR HACKATHON 2026</span><a href="/privacy" className="hover:text-zinc-300">Privacy</a><a href="/terms" className="hover:text-zinc-300">Terms</a><a href="/llms.txt" className="hover:text-zinc-300">llms.txt</a></span>
         <span className="flex items-center gap-4">
           <span className="flex items-center gap-1.5"><BrandIcon icon={BRANDS.near} size={13} color="#a1a1aa" /> NEAR AI Cloud</span>
           <span className="flex items-center gap-1.5"><BrandIcon icon={BRANDS.near} size={13} color="#a1a1aa" /> NEAR Intents</span>
@@ -56,6 +63,7 @@ export default function Home() {
           <span className="flex items-center gap-1.5"><BrandIcon icon={BRANDS.cloudflare} size={13} color="#a1a1aa" /> Cloudflare</span>
         </span>
       </footer>
+      <JsonLd data={builderJsonLd()} />
     </div>
   );
 }

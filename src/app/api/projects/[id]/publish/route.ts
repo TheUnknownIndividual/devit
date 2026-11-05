@@ -6,6 +6,8 @@ import { publicProject } from "@/lib/public";
 import { RESERVED_SLUGS as RESERVED, siteUrl } from "@/lib/sites";
 import { editable } from "@/lib/access";
 import { syncRouting } from "@/lib/routing";
+import { appOrigin, pingIndexNow } from "@/lib/seo";
+import { isPrivateSite } from "@/lib/site-access";
 
 const Body = z.object({ slug: z.string().trim().toLowerCase().regex(/^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/) });
 
@@ -33,5 +35,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   });
   if (!p) return NextResponse.json({ error: "not found" }, { status: 404 });
   await syncRouting(p);
+  // Tell IndexNow engines (Bing, Yandex, Seznam, Naver) the site is new or changed; Google reads our sitemap.
+  const url = siteUrl(slug);
+  if (/^https:/.test(url) && !isPrivateSite(p) && !p.publishedSpec?.token?.demo) pingIndexNow([url, `${appOrigin()}/sitemap.xml`]);
   return NextResponse.json(publicProject(p));
 }

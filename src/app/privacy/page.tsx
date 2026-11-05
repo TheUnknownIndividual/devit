@@ -30,7 +30,7 @@ export default function Privacy() {
       </section>
       <section>
         <h2>Cookies</h2>
-        <p>We use cookies only to keep you signed in and to protect the sign-in flow. There are no ad or tracking cookies.</p>
+        <p>We use cookies to keep you signed in and to protect the sign-in flow. On the builder (devit.lol) we also use Google Analytics, with IP anonymisation, to count visits and see which pages people use; it sets its own cookies. We don&apos;t use ad cookies, and published sites don&apos;t load our analytics.</p>
       </section>
       <section>
         <h2>Deleting your data</h2>

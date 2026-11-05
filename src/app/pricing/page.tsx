@@ -10,7 +10,11 @@ import { planOf } from "@/lib/entitlements";
 import { Payments } from "@/components/pricing/Payments";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Pricing · sitesmith" };
+export const metadata: Metadata = {
+  title: "Pricing · sitesmith",
+  description: "sitesmith plans: Free with 5 builds a day and a devit.lol subdomain, Pro with a custom domain and private projects, Team with shared projects. Pay with any coin through NEAR Intents.",
+  alternates: { canonical: "/pricing" },
+};
 
 export default async function Pricing() {
   const { user } = await viewer();

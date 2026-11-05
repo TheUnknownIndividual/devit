@@ -8,6 +8,23 @@ import { routing } from "@/lib/routing";
 // Private sites get noindex on every host, and a ?k= private link is traded for a cookie at /api/site-access.
 
 const NOT_FOUND = () => new NextResponse("Not found", { status: 404, headers: { "x-robots-tag": "noindex" } });
+// What a site host answers besides its page: discovery files for search engines and AI assistants (host-aware routes).
+const SITE_FILES = /^\/(favicon\.ico|robots\.txt|sitemap\.xml|llms\.txt|llms-full\.txt|indexnow\.txt|ga\.js)$/;
+
+/** www.<apex> → <apex>, so search engines see one canonical host for the builder. */
+function wwwRedirect(req: NextRequest, host: string | null): NextResponse | null {
+  const app = process.env.APP_URL?.trim();
+  if (!app || !host?.startsWith("www.")) return null;
+  try {
+    const apex = new URL(app);
+    if (host !== `www.${apex.hostname}`) return null;
+    const to = new URL(req.nextUrl.pathname + req.nextUrl.search, apex.origin);
+    return NextResponse.redirect(to, 301);
+  } catch {
+    return null;
+  }
+}
+
 const hostOf = (h: string | null) => h?.toLowerCase().split(":")[0].replace(/\.$/, "") || null;
 
 async function sitePage(req: NextRequest, slug: string, via: "host" | "custom" | null) {
@@ -37,6 +54,8 @@ export async function proxy(req: NextRequest) {
   const viaEdge = !!secret && req.headers.get("x-sitesmith-edge") === secret;
   const host = hostOf((viaEdge && req.headers.get("x-sitesmith-host")) || req.headers.get("host"));
   const path = req.nextUrl.pathname;
+  const www = wwwRedirect(req, host);
+  if (www) return www;
   let slug = slugFromHost(host);
   let via: "host" | "custom" | null = slug ? "host" : null;
   if (!slug && host) {
@@ -56,7 +75,7 @@ export async function proxy(req: NextRequest) {
     return m ? sitePage(req, m[1], null) : NextResponse.next();
   }
   if (path === "/") return sitePage(req, slug, via);
-  if (path.startsWith("/_next/") || path.startsWith("/wallets/") || SITE_API.test(path) || path === "/favicon.ico" || path === "/robots.txt") return NextResponse.next();
+  if (path.startsWith("/_next/") || path.startsWith("/wallets/") || SITE_API.test(path) || SITE_FILES.test(path) || path === `/og/${slug}`) return NextResponse.next();
   return NOT_FOUND();
 }
 

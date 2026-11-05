@@ -8,6 +8,8 @@ import { siteCredit } from "@/lib/credit";
 import { isPrivateSite, siteGate } from "@/lib/site-access";
 import { projectEntitled } from "@/lib/entitlements";
 import type { Project } from "@/lib/spec";
+import { JsonLd } from "@/components/JsonLd";
+import { publishedUrl, siteDescription, siteJsonLd } from "@/lib/seo";
 
 // A published site. Locally it lives at /s/<slug>; the Cloudflare Worker serves the same page at <slug>.<domain>
 // and at a verified custom domain. The proxy says which (x-sitesmith-via) and adds noindex for private sites.
@@ -16,12 +18,15 @@ export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ e?: string }> };
 
 /** The project, when this host may serve it: a custom domain needs its owner still on a plan that has them. */
-async function load(slug: string): Promise<{ p: Project; via: string | null } | null> {
+async function load(slug: string): Promise<{ p: Project; via: string | null; url: string } | null> {
   const p = await findBySlug(slug);
   if (!p || !(p.publishedSpec ?? p.spec)) return null;
-  const via = (await headers()).get("x-sitesmith-via");
+  const h = await headers();
+  const via = h.get("x-sitesmith-via");
   if (via === "custom" && !(await projectEntitled(p, "customDomain"))) return null;
-  return { p, via };
+  const secret = process.env.EDGE_SECRET;
+  const host = ((secret && h.get("x-sitesmith-edge") === secret && h.get("x-sitesmith-host")) || h.get("host"))?.toLowerCase().split(":")[0] ?? null;
+  return { p, via, url: publishedUrl(p, via, host) };
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -31,11 +36,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const spec = (l.p.publishedSpec ?? l.p.spec)!;
   const robots = isPrivateSite(l.p) ? { index: false, follow: false } : undefined;
   if ((await siteGate(l.p, slug)) !== "open") return { title: "Private site", robots };
+  const title = `${spec.name} ($${spec.ticker})`;
+  const description = siteDescription(spec).slice(0, 160);
+  // The share image is served by the site's own host, so it works on a subdomain and on a custom domain alike.
+  const og = l.via ? `${l.url}/og/${slug}` : `/og/${slug}`;
   return {
-    title: `${spec.name} ($${spec.ticker})`,
-    description: spec.tagline,
+    title,
+    description,
+    applicationName: spec.name,
+    keywords: [spec.name, `$${spec.ticker}`, `${spec.ticker} token`, `buy ${spec.ticker}`, spec.token?.address ?? ""].filter(Boolean),
     icons: spec.token?.logo && /^https:/.test(spec.token.logo) ? { icon: spec.token.logo } : undefined,
-    robots,
+    alternates: { canonical: l.url, ...(l.via ? { types: { "text/plain": `${l.url}/llms.txt` } } : {}) },
+    openGraph: { type: "website", siteName: spec.name, title, description, url: l.url, images: [{ url: og, width: 1200, height: 630, alt: title }] },
+    twitter: { card: "summary_large_image", title, description, images: [og] },
+    robots: robots ?? { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 } },
   };
 }
 
@@ -47,7 +61,12 @@ export default async function Published({ params, searchParams }: Props) {
   if (gate === "link") notFound();
   if (gate === "password") return <PasswordGate slug={slug} to={l.via ? "/" : `/s/${slug}`} error={(await searchParams).e} />;
   const spec = (l.p.publishedSpec ?? l.p.spec)!;
-  return <Site spec={spec} mode="live" walletconnect={l.p.integrations.walletconnectProjectId ?? null} privy={l.p.integrations.privyAppId ?? null} credit={await siteCredit(l.p)} />;
+  return (
+    <>
+      <Site spec={spec} mode="live" walletconnect={l.p.integrations.walletconnectProjectId ?? null} privy={l.p.integrations.privyAppId ?? null} credit={await siteCredit(l.p)} />
+      {!isPrivateSite(l.p) && <JsonLd data={siteJsonLd(spec, l.url)} />}
+    </>
+  );
 }
 
 function PasswordGate({ slug, to, error }: { slug: string; to: string; error?: string }) {
