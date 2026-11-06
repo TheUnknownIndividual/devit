@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { askJson, llmAvailable } from "./llm";
+import { connectorContext } from "./connector-context";
 import { readIntent } from "./intent";
 import { THEME_LABELS } from "./themes";
 import { BLOCK_LABELS, CHAINS, THEME_IDS, type BlockType, type Chain, type Project, type ThemeId } from "./spec";
@@ -24,6 +25,7 @@ const Reply = z.object({ reply: z.string().min(1).max(3000), steps: z.array(z.st
 
 export async function planChange(p: Project, text: string): Promise<{ reply: string; steps: string[]; via: string }> {
   if (!llmAvailable()) return { reply: "Plan mode needs a model. Add one in Settings, or send the change without Plan.", steps: [], via: "offline editor" };
+  const cx = await connectorContext(p, text);
   const system = [
     "You plan edits to a token website made of JSON blocks, before anything changes. Don't change anything now.",
     "Reply with {reply, steps}. reply: one or two plain sentences on the approach. steps: 2-8 short concrete changes, each naming the section (e.g. 'Hero: headline becomes …', 'Add a Roadmap after How to buy').",
@@ -31,22 +33,23 @@ export async function planChange(p: Project, text: string): Promise<{ reply: str
     "Never invent prices, holder counts, partnerships or tokenomics; say [PLACEHOLDER] where a fact is missing.",
     knowledgeLine(p),
   ].filter(Boolean).join("\n");
-  const res = await askJson(system, JSON.stringify({ site: siteBrief(p), request: text }), (v) => { const r = Reply.safeParse(v); return r.success ? r.data : null; }, "light", "edit");
+  const res = await askJson(system, JSON.stringify({ site: siteBrief(p), request: text, ...(cx.text ? { "Context from your connectors": cx.text } : {}) }), (v) => { const r = Reply.safeParse(v); return r.success ? r.data : null; }, "light", "edit");
   if (!res) return { reply: "I couldn't reach a model just now. Try again in a moment.", steps: [], via: "offline editor" };
-  return { reply: res.value.reply, steps: res.value.steps ?? [], via: res.via };
+  return { reply: res.value.reply, steps: res.value.steps ?? [], via: cx.used.length ? `${res.via} · read ${cx.used.join(", ")}` : res.via };
 }
 
 export async function askAbout(p: Project, text: string): Promise<{ reply: string; via: string }> {
   if (!llmAvailable()) return { reply: "Questions need a model. Add one in Settings.", via: "offline editor" };
+  const cx = await connectorContext(p, text);
   const system = [
     "You answer questions about a token website the team is building in sitesmith. Don't change anything; if they want a change, say what to ask for.",
     "Answer in at most 5 short sentences, plainly. Use the site JSON for facts about the page; don't invent token facts.",
     "Builder facts: Publish puts it at <slug>.<sites domain>; custom domains, private links and passwords are on Pro; Export sends the code to GitHub or a zip; Database keeps signup entries; Integrations sets WalletConnect and Privy; double-click text in the preview to type over it; History restores any earlier version.",
     knowledgeLine(p),
   ].filter(Boolean).join("\n");
-  const res = await askJson(system, JSON.stringify({ site: siteBrief(p), question: text }), (v) => { const r = Reply.safeParse(v); return r.success ? r.data : null; }, "light", "edit");
+  const res = await askJson(system, JSON.stringify({ site: siteBrief(p), question: text, ...(cx.text ? { "Context from your connectors": cx.text } : {}) }), (v) => { const r = Reply.safeParse(v); return r.success ? r.data : null; }, "light", "edit");
   if (!res) return { reply: "I couldn't reach a model just now. Try again in a moment.", via: "offline editor" };
-  return { reply: res.value.reply, via: res.via };
+  return { reply: res.value.reply, via: cx.used.length ? `${res.via} · read ${cx.used.join(", ")}` : res.via };
 }
 
 // ---------- landing plan ----------

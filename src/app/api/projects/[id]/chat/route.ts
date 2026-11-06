@@ -9,6 +9,7 @@ import { getProject, updateProject } from "@/lib/store";
 import { CHAINS, newId, type Block, type SiteSpec } from "@/lib/spec";
 import { publicProject } from "@/lib/public";
 import { snapshot } from "@/lib/history";
+import { connectorContext } from "@/lib/connector-context";
 import { askAbout, planChange } from "@/lib/assist";
 import { THEMES, fitAccent, readableOn } from "@/lib/themes";
 import { overLimit } from "@/lib/net";
@@ -149,7 +150,9 @@ async function chat(req: Request, ctx: { params: Promise<{ id: string }> }) {
 
   const target = p.spec.blocks.find((b) => b.type === "hero") ?? p.spec.blocks[0];
   const context = docs?.length ? `\n\nFrom the files they added:\n${docs.map((d) => `--- ${d.name}\n${d.text}`).join("\n")}` : "";
-  const res = await applyComments(p, [{ id: newId(), blockId: target.id, blockLabel: "Whole page", text: text + context, assets }]);
+  const cx = await connectorContext(p, text);
+  const res = await applyComments(p, [{ id: newId(), blockId: target.id, blockLabel: "Whole page", text: text + context, assets, ...(cx.text ? { context: cx.text } : {}) }]);
+  if (cx.used.length) res.via = `${res.via} · read ${cx.used.join(", ")}`;
   const out = await updateProject(id, (q) => {
     if (!q.spec) return;
     snapshot(q, text);

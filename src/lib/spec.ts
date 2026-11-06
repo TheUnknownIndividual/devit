@@ -255,6 +255,8 @@ export interface PendingComment {
   text: string;
   /** Images sent with the comment (Asset ids). */
   assets?: string[];
+  /** Read-only results from the owner's connectors (lib/connector-context.ts), for the model only. */
+  context?: string;
 }
 
 export interface Project {
@@ -306,6 +308,8 @@ export interface Project {
   github?: { repo: string; url: string; branch: string; sha: string; at: number };
   /** Where the site's signup forms save entries (lib/database.ts). */
   database?: ProjectDatabase;
+  /** Ids of the owner's connectors (MCP) switched off for this project. */
+  connectorsOff?: string[];
   version: number;
 }
 
