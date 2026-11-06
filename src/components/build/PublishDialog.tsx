@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, ArrowUpRight, BarChart3, Check, CheckCircle2, Copy, Crown, Globe, Loader2, Rocket } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, BarChart3, Check, CheckCircle2, ChevronDown, Copy, Crown, Globe, Info, Loader2, Rocket, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
 import { BrandIcon, BRANDS } from "@/components/brand";
 import type { PublicProject } from "@/lib/public";
@@ -75,6 +75,8 @@ export function PublishDialog({ open, onClose, project, onSaved }: { open: boole
           <p className="mt-2 text-[12px] text-zinc-500">{project.sitesDomain ? <>Live at https://{slug || "…"}{suffix} the moment you publish. Updates show within a minute.</> : <>Served at /s/{slug || "…"} for now. Subdomains switch on once the sites domain is set.</>}</p>
         </div>
 
+        <SafetySection projectId={project.id} open={open} version={project.version} />
+
         {project.published && <VisitsSection projectId={project.id} open={open} />}
 
         <VisibilitySection projectId={project.id} open={open} />
@@ -107,6 +109,49 @@ export function PublishDialog({ open, onClose, project, onSaved }: { open: boole
         </button>
       </div>
     </Dialog>
+  );
+}
+
+type Finding = { level: "high" | "warn" | "info"; title: string; detail: string };
+
+/** The pre-publish check (lib/safety.ts): drainer wording, promises of profit, a wrong CA, lookalike or http links. */
+function SafetySection({ projectId, open, version }: { projectId: string; open: boolean; version: number }) {
+  const [f, setF] = useState<Finding[] | null>(null);
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    fetch(`/api/projects/${projectId}/safety`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setF(j.findings as Finding[]); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [projectId, open, version]);
+  if (!f) return null;
+  const high = f.filter((x) => x.level === "high").length, warn = f.filter((x) => x.level === "warn").length;
+  const head = high ? `${high} thing${high === 1 ? "" : "s"} to fix before publishing` : warn ? `${warn} thing${warn === 1 ? "" : "s"} worth a look` : "Nothing risky found";
+  const shown = more ? f : f.filter((x) => x.level !== "info").slice(0, 4);
+  return (
+    <div className={`min-w-0 rounded-[12px] border p-3.5 ${high ? "border-red-400/35 bg-red-400/[0.05]" : warn ? "border-amber-300/25 bg-amber-300/[0.04]" : "border-white/[0.08] bg-ink-850"}`}>
+      <div className="flex min-w-0 items-center gap-2">
+        {high ? <ShieldAlert size={15} className="shrink-0 text-red-300" /> : warn ? <ShieldAlert size={15} className="shrink-0 text-amber-300" /> : <ShieldCheck size={15} className="shrink-0 text-lime" />}
+        <span className="min-w-0 flex-1 text-[13px] font-medium text-white">Safety check: {head}</span>
+        {f.length > shown.length || more ? (
+          <button type="button" className="flex shrink-0 items-center gap-1 text-[12px] text-zinc-400 hover:text-white" onClick={() => setMore((m) => !m)}>{more ? "Less" : `All ${f.length}`} <ChevronDown size={12} className={more ? "rotate-180" : ""} /></button>
+        ) : null}
+      </div>
+      {shown.length > 0 && (
+        <ul className="mt-2.5 space-y-2">
+          {shown.map((x, i) => (
+            <li key={i} className="flex min-w-0 gap-2">
+              {x.level === "info" ? <Info size={13} className="mt-0.5 shrink-0 text-zinc-500" /> : <AlertTriangle size={13} className={`mt-0.5 shrink-0 ${x.level === "high" ? "text-red-300" : "text-amber-300"}`} />}
+              <div className="min-w-0">
+                <p className="text-[12.5px] text-zinc-200">{x.title}</p>
+                <p className="break-words text-[12px] leading-snug text-zinc-500">{x.detail}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {!f.length && <p className="mt-1.5 text-[12px] text-zinc-500">Checked the words and links for drainer wording, promises of profit, a wrong contract address and lookalike links.</p>}
+    </div>
   );
 }
 

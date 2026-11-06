@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowUp, BookOpen, HelpCircle, ChevronDown, Code2, Crosshair, Eye, ExternalLink, Globe, History, Lightbulb, Link2, Loader2, MessageCircleQuestion, MessageSquare, Mic, MicOff, Monitor, MousePointer2, Palette, Pencil, Plug, Server, FileText, ImagePlus, Smartphone, Tablet, Trash2, Undo2, X, Database, Hammer,
+  ArrowUp, BookOpen, HelpCircle, ChevronDown, Code2, Crosshair, Eye, ExternalLink, Globe, History, Lightbulb, Link2, Loader2, MessageCircleQuestion, MessageSquare, Mic, MicOff, Monitor, MousePointer2, Palette, Pencil, Plug, Server, FileText, ImagePlus, Smartphone, Tablet, Trash2, Undo2, X, Database, Hammer, Wand2,
 } from "lucide-react";
 import { HistoryPanel, KnowledgeDialog, useDictation } from "./BuilderExtras";
 import { CodePanel } from "./CodePanel";
+import { matchCommands, type SlashCommand } from "@/lib/commands";
 import { ProjectLogo } from "@/components/projects/ProjectList";
 import { LogoMark } from "@/components/Logo";
 import { Tour, BUILDER_TOUR, restartTour } from "@/components/ui/Tour";
@@ -63,6 +64,11 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
+  // "/" commands: the list shows while the box holds just "/word"; Esc or a click elsewhere hides it until the text changes.
+  const [slashAt, setSlashAt] = useState(0);
+  const [slashOff, setSlashOff] = useState(false);
+  const [enhancing, setEnhancing] = useState(false);
+  const [beforeEnhance, setBeforeEnhance] = useState<string | null>(null);
   const [busy, setBusy] = useState<null | "apply" | "chat" | "undo" | "patch">(null);
   const [dialog, setDialog] = useState<null | "integrations" | "rpc" | "publish" | "export" | "database" | "knowledge">(null);
   // Back from connecting GitHub (?export=1): reopen the export dialog where it left off.
@@ -191,6 +197,34 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
     el.style.overflowY = el.scrollHeight > max ? "auto" : "hidden";
   }, [text]);
 
+  const slash = canEdit && !slashOff && /^\/[a-z-]*$/i.test(text) ? matchCommands(text.slice(1)) : [];
+  useEffect(() => { setSlashOff(false); setSlashAt(0); }, [text]);
+  useEffect(() => {
+    if (!slash.length) return;
+    const down = (e: PointerEvent) => { if (!(e.target as Element).closest?.("[data-slash]")) setSlashOff(true); };
+    const blur = () => setSlashOff(true);
+    document.addEventListener("pointerdown", down, true);
+    window.addEventListener("blur", blur);
+    return () => { document.removeEventListener("pointerdown", down, true); window.removeEventListener("blur", blur); };
+  }, [slash.length]);
+  function runCommand(c: SlashCommand) {
+    if (c.mode) { setMode(c.mode); setText(""); }
+    else setText(c.text ?? "");
+    setTimeout(() => { const el = input.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 0);
+  }
+
+  // Enhance: a clearer version of the request, kept editable; one click puts the original back.
+  async function enhance() {
+    const t = text.trim();
+    if (t.length < 3 || enhancing) return;
+    setEnhancing(true); setNotice(null);
+    const r = await fetch("/api/enhance", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: t, projectId: p.id }) }).catch(() => null);
+    const j = await r?.json().catch(() => null);
+    setEnhancing(false);
+    if (r?.ok && j?.text) { setBeforeEnhance(t); setText(j.text); input.current?.focus(); }
+    else setNotice(j?.error ?? "Couldn't enhance that just now.");
+  }
+
   const dictation = useDictation((said) => setText((t) => (t ? `${t.trimEnd()} ${said}` : said)));
 
   async function call(path: string, body: unknown, kind: NonNullable<typeof busy>, method = "POST") {
@@ -210,7 +244,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
     const t = text.trim();
     if (!t || busy || building || uploading || !canEdit) return;
     const assets = attached.map((a) => a.id);
-    setText(""); setAttached([]); setDocs([]); setAttachError(null);
+    setText(""); setAttached([]); setDocs([]); setAttachError(null); setBeforeEnhance(null);
     if (picks.length) {
       const fresh = picks.map((s) => ({ id: newId(), blockId: s.blockId, blockLabel: s.element ? `${s.label} · ${s.element}` : s.label, element: s.element ?? undefined, text: t, ...(assets.length ? { assets } : {}) }));
       void apply([...comments, ...fresh]);
@@ -400,7 +434,19 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
                 <span className="ml-auto truncate text-[11px] text-zinc-500">{MODES.find((x) => x.id === mode)!.hint}</span>
               </div>
             )}
-            <div className="rounded-[16px] border border-white/10 bg-ink-900 focus-within:border-white/20">
+            <div className="relative rounded-[16px] border border-white/10 bg-ink-900 focus-within:border-white/20">
+              {slash.length > 0 && (
+                <div data-slash role="listbox" aria-label="Commands" className="absolute inset-x-0 bottom-full z-30 mb-2 max-h-[min(340px,50vh)] overflow-y-auto rounded-xl border border-white/10 bg-ink-850 p-1 shadow-[0_16px_48px_rgba(0,0,0,0.5)]">
+                  <p className="px-2.5 pb-1 pt-1.5 text-[11px] text-zinc-500">Commands · ↑↓ to move, Enter to use</p>
+                  {slash.map((c, i) => (
+                    <button key={c.cmd} type="button" role="option" aria-selected={i === slashAt} onMouseEnter={() => setSlashAt(i)} onMouseDown={(e) => e.preventDefault()} onClick={() => runCommand(c)}
+                      className={`flex h-9 w-full min-w-0 items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] ${i === slashAt ? "bg-white/[0.07] text-white" : "text-zinc-300"}`}>
+                      <span className="w-[92px] shrink-0 truncate font-mono text-[12px] text-sel">/{c.cmd}</span>
+                      <span className="min-w-0 flex-1 truncate">{c.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               {(attached.length > 0 || docs.length > 0 || uploading > 0 || attachError) && (
                 <div className="flex flex-wrap items-center gap-1.5 px-3 pt-2.5">
                   {attached.map((a) => (
@@ -437,12 +483,20 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
                 value={text}
                 disabled={building || !canEdit}
                 onChange={(e) => setText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}
+                onKeyDown={(e) => {
+                  if (slash.length) {
+                    if (e.key === "ArrowDown") { e.preventDefault(); setSlashAt((i) => (i + 1) % slash.length); return; }
+                    if (e.key === "ArrowUp") { e.preventDefault(); setSlashAt((i) => (i - 1 + slash.length) % slash.length); return; }
+                    if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") { e.preventDefault(); runCommand(slash[Math.min(slashAt, slash.length - 1)]); return; }
+                    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setSlashOff(true); return; }
+                  }
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
+                }}
                 onPaste={(e) => { const f = [...e.clipboardData.files]; if (f.length && ready) { e.preventDefault(); void attach(f); } }}
-                placeholder={!canEdit ? "View only" : building ? "Building…" : mode === "ask" ? "Ask anything about your site…" : mode === "plan" ? "Describe the change; I'll plan it before touching anything…" : picks.length > 1 ? `What should change in these ${picks.length}?` : selected ? `What should change in ${selected.label}?` : "Ask for a change, or paste a contract address…"}
+                placeholder={!canEdit ? "View only" : building ? "Building…" : mode === "ask" ? "Ask anything about your site…" : mode === "plan" ? "Describe the change; I'll plan it before touching anything…" : picks.length > 1 ? `What should change in these ${picks.length}?` : selected ? `What should change in ${selected.label}?` : "Ask for a change, paste a contract address, or type / for commands"}
                 className="block max-h-[45vh] min-h-[64px] w-full resize-none bg-transparent px-3.5 pb-1 pt-3 text-[13.5px] leading-relaxed text-white outline-none [overflow-wrap:anywhere] placeholder:text-zinc-500"
               />
-              <div className="flex items-center gap-1.5 p-2">
+              <div className="flex flex-wrap items-center gap-1.5 p-2">
                 <button
                   type="button"
                   data-tour="select"
@@ -460,9 +514,14 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
                     {dictation.on ? <MicOff size={15} /> : <Mic size={15} />}
                   </button>
                 )}
+                <button type="button" className="btn btn-ghost btn-icon h-8 w-8" disabled={!canEdit || building || text.trim().length < 3 || enhancing} onClick={() => void enhance()} aria-label="Enhance: make the request clearer" title="Enhance: make the request clearer before sending">{enhancing ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />}</button>
                 <ModelPicker disabled={!canEdit} />
                 <input ref={fileInput} type="file" multiple hidden accept="image/png,image/jpeg,image/webp,image/gif,.txt,.md,text/plain,text/markdown" onChange={(e) => { if (e.target.files) void attach(e.target.files); e.target.value = ""; }} />
-                <span className="ml-1 hidden text-[11.5px] text-zinc-500 lg:inline">{selected ? "Enter applies · Esc clears" : ""}</span>
+                {beforeEnhance !== null && text && text !== beforeEnhance ? (
+                  <button type="button" className="ml-1 truncate text-[11.5px] text-zinc-400 underline-offset-2 hover:text-white hover:underline" onClick={() => { setText(beforeEnhance); setBeforeEnhance(null); }}>Undo enhance</button>
+                ) : (
+                  <span className="ml-1 hidden text-[11.5px] text-zinc-500 lg:inline">{selected ? "Enter applies · Esc clears" : ""}</span>
+                )}
                 <button type="button" className="btn btn-primary btn-icon ml-auto h-8 w-8" disabled={!canEdit || !text.trim() || !!busy || building || uploading > 0} onClick={submit} aria-label={selected ? "Apply" : "Send"}>
                   {busy === "chat" ? <Loader2 size={15} className="animate-spin" /> : <ArrowUp size={15} />}
                 </button>
