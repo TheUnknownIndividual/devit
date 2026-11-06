@@ -10,12 +10,13 @@ import { projectEntitled } from "@/lib/entitlements";
 import type { Project } from "@/lib/spec";
 import { JsonLd } from "@/components/JsonLd";
 import { publishedUrl, siteDescription, siteJsonLd } from "@/lib/seo";
+import { recordVisit } from "@/lib/visits";
 
 // A published site. Locally it lives at /s/<slug>; the Cloudflare Worker serves the same page at <slug>.<domain>
 // and at a verified custom domain. The proxy says which (x-sitesmith-via) and adds noindex for private sites.
 export const dynamic = "force-dynamic";
 
-type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ e?: string }> };
+type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ e?: string; from?: string }> };
 
 /** The project, when this host may serve it: a custom domain needs its owner still on a plan that has them. */
 async function load(slug: string): Promise<{ p: Project; via: string | null; url: string } | null> {
@@ -61,12 +62,31 @@ export default async function Published({ params, searchParams }: Props) {
   if (gate === "link") notFound();
   if (gate === "password") return <PasswordGate slug={slug} to={l.via ? "/" : `/s/${slug}`} error={(await searchParams).e} />;
   const spec = (l.p.publishedSpec ?? l.p.spec)!;
+  // "Open" in the builder's Publish dialog adds ?from=builder, so the owner checking their own site isn't counted.
+  if ((await searchParams).from !== "builder") await countVisit(l.p.id);
   return (
     <>
       <Site spec={spec} mode="live" walletconnect={l.p.integrations.walletconnectProjectId ?? null} privy={l.p.integrations.privyAppId ?? null} credit={await siteCredit(l.p)} />
       {!isPrivateSite(l.p) && <JsonLd data={siteJsonLd(spec, l.url)} />}
     </>
   );
+}
+
+/**
+ * One page view for the site's visit counts (lib/visits.ts): not for prefetches, in-app router requests, or the
+ * owner opening it from the builder. The IP only feeds an in-memory hash; it's never stored.
+ */
+async function countVisit(projectId: string) {
+  const h = await headers();
+  if (h.get("rsc") || h.get("next-router-prefetch") || /prefetch|prerender/i.test(h.get("sec-purpose") ?? h.get("purpose") ?? "")) return;
+  const referer = h.get("referer");
+  if (referer) {
+    try { if (/^\/(build|preview|live|projects)\//.test(new URL(referer).pathname)) return; } catch { /* not a URL: count it as direct */ }
+  }
+  const secret = process.env.EDGE_SECRET;
+  const host = ((secret && h.get("x-sitesmith-edge") === secret && h.get("x-sitesmith-host")) || h.get("host"))?.toLowerCase().split(":")[0] ?? null;
+  const ip = h.get("cf-connecting-ip") || h.get("x-forwarded-for")?.split(",")[0].trim() || h.get("x-real-ip") || null;
+  recordVisit({ projectId, ip, ua: h.get("user-agent"), referer, host });
 }
 
 function PasswordGate({ slug, to, error }: { slug: string; to: string; error?: string }) {

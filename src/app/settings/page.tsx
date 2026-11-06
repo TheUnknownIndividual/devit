@@ -4,6 +4,7 @@ import { SettingsView } from "@/components/settings/SettingsView";
 import { SignInNudge } from "@/components/projects/SignInNudge";
 import { buildsToday, getUser, publicUser, viewer } from "@/lib/accounts";
 import { isAdmin, sweepPayments } from "@/lib/billing";
+import { sweepCreditOrders } from "@/lib/credit-orders";
 import { entitled, planOf } from "@/lib/entitlements";
 import { FAIR_USE_BUILDS_PER_DAY, plan } from "@/lib/plans";
 import { teamsOf } from "@/lib/teams";
@@ -15,7 +16,7 @@ export const metadata: Metadata = { title: "Settings · sitesmith" };
 export default async function Settings() {
   const v = await viewer();
   // Ask 1-Click about open payments first, so a plan that just landed shows as on.
-  if (v.user) await sweepPayments(v.user.id);
+  if (v.user) await Promise.all([sweepPayments(v.user.id), sweepCreditOrders(v.user.id)]);
   const user = v.user && ((await getUser(v.user.id)) ?? v.user);
   return (
     <div className="min-h-screen bg-ink-950">

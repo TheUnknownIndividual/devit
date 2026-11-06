@@ -41,7 +41,10 @@ async function sitePage(req: NextRequest, slug: string, via: "host" | "custom" |
   const h = new Headers(req.headers);
   h.delete("x-sitesmith-via");
   if (via) h.set("x-sitesmith-via", via);
-  const res = via ? NextResponse.rewrite(new URL(`/s/${slug}`, req.url), { request: { headers: h } }) : NextResponse.next({ request: { headers: h } });
+  // The query rides along (?e= from the password form, ?from=builder so the owner's own visit isn't counted).
+  const dest = new URL(`/s/${slug}`, req.url);
+  dest.search = req.nextUrl.search;
+  const res = via ? NextResponse.rewrite(dest, { request: { headers: h } }) : NextResponse.next({ request: { headers: h } });
   if (priv) {
     res.headers.set("x-robots-tag", "noindex, nofollow");
     res.headers.set("cache-control", "private, no-store");
