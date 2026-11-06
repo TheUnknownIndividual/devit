@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BookOpen, Check, Copy, FileCode2, History, Link2, Loader2, RotateCcw } from "lucide-react";
+import { BookOpen, Check, Copy, History, Link2, Loader2, RotateCcw } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
 import type { PublicProject } from "@/lib/public";
 
@@ -50,52 +50,6 @@ export function HistoryPanel({ versions, viewing, canEdit, busy, onView, onResto
   );
 }
 
-type CodeFile = { path: string; size: number; text: string };
-
-/** The same files Export ships, read-only, with a file list on the left. */
-export function CodeView({ projectId, version }: { projectId: string; version: number }) {
-  const [files, setFiles] = useState<CodeFile[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [cur, setCur] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    let live = true;
-    setError(null);
-    fetch(`/api/projects/${projectId}/code`, { cache: "no-store" }).then(async (r) => {
-      const j = await r.json().catch(() => ({}));
-      if (!live) return;
-      if (!r.ok) { setError(j.error ?? "Couldn't load the code."); return; }
-      setFiles(j.files);
-      setCur((c) => c ?? j.files[0]?.path ?? null);
-    }).catch(() => live && setError("Couldn't load the code."));
-    return () => { live = false; };
-  }, [projectId, version]);
-  if (error) return <div className="grid flex-1 place-items-center p-8 text-[13px] text-zinc-400">{error}</div>;
-  if (!files) return <div className="grid flex-1 place-items-center"><Loader2 size={16} className="animate-spin text-zinc-500" /></div>;
-  const file = files.find((f) => f.path === cur) ?? files[0];
-  return (
-    <div className="grid min-h-0 flex-1 grid-cols-[220px_1fr] bg-ink-950">
-      <nav className="min-h-0 overflow-y-auto border-r border-white/[0.07] py-2" aria-label="Files">
-        {files.map((f) => (
-          <button key={f.path} type="button" title={f.path} onClick={() => setCur(f.path)} className={`flex w-full items-center gap-1.5 truncate px-3 py-1 text-left font-mono text-[11.5px] ${f.path === file?.path ? "bg-white/[0.07] text-white" : "text-zinc-400 hover:text-zinc-200"}`}>
-            <FileCode2 size={12} className="shrink-0 text-zinc-500" /><span className="truncate">{f.path}</span>
-          </button>
-        ))}
-      </nav>
-      <div className="flex min-h-0 flex-col">
-        <div className="flex h-9 shrink-0 items-center gap-2 border-b border-white/[0.07] px-3">
-          <span className="truncate font-mono text-[11.5px] text-zinc-300">{file?.path}</span>
-          <span className="text-[11px] text-zinc-600">read-only · {file ? `${(file.size / 1024).toFixed(1)} KB` : ""}</span>
-          <button type="button" className="btn btn-ghost ml-auto h-7 px-2 text-[12px]" onClick={() => { if (file) { void navigator.clipboard.writeText(file.text); setCopied(true); setTimeout(() => setCopied(false), 1200); } }}>
-            {copied ? <Check size={12} className="text-lime" /> : <Copy size={12} />} Copy
-          </button>
-        </div>
-        <pre className="min-h-0 flex-1 overflow-auto p-3 font-mono text-[12px] leading-[1.6] text-zinc-200"><code>{file?.text.split("\n").map((l, i) => <div key={i} className="flex"><span className="w-10 shrink-0 select-none pr-3 text-right text-zinc-600">{i + 1}</span><span className="whitespace-pre">{l || " "}</span></div>)}</code></pre>
-      </div>
-    </div>
-  );
-}
-
 /** Standing instructions the agent reads on every change. */
 export function KnowledgeDialog({ open, onClose, project, onSaved }: { open: boolean; onClose: () => void; project: PublicProject; onSaved: (p: PublicProject) => void }) {
   const [text, setText] = useState(project.knowledge ?? "");
@@ -112,54 +66,51 @@ export function KnowledgeDialog({ open, onClose, project, onSaved }: { open: boo
   return (
     <Dialog open={open} onClose={onClose} title="Project knowledge" icon={<BookOpen size={16} />} width={560}
       footer={<><button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button><button type="button" className="btn btn-primary" disabled={busy} onClick={() => void save()}>{busy ? <Loader2 size={14} className="animate-spin" /> : null} Save</button></>}>
-      <div className="space-y-2.5">
+      <div className="min-w-0 space-y-2.5 p-5">
         <p className="text-[12.5px] text-zinc-400">The agent follows these on every change and in Plan and Ask: tone of voice, words to avoid, links to always use, facts about the project.</p>
-        <textarea className="field min-h-[180px] w-full resize-y py-2.5 text-[13px] leading-relaxed" maxLength={2000} value={text} onChange={(e) => setText(e.target.value)} placeholder={"Always lowercase.\nNever say \"moon\" or \"100x\".\nOur Telegram is t.me/frogs, our site is frogs.xyz.\nThe mascot is a green frog called Ribbit."} />
-        <div className="flex items-center text-[11.5px] text-zinc-500"><span>{err ? <span className="text-amber-300">{err}</span> : "Kept with the project; team members see it too."}</span><span className="ml-auto">{text.length}/2000</span></div>
+        <textarea className="field block h-auto min-h-[180px] max-h-[50vh] w-full resize-y py-2.5 text-[13px] leading-relaxed" maxLength={2000} value={text} onChange={(e) => setText(e.target.value)} placeholder={"Always lowercase.\nNever say \"moon\" or \"100x\".\nOur Telegram is t.me/frogs, our site is frogs.xyz.\nThe mascot is a green frog called Ribbit."} />
+        <div className="flex items-center gap-3 text-[11.5px] text-zinc-500"><span className="min-w-0">{err ? <span className="text-amber-300">{err}</span> : "Kept with the project; team members see it too."}</span><span className="ml-auto shrink-0 tabular-nums">{text.length}/2000</span></div>
       </div>
     </Dialog>
   );
 }
 
-/** The view-only builder link: make it, copy it, or turn it off. */
-export function ShareDialog({ open, onClose, project, onSaved }: { open: boolean; onClose: () => void; project: PublicProject; onSaved: (p: PublicProject) => void }) {
-  const [url, setUrl] = useState<string | null>(null);
+/** The view-only builder link, inside Publish: copy it (made on first copy), or turn it off. */
+export function ShareSection({ project, onSaved }: { project: PublicProject; onSaved: (p: PublicProject) => void }) {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
-  const make = useCallback(async () => {
-    setBusy(true);
+  const [err, setErr] = useState<string | null>(null);
+  async function copy() {
+    setBusy(true); setErr(null);
     const r = await fetch(`/api/projects/${project.id}/share`, { method: "POST" }).catch(() => null);
     const j = await r?.json().catch(() => null);
     setBusy(false);
-    if (r?.ok && j?.shareUrl) { setUrl(`${window.location.origin}${j.shareUrl}`); onSaved(j); }
-  }, [project.id, onSaved]);
-  useEffect(() => { if (open && project.shared && !url) void make(); }, [open, project.shared, url, make]);
+    if (!r?.ok || !j?.shareUrl) { setErr(j?.error ?? "Couldn't make the link."); return; }
+    onSaved(j);
+    await navigator.clipboard?.writeText(`${window.location.origin}${j.shareUrl}`).catch(() => undefined);
+    setCopied(true); setTimeout(() => setCopied(false), 1600);
+  }
   async function off() {
     setBusy(true);
     const r = await fetch(`/api/projects/${project.id}/share`, { method: "DELETE" }).catch(() => null);
     const j = await r?.json().catch(() => null);
     setBusy(false);
-    if (r?.ok && j?.id) { setUrl(null); onSaved(j); }
+    if (r?.ok && j?.id) onSaved(j);
   }
   return (
-    <Dialog open={open} onClose={onClose} title="Share the builder" icon={<Link2 size={16} />} width={520}>
-      <div className="space-y-3">
-        <p className="text-[12.5px] text-zinc-400">Anyone with this link sees the chat, history, code and preview, and can&apos;t change anything. Good for showing a teammate or a reviewer how the site was made.</p>
-        {url ? (
-          <>
-            <div className="flex items-center gap-2 rounded-[10px] border border-white/[0.08] bg-ink-900 p-2.5">
-              <code className="min-w-0 flex-1 truncate font-mono text-[12px] text-zinc-200">{url}</code>
-              <button type="button" className="btn btn-outline h-8 px-2.5 text-[12px]" onClick={() => { void navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1400); }}>
-                {copied ? <Check size={13} className="text-lime" /> : <Copy size={13} />} {copied ? "Copied" : "Copy"}
-              </button>
-            </div>
-            <button type="button" className="btn btn-ghost h-8 px-2.5 text-[12px] text-zinc-400" disabled={busy} onClick={() => void off()}>Turn the link off</button>
-          </>
-        ) : (
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void make()}>{busy ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />} Make a view-only link</button>
-        )}
+    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-[12px] border border-white/[0.08] bg-ink-850 p-3.5">
+      <Link2 size={16} className="shrink-0 text-zinc-400" />
+      <div className="min-w-0 flex-1 basis-[220px]">
+        <div className="text-[13px] font-medium text-white">Share the builder</div>
+        <p className="text-[12px] text-zinc-500">{err ? <span className="text-amber-300">{err}</span> : "A view-only link to this chat, history, code and preview. Nobody can change anything with it."}</p>
       </div>
-    </Dialog>
+      <div className="flex shrink-0 items-center gap-1.5">
+        {project.shared && <button type="button" className="btn btn-ghost h-8 px-2.5 text-[12px] text-zinc-400" disabled={busy} onClick={() => void off()}>Turn off</button>}
+        <button type="button" className="btn btn-outline h-8 px-2.5 text-[12px]" disabled={busy} onClick={() => void copy()}>
+          {busy ? <Loader2 size={13} className="animate-spin" /> : copied ? <Check size={13} className="text-lime" /> : <Copy size={13} />} {copied ? "Copied" : "Copy link to share"}
+        </button>
+      </div>
+    </div>
   );
 }
 

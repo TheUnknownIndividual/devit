@@ -291,7 +291,9 @@ export interface Project {
   knowledge?: string;
   /** Secret for the view-only builder link (/build/<id>?share=<key>). Missing: no share link. */
   shareKey?: string;
-  network: { chain: Chain; rpcUrl?: string };
+  /** chain: the one the site reads from. chains: set only for a multi-chain project (all of them, main first); a
+   *  one-chain project's chain is fixed once built. rpcUrls: the team's own endpoint per extra chain. */
+  network: { chain: Chain; rpcUrl?: string; chains?: Chain[]; rpcUrls?: Partial<Record<Chain, string>> };
   integrations: Integrations;
   published: { slug: string; at: number } | null;
   /** The spec as of the last publish; edits stay in the builder until the next one. */

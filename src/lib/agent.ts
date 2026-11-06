@@ -2,7 +2,7 @@ import { z } from "zod";
 import { askJson, llmAvailable } from "./llm";
 import { tokenContext } from "./chain";
 import { readToken, venue, venueBrief, venueLine, venuesNamed, withoutVenueMentions } from "./venues";
-import { readIntent, type Intent } from "./intent";
+import { moreChains, readIntent, type Intent } from "./intent";
 import { research } from "./research";
 import { readReference } from "./reference";
 import { withoutRefs as withoutRefsText } from "./reference-urls";
@@ -504,6 +504,8 @@ export async function runBuild(id: string): Promise<void> {
     p.research = found ?? undefined;
     if (refs.length) p.refs = refs;
     p.network.chain = chain;
+    const extra = moreChains(prompt, chain);
+    if (extra.length) p.network.chains = [chain, ...extra];
     p.status = "ready";
     p.version += 1;
     const t = (spec as SiteSpec).token;

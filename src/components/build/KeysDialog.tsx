@@ -17,12 +17,12 @@ export function KeysDialog({ open, onClose }: { open: boolean; onClose: () => vo
   return (
     <Dialog open={open} onClose={onClose} title="Your API keys" icon={<KeyRound size={16} />} width={600}>
       {!user ? (
-        <div className="space-y-3">
+        <div className="space-y-3 p-5">
           <p className="text-[13px] text-zinc-400">Sign in to add your own keys. They're encrypted on our server, tied to your account, and used for your builds before ours.</p>
           <button type="button" className="btn btn-primary" onClick={() => { onClose(); openSignIn(); }}><LogIn size={15} /> Sign in</button>
         </div>
       ) : (
-        <div className="max-h-[64vh] space-y-5 overflow-y-auto pr-1">
+        <div className="min-w-0 space-y-5 p-5">
           <p className="text-[12.5px] text-zinc-500">Your keys run first, then ours if they fail. Builds on your own model key don't count toward your plan. Keys are encrypted at rest and never shown again.</p>
           <section>
             <h3 className="mb-2 text-[12px] font-medium text-zinc-400">Models</h3>

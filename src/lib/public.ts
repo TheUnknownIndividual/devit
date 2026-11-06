@@ -7,7 +7,7 @@ import { versionsView } from "./history";
 export function publicProject(p: Project) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { network, publishedSpec, anon, access, domain, database, history, historyMeta, shareKey, ...rest } = p;
-  return { ...rest, versions: history.length ? versionsView(p) : [], shared: !!shareKey, visibility: access?.mode ?? "public", domain: domain ? { host: domain.host, status: domain.status } : null, database: databaseView(database), title: displayName(p), network: { chain: network.chain, rpcUrlSet: !!network.rpcUrl }, integrations: { ...p.integrations, rpcUrl: undefined }, liveUrl: p.published ? siteUrl(p.published.slug) : null, sitesDomain: sitesDomain(), publishedIsCurrent: publishedSpec ? JSON.stringify(publishedSpec) === JSON.stringify(p.spec) : null };
+  return { ...rest, versions: history.length ? versionsView(p) : [], shared: !!shareKey, visibility: access?.mode ?? "public", domain: domain ? { host: domain.host, status: domain.status } : null, database: databaseView(database), title: displayName(p), network: { chain: network.chain, rpcUrlSet: !!network.rpcUrl, chains: network.chains ?? null, locked: !!p.spec && !network.chains }, integrations: { ...p.integrations, rpcUrl: undefined }, liveUrl: p.published ? siteUrl(p.published.slug) : null, sitesDomain: sitesDomain(), publishedIsCurrent: publishedSpec ? JSON.stringify(publishedSpec) === JSON.stringify(p.spec) : null };
 }
 
 export type PublicProject = ReturnType<typeof publicProject>;

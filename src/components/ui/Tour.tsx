@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 
 // A first-visit walkthrough: each step lights up one part of the page (found by a [data-tour] selector) and points
@@ -40,6 +40,8 @@ export function Tour({ id, steps, delay = 900 }: { id: string; steps: TourStep[]
   const [i, setI] = useState(0);
   const [box, setBox] = useState<Box | null>(null);
   const [, tick] = useState(0);
+  const card = useRef<HTMLDivElement>(null);
+  const [cardH, setCardH] = useState(190);
 
   const live = steps.filter((s) => typeof document !== "undefined" && document.querySelector(s.sel));
   const step = live[i];
@@ -73,6 +75,9 @@ export function Tour({ id, steps, delay = 900 }: { id: string; steps: TourStep[]
     return () => { window.removeEventListener("resize", re); window.removeEventListener("scroll", re, true); clearInterval(t); };
   }, [on, step]);
 
+  // The card's real height (its text wraps differently per step and screen), so it is placed fully on screen.
+  useLayoutEffect(() => { if (card.current) setCardH(card.current.offsetHeight); });
+
   useEffect(() => {
     if (!on) return;
     const key = (e: KeyboardEvent) => {
@@ -86,15 +91,22 @@ export function Tour({ id, steps, delay = 900 }: { id: string; steps: TourStep[]
 
   if (!on || !step || !box) return null;
 
-  const pad = 6;
-  const hole = { top: box.top - pad, left: box.left - pad, width: box.width + pad * 2, height: box.height + pad * 2 };
-  const W = 320, H = 180, vw = window.innerWidth, vh = window.innerHeight;
-  // The card goes below the target when it fits, else above, else beside it; the arrow points back at the target.
-  const below = hole.top + hole.height + 14 + H < vh;
-  const above = hole.top - 14 - H > 0;
-  const side = !below && !above;
-  const left = side ? (hole.left + hole.width + 14 + W < vw ? hole.left + hole.width + 14 : Math.max(12, hole.left - W - 14)) : Math.min(Math.max(12, hole.left + hole.width / 2 - W / 2), vw - W - 12);
-  const top = side ? Math.min(Math.max(12, hole.top + hole.height / 2 - H / 2), vh - H - 12) : below ? hole.top + hole.height + 14 : hole.top - 14 - H;
+  const pad = 6, M = 8, gap = 14;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  // The lit-up box, kept inside the window: a tall target (the preview, the chat box at the bottom) is cut at the edges.
+  const t0 = Math.max(M, box.top - pad), l0 = Math.max(M, box.left - pad);
+  const hole = { top: t0, left: l0, width: Math.max(0, Math.min(vw - M, box.left + box.width + pad) - l0), height: Math.max(0, Math.min(vh - M, box.top + box.height + pad) - t0) };
+  const W = Math.min(320, vw - 2 * M), H = Math.min(cardH, vh - 2 * M);
+  // Below the target when it fits, else above, else beside it, else over it near the bottom; always fully on screen.
+  const below = hole.top + hole.height + gap + H <= vh - M;
+  const above = !below && hole.top - gap - H >= M;
+  const right = hole.left + hole.width + gap + W <= vw - M, leftSide = hole.left - gap - W >= M;
+  const side = !below && !above && (right || leftSide);
+  const clampX = (x: number) => Math.min(Math.max(M, x), vw - W - M);
+  const clampY = (y: number) => Math.min(Math.max(M, y), vh - H - M);
+  const left = side ? (right ? hole.left + hole.width + gap : hole.left - gap - W) : clampX(hole.left + hole.width / 2 - W / 2);
+  const top = below ? hole.top + hole.height + gap : above ? hole.top - gap - H : side ? clampY(hole.top + hole.height / 2 - H / 2) : vh - H - M;
+  const arrow = below || above;
   const arrowX = Math.min(Math.max(16, hole.left + hole.width / 2 - left), W - 16);
   const last = i === live.length - 1;
 
@@ -104,10 +116,11 @@ export function Tour({ id, steps, delay = 900 }: { id: string; steps: TourStep[]
       {/* The lit-up target: a darker page around it, a solid 3px frame in the accent and a pulsing outer ring so it can't be missed. */}
       <div className="pointer-events-none absolute rounded-[12px] border-[3px] border-sel transition-all duration-300" style={{ ...hole, boxShadow: "0 0 0 4px rgba(124,156,255,0.35), 0 0 0 9999px rgba(3,4,10,0.78)" }} />
       <div className="tour-pulse pointer-events-none absolute rounded-[12px]" style={hole} />
-      <div className="absolute w-[320px] rounded-[14px] border border-sel/50 bg-ink-850 p-4 shadow-[0_18px_50px_rgba(0,0,0,0.55)] transition-all duration-300" style={{ top: below || side ? top : undefined, bottom: !below && !side ? vh - (hole.top - 14) : undefined, left }}>
-        {!side && <span className="absolute h-3 w-3 rotate-45 border-sel/50 bg-ink-850" style={{ left: arrowX - 6, ...(below ? { top: -6.5, borderLeftWidth: 1, borderTopWidth: 1 } : { bottom: -6.5, borderRightWidth: 1, borderBottomWidth: 1 }) }} />}
+      <div ref={card} className="absolute rounded-[14px] border border-sel/50 bg-ink-850 p-4 shadow-[0_18px_50px_rgba(0,0,0,0.55)] transition-[top,left] duration-300" style={{ top, left, width: W }}>
+        {arrow && <span className="absolute h-3 w-3 rotate-45 border-sel/50 bg-ink-850" style={{ left: arrowX - 6, ...(below ? { top: -6.5, borderLeftWidth: 1, borderTopWidth: 1 } : { bottom: -6.5, borderRightWidth: 1, borderBottomWidth: 1 }) }} />}
+        <div className="overflow-y-auto" style={{ maxHeight: vh - 2 * M - 32 }}>
         <div className="flex items-start gap-2">
-          <p className="flex-1 text-[14px] font-semibold text-white">{step.title}</p>
+          <p className="min-w-0 flex-1 text-[14px] font-semibold text-white">{step.title}</p>
           <button type="button" className="-mr-1 -mt-1 grid h-7 w-7 place-items-center rounded-md text-zinc-500 hover:text-white" aria-label="Close the tour" onClick={done}><X size={14} /></button>
         </div>
         <p className="mt-1.5 text-[12.5px] leading-relaxed text-zinc-300">{step.body}</p>
@@ -115,6 +128,7 @@ export function Tour({ id, steps, delay = 900 }: { id: string; steps: TourStep[]
           <span className="text-[11px] text-zinc-500">{i + 1} of {live.length}</span>
           <button type="button" className="btn btn-ghost ml-auto h-8 px-2.5 text-[12px]" onClick={i === 0 ? done : () => setI(i - 1)}>{i === 0 ? "Skip" : "Back"}</button>
           <button type="button" className="btn btn-primary h-8 px-3 text-[12px]" autoFocus onClick={last ? done : () => setI(i + 1)}>{last ? "Got it" : "Next"}</button>
+        </div>
         </div>
       </div>
     </div>

@@ -39,13 +39,31 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const b = parsed.data;
   const g = await editable(id);
   if (g instanceof Response) return g;
+  // A built site's chain is fixed: its token, buy box and copy are made for it. A multi-chain project moves only
+  // between the chains it was made for.
+  if (b.chain) {
+    const cur = await getProject(id);
+    if (cur?.spec && b.chain !== cur.network.chain && !(cur.network.chains ?? []).includes(b.chain)) {
+      return NextResponse.json({ error: "This site is built for one chain. Start a new project for another chain." }, { status: 409 });
+    }
+  }
   const p = await updateProject(id, (p) => {
     // A rename is the project's name in lists and the builder; the site's own copy keeps its name unless it has none yet.
     if (b.name) {
       p.name = b.name;
       if (p.spec && !p.spec.name.trim()) p.spec.name = b.name;
     }
-    if (b.chain) p.network.chain = b.chain;
+    if (b.chain && b.chain !== p.network.chain && (!p.spec || (p.network.chains ?? []).includes(b.chain))) {
+      // Each chain of a multi-chain project keeps its own RPC: park this one's, bring that one's back.
+      if (p.network.chains) {
+        const urls = { ...(p.network.rpcUrls ?? {}) };
+        if (p.network.rpcUrl) urls[p.network.chain] = p.network.rpcUrl; else delete urls[p.network.chain];
+        p.network.rpcUrl = urls[b.chain];
+        delete urls[b.chain];
+        p.network.rpcUrls = urls;
+      }
+      p.network.chain = b.chain;
+    }
     if (b.rpcUrl !== undefined) p.network.rpcUrl = b.rpcUrl || undefined;
     if (b.walletconnectProjectId !== undefined) p.integrations.walletconnectProjectId = b.walletconnectProjectId || undefined;
     if (b.privyAppId !== undefined) p.integrations.privyAppId = b.privyAppId || undefined;

@@ -31,6 +31,29 @@ const CHAIN_WORDS: Array<[Chain, RegExp]> = [
   ["ethereum", /\b(ethereum|eth|mainnet)\b/i],
 ];
 
+// For telling a multi-chain project from a one-chain one: stricter than CHAIN_WORDS ("eth" is how Base and Robinhood
+// tokens are bought, and "near" is an English word), so only a clear second chain counts.
+const STRICT_CHAIN: Array<[Chain, RegExp]> = [
+  ["robinhood", /\brobinhood\b/i],
+  ["solana", /\bsolana\b/i],
+  ["near", /\b(on|to|and|the) near\b|\bnear (protocol|chain|network|mainnet)\b/i],
+  ["base", /\b(on|in|to|and) base\b|\bbase (chain|network|mainnet)\b/i],
+  ["bsc", /\b(bsc|bnb chain|binance smart chain)\b/i],
+  ["ethereum", /\bethereum\b/i],
+];
+const MULTI = /\b(multi-?chain|cross-?chain|omni-?chain|multi-?network|every chain|several chains|multiple chains)\b/i;
+
+/**
+ * The chains a project lives on besides its main one, when the words say so ("on Solana and Base", "multichain").
+ * Empty for the usual one-chain memecoin: that project's chain is fixed once built.
+ */
+export function moreChains(prompt: string, main: Chain): Chain[] {
+  const plain = withoutReferences(prompt).replace(/\bhttps?:\/\/\S+/g, " ");
+  const named = STRICT_CHAIN.filter(([c, re]) => c !== main && re.test(plain)).map(([c]) => c);
+  if (named.length) return named;
+  return MULTI.test(plain) ? (["solana", "base", "ethereum", "near"] as Chain[]).filter((c) => c !== main).slice(0, 3) : [];
+}
+
 const WANT_WORDS: Array<[BlockType, RegExp]> = [
   ["holders", /\bholders?\b/i], ["roadmap", /\broadmap|milestones?|plans?\b/i], ["treasury", /\btreasury|multisig|dao|grants?\b/i],
   ["faq", /\bfaq|questions\b/i], ["chart", /\bchart|price\b/i], ["trades", /\btrades|buys|live\b/i], ["tokenomics", /\btokenomics|supply|split\b/i],

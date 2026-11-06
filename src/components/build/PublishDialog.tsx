@@ -6,6 +6,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { BrandIcon, BRANDS } from "@/components/brand";
 import type { PublicProject } from "@/lib/public";
 import { DomainSection, VisibilitySection } from "./PublishPro";
+import { ShareSection } from "./BuilderExtras";
 
 /** The owner opening their own site from here isn't counted as a visit (app/s/[slug]/page.tsx). */
 const ownVisit = (url: string) => `${url}${url.includes("?") ? "&" : "?"}from=builder`;
@@ -78,6 +79,7 @@ export function PublishDialog({ open, onClose, project, onSaved }: { open: boole
 
         <VisibilitySection projectId={project.id} open={open} />
         <DomainSection projectId={project.id} open={open} suggest={suggest(project)} />
+        <ShareSection project={project} onSaved={onSaved} />
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-[12px] border border-sel/60 bg-sel/[0.06] p-3.5">

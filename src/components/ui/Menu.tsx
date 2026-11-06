@@ -33,11 +33,15 @@ export function Menu<T extends string>({
 
   useEffect(() => {
     if (!open) return;
-    const down = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    // Any press outside closes it. A click into the preview iframe never reaches this document, but it takes focus
+    // away from the window, so blur closes it too.
+    const down = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", down);
+    const blur = () => setOpen(false);
+    document.addEventListener("pointerdown", down, true);
     document.addEventListener("keydown", key);
-    return () => { document.removeEventListener("mousedown", down); document.removeEventListener("keydown", key); };
+    window.addEventListener("blur", blur);
+    return () => { document.removeEventListener("pointerdown", down, true); document.removeEventListener("keydown", key); window.removeEventListener("blur", blur); };
   }, [open]);
 
   return (
@@ -47,8 +51,8 @@ export function Menu<T extends string>({
         <div
           role="menu"
           aria-label={label}
-          style={{ width }}
-          className={`absolute z-50 animate-menu rounded-xl border border-white/10 bg-ink-850 p-1 shadow-[0_16px_48px_rgba(0,0,0,0.5)] ${up ? "bottom-full mb-2 [--my0:4px]" : "top-full mt-2 [--my0:-4px]"} ${align === "right" ? "right-0" : "left-0"} ${align === "right" ? (up ? "origin-bottom-right" : "origin-top-right") : up ? "origin-bottom-left" : "origin-top-left"}`}
+          style={{ width, maxWidth: "calc(100vw - 16px)" }}
+          className={`absolute z-50 max-h-[min(420px,70vh)] overflow-y-auto animate-menu rounded-xl border border-white/10 bg-ink-850 p-1 shadow-[0_16px_48px_rgba(0,0,0,0.5)] ${up ? "bottom-full mb-2 [--my0:4px]" : "top-full mt-2 [--my0:-4px]"} ${align === "right" ? "right-0" : "left-0"} ${align === "right" ? (up ? "origin-bottom-right" : "origin-top-right") : up ? "origin-bottom-left" : "origin-top-left"}`}
         >
           {header && <div className="mb-1 border-b border-white/[0.07] px-2.5 pb-2 pt-1.5">{header}</div>}
           {items.map((it) => (

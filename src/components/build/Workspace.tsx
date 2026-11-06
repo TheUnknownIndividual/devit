@@ -5,7 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowUp, BookOpen, HelpCircle, ChevronDown, Code2, Crosshair, Eye, ExternalLink, Globe, History, Lightbulb, Link2, Loader2, MessageCircleQuestion, MessageSquare, Mic, MicOff, Monitor, MousePointer2, Palette, Pencil, Plug, Server, FileText, ImagePlus, Smartphone, Tablet, Trash2, Undo2, X, Database, Hammer,
 } from "lucide-react";
-import { CodeView, HistoryPanel, KnowledgeDialog, ShareDialog, useDictation } from "./BuilderExtras";
+import { HistoryPanel, KnowledgeDialog, useDictation } from "./BuilderExtras";
+import { CodePanel } from "./CodePanel";
 import { ProjectLogo } from "@/components/projects/ProjectList";
 import { LogoMark } from "@/components/Logo";
 import { Tour, BUILDER_TOUR, restartTour } from "@/components/ui/Tour";
@@ -63,7 +64,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
   const fileInput = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState<null | "apply" | "chat" | "undo" | "patch">(null);
-  const [dialog, setDialog] = useState<null | "integrations" | "rpc" | "publish" | "export" | "database" | "knowledge" | "share">(null);
+  const [dialog, setDialog] = useState<null | "integrations" | "rpc" | "publish" | "export" | "database" | "knowledge">(null);
   // Back from connecting GitHub (?export=1): reopen the export dialog where it left off.
   useEffect(() => {
     const u = new URL(window.location.href);
@@ -180,6 +181,16 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
     else { setNotice(j?.error ?? "That edit didn't save."); setP((cur) => ({ ...cur, version: cur.version })); if (frameReady && p.spec) send({ type: "ss:spec", spec: p.spec }); }
   }, [canEdit, p.id, p.spec, frameReady, send]);
 
+  // The message box grows with what's typed (like bolt.new) up to about half the window, then scrolls inside.
+  useEffect(() => {
+    const el = input.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const max = Math.max(120, Math.round(window.innerHeight * 0.45));
+    el.style.height = `${Math.min(el.scrollHeight, max)}px`;
+    el.style.overflowY = el.scrollHeight > max ? "auto" : "hidden";
+  }, [text]);
+
   const dictation = useDictation((said) => setText((t) => (t ? `${t.trimEnd()} ${said}` : said)));
 
   async function call(path: string, body: unknown, kind: NonNullable<typeof busy>, method = "POST") {
@@ -250,29 +261,32 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
             <button type="button" onClick={() => setMobileTab("chat")} className={`btn h-8 ${mobileTab === "chat" ? "bg-white/[0.09] text-white" : "btn-ghost"}`}><MessageSquare size={14} /></button>
             <button type="button" onClick={() => setMobileTab("preview")} className={`btn h-8 ${mobileTab === "preview" ? "bg-white/[0.09] text-white" : "btn-ghost"}`}><Monitor size={14} /></button>
           </div>
-          <Menu
-            label="Network"
-            align="right"
-            value={chain}
-            onPick={(c: Chain) => void call("", { chain: c }, "patch", "PATCH")}
-            items={(Object.keys(CHAINS) as Chain[]).map((c) => ({ value: c, label: CHAINS[c].name, icon: <ChainIcon chain={c} size={15} /> }))}
-            trigger={(o) => (
-              <button type="button" className="btn btn-outline" disabled={!canEdit} aria-label={`Network: ${CHAINS[chain].name}`}>
-                <ChainIcon chain={chain} size={15} /><span className="hidden lg:inline">{CHAINS[chain].name}</span><ChevronDown size={14} className={`text-zinc-500 ${o ? "rotate-180" : ""}`} />
-              </button>
-            )}
-          />
-          <button type="button" className="btn btn-outline btn-icon hidden sm:inline-flex" disabled={!canEdit} onClick={() => setDialog("rpc")} aria-label="RPC endpoint" title="RPC endpoint">
-            <span className="relative"><Server size={15} />{p.network.rpcUrlSet && <span className="absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full bg-lime" />}</span>
-          </button>
-          {ready && canEdit && (
-            <Menu
-              label="Style"
+          {/* The chain: fixed once a one-chain site is built, so this opens its RPC settings. A multi-chain project
+              switches between the chains it was made for; before the first build any chain can be picked. */}
+          {ready && !p.network.chains ? (
+            <button type="button" className="btn btn-outline" disabled={!canEdit} onClick={() => setDialog("rpc")} aria-label={`${CHAINS[chain].name}: RPC endpoint`} title={`Built for ${CHAINS[chain].name}. Click to set the RPC endpoint.`}>
+              <ChainIcon chain={chain} size={15} /><span className="hidden lg:inline">{CHAINS[chain].name}</span>
+              <span className="relative text-zinc-500"><Server size={13} />{p.network.rpcUrlSet && <span className="absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full bg-lime" />}</span>
+            </button>
+          ) : (
+            <Menu<Chain | "rpc">
+              label="Network"
               align="right"
-              value={p.spec!.theme.id}
-              onPick={(t: ThemeId) => void call("", { themeId: t }, "patch", "PATCH")}
-              items={(Object.keys(THEME_LABELS) as ThemeId[]).map((t) => ({ value: t, label: THEME_LABELS[t], icon: <ThemeSwatch id={t} size={15} /> }))}
-              trigger={() => <button type="button" className="btn btn-outline btn-icon hidden sm:inline-flex" aria-label="Style" title="Style"><Palette size={15} /></button>}
+              width={250}
+              value={chain}
+              header={p.network.chains ? <p className="text-[11.5px] text-zinc-400">This project runs on {p.network.chains.length} chains. Pick the one the site reads from.</p> : undefined}
+              onPick={(c) => { if (c === "rpc") setDialog("rpc"); else void call("", { chain: c }, "patch", "PATCH"); }}
+              items={[
+                ...((p.network.chains ?? (Object.keys(CHAINS) as Chain[])).map((c) => ({ value: c as Chain | "rpc", label: CHAINS[c].name, icon: <ChainIcon chain={c} size={15} /> }))),
+                { value: "rpc" as const, label: `RPC endpoint for ${CHAINS[chain].name}…`, icon: <Server size={14} className="text-zinc-400" />, hint: p.network.rpcUrlSet ? "your own" : undefined },
+              ]}
+              trigger={(o) => (
+                <button type="button" className="btn btn-outline" disabled={!canEdit} aria-label={`Network: ${CHAINS[chain].name}`}>
+                  <ChainIcon chain={chain} size={15} /><span className="hidden lg:inline">{CHAINS[chain].name}</span>
+                  {p.network.chains && <span className="text-[11px] text-zinc-500">+{p.network.chains.length - 1}</span>}
+                  <ChevronDown size={14} className={`text-zinc-500 ${o ? "rotate-180" : ""}`} />
+                </button>
+              )}
             />
           )}
           <button type="button" className="btn btn-outline" disabled={!canEdit} onClick={() => setDialog("integrations")}><Plug size={15} /><span className="hidden lg:inline">Integrations</span></button>
@@ -280,7 +294,6 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
           <button type="button" className="btn btn-outline btn-icon hidden sm:inline-flex" disabled={!ready || !canEdit} onClick={() => setDialog("export")} aria-label="Export code" title="Export code (GitHub or zip)"><BrandIcon icon={BRANDS.github} size={15} color="currentColor" /></button>
           <span className="mx-0.5 hidden h-5 w-px bg-white/10 sm:block" />
           <button type="button" className="btn btn-outline btn-icon hidden sm:inline-flex" disabled={!canEdit} onClick={() => setDialog("knowledge")} aria-label="Project knowledge" title={p.knowledge ? "Project knowledge (set)" : "Project knowledge: instructions the agent always follows"}><span className="relative"><BookOpen size={15} />{p.knowledge && <span className="absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full bg-lime" />}</span></button>
-          <button type="button" className="btn btn-outline btn-icon hidden sm:inline-flex" disabled={!canEdit} onClick={() => setDialog("share")} aria-label="Share a view-only link" title="Share a view-only link to this builder"><Link2 size={15} /></button>
           <span className="mx-0.5 hidden h-5 w-px bg-white/10 sm:block" />
           <button type="button" className="btn btn-ghost btn-icon hidden lg:inline-flex" onClick={() => restartTour("builder")} aria-label="Show the tour" title="Show the tour again"><HelpCircle size={16} /></button>
           <button type="button" data-tour="history" className={`btn btn-icon hidden sm:inline-flex ${side === "history" ? "bg-white/[0.09] text-white" : "btn-ghost"}`} disabled={!ready} onClick={() => setSide((x) => (x === "history" ? null : "history"))} aria-label="History" title="History: every earlier version"><History size={16} /></button>
@@ -427,7 +440,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}
                 onPaste={(e) => { const f = [...e.clipboardData.files]; if (f.length && ready) { e.preventDefault(); void attach(f); } }}
                 placeholder={!canEdit ? "View only" : building ? "Building…" : mode === "ask" ? "Ask anything about your site…" : mode === "plan" ? "Describe the change; I'll plan it before touching anything…" : picks.length > 1 ? `What should change in these ${picks.length}?` : selected ? `What should change in ${selected.label}?` : "Ask for a change, or paste a contract address…"}
-                className="block w-full resize-none bg-transparent px-3.5 pt-3 text-[13.5px] leading-relaxed text-white outline-none placeholder:text-zinc-500"
+                className="block max-h-[45vh] min-h-[64px] w-full resize-none bg-transparent px-3.5 pb-1 pt-3 text-[13.5px] leading-relaxed text-white outline-none [overflow-wrap:anywhere] placeholder:text-zinc-500"
               />
               <div className="flex items-center gap-1.5 p-2">
                 <button
@@ -461,7 +474,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
         {/* Preview */}
         <section className={`min-h-0 flex-col bg-[radial-gradient(rgba(255,255,255,0.05)_1px,transparent_1px)] [background-size:16px_16px] ${mobileTab === "preview" ? "flex" : "hidden"} md:flex`}>
           <div className="flex min-h-0 flex-1 justify-center overflow-hidden p-3">
-            <div className="flex h-full flex-col overflow-hidden rounded-[14px] border border-white/[0.08] bg-ink-900 shadow-[0_12px_40px_rgba(0,0,0,0.4)] transition-[width] duration-300" style={{ width: WIDTH[device], maxWidth: "100%" }}>
+            <div className="flex h-full flex-col overflow-hidden rounded-[14px] border border-white/[0.08] bg-ink-900 shadow-[0_12px_40px_rgba(0,0,0,0.4)] transition-[width] duration-300" style={{ width: view === "code" ? "100%" : WIDTH[device], maxWidth: "100%" }}>
               <div className="flex h-9 shrink-0 items-center gap-2 border-b border-white/[0.06] px-3">
                 <span className="flex gap-1.5"><span className="h-2 w-2 rounded-full bg-white/15" /><span className="h-2 w-2 rounded-full bg-white/15" /><span className="h-2 w-2 rounded-full bg-white/15" /></span>
                 <span className="mx-auto flex h-6 min-w-0 max-w-[360px] flex-1 items-center justify-center gap-1.5 truncate rounded-md bg-white/[0.04] px-2 font-mono text-[11px] text-zinc-500">
@@ -480,7 +493,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
                   <button type="button" className="btn btn-ghost h-7 px-2.5 text-[12px]" onClick={() => setViewing(null)}>Back to current</button>
                 </div>
               )}
-              {ready && view === "code" && <CodeView projectId={p.id} version={p.version} />}
+              {ready && view === "code" && <CodePanel projectId={p.id} version={p.version} onAsk={canEdit ? (t) => { setMode("ask"); setText(t); setMobileTab("chat"); setTimeout(() => input.current?.focus(), 0); } : undefined} />}
               {ready ? (
                 <iframe ref={frame} key={p.id} src={`/preview/${p.id}${q}`} title="Site preview" data-tour="preview" className={`min-h-0 w-full flex-1 bg-white ${view === "code" ? "hidden" : ""}`} />
               ) : (
@@ -496,7 +509,6 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
       <PublishDialog open={dialog === "publish"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
       <ExportDialog open={dialog === "export"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
       <KnowledgeDialog open={dialog === "knowledge"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
-      <ShareDialog open={dialog === "share"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
       {canEdit && ready && <Tour id="builder" steps={BUILDER_TOUR} />}
       <DatabaseDialog open={dialog === "database"} onClose={() => setDialog(null)} project={p} hasForm={!!p.spec?.blocks.some((b) => b.type === "signup")} />
     </div>
