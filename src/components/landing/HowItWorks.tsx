@@ -87,6 +87,7 @@ export function HowItWorks() {
         <h2 data-reveal className="text-[28px] font-semibold tracking-[-0.02em] text-white">Start from a style</h2>
         <p data-reveal style={{ "--d": 1 } as React.CSSProperties} className="mt-2 max-w-[560px] text-[15px] text-zinc-400">Real sites, built from the same blocks yours will be. Pick one and it fills the prompt; change anything after with a comment.</p>
         <div data-reveal style={{ "--d": 2 } as React.CSSProperties} className="mt-8"><StyleShowcase /></div>
+        <p className="mt-4 text-[13px] text-zinc-500"><a href="/templates" className="text-zinc-300 underline underline-offset-4 hover:text-white">Browse all templates</a> for memecoin, dApp and NFT sites.</p>
       </section>
 
       <section id="integrations" className="scroll-mt-20 pt-20">

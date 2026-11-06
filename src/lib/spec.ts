@@ -120,13 +120,15 @@ export interface TokenVenue {
 
 export type BlockType =
   | "nav" | "hero" | "stats" | "buy" | "chart" | "trades" | "how"
-  | "tokenomics" | "holders" | "roadmap" | "treasury" | "socials" | "faq" | "footer" | "story" | "posts" | "signup";
+  | "tokenomics" | "holders" | "roadmap" | "treasury" | "socials" | "faq" | "footer" | "story" | "posts" | "signup"
+  | "toasts" | "leaderboard" | "pnl" | "raid" | "milestones";
 
 export const BLOCK_LABELS: Record<BlockType, string> = {
   nav: "Navigation", hero: "Hero", stats: "Live stats", buy: "Buy box", chart: "Chart",
   trades: "Live trades", how: "How to buy", tokenomics: "Tokenomics", holders: "Holders",
   roadmap: "Roadmap", treasury: "Treasury", socials: "Socials", faq: "FAQ", footer: "Footer",
   story: "Story", posts: "From X", signup: "Signup form",
+  toasts: "Buy toasts", leaderboard: "Top buyers", pnl: "What if you bought", raid: "Raid posts", milestones: "Milestones",
 };
 
 export interface Block {

@@ -7,6 +7,7 @@ import { usd, num, ago } from "./format";
 import { BuyBox, Chart, Count, CopyCA, LiveStats, LiveTrades, MotionFx, Ticker, WalletButton, type Mode } from "./client/parts";
 import { Treasury } from "./client/treasury";
 import { SignupForm } from "./client/signup";
+import { BuyToasts, Leaderboard, Milestones, RAID_POSTS, Raid, WhatIf } from "./client/fomo";
 import { fxOf } from "@/lib/themes";
 import type { TreasuryData } from "@/lib/treasury";
 
@@ -228,7 +229,7 @@ function BlockView({ b, spec, mode, walletconnect, privy, credit }: { b: Block; 
               <Title text={s(p.title, `Buy $${spec.ticker}`)} />
               <p className="ss-muted" data-el="body" style={{ maxWidth: 420, margin: 0 }}>{s(p.body, `Buy with ${CHAINS[spec.chain].native}, or pay with SOL, ETH, BTC or USDC from any chain through NEAR Intents.`)}</p>
             </div>
-            <BuyBox chain={spec.chain} token={spec.token} ticker={spec.ticker} />
+            <BuyBox chain={spec.chain} token={spec.token} ticker={spec.ticker} presets={arr<unknown>(p.presets).filter((n): n is number => typeof n === "number" && n > 0 && Number.isFinite(n)).slice(0, 5)} />
           </div>
         </Section>
       );
@@ -307,6 +308,36 @@ function BlockView({ b, spec, mode, walletconnect, privy, credit }: { b: Block; 
         </Section>
       );
     }
+    case "toasts": {
+      const min = typeof p.minUsd === "number" && p.minUsd >= 0 ? p.minUsd : 50;
+      return <BuyToasts token={spec.token} ticker={spec.ticker} mode={mode} minUsd={min} seconds={typeof p.seconds === "number" ? p.seconds : 6} blockId={b.id} />;
+    }
+    case "leaderboard": {
+      const n = typeof p.count === "number" ? Math.max(3, Math.min(20, Math.round(p.count))) : 10;
+      return <Section b={b}><div className="ss-wrap"><Title text={s(p.title, "Top buyers")} /><Leaderboard token={spec.token} mode={mode} count={n} /></div></Section>;
+    }
+    case "pnl":
+      return (
+        <Section b={b}>
+          <div className="ss-wrap" style={{ maxWidth: 820 }}>
+            <Title text={s(p.title, "What if you'd bought")} />
+            <WhatIf token={spec.token} ticker={spec.ticker} mode={mode} amount={typeof p.amount === "number" && p.amount > 0 ? p.amount : 100} />
+          </div>
+        </Section>
+      );
+    case "raid": {
+      const posts = arr<unknown>(p.posts).filter((x): x is string => typeof x === "string" && !!x.trim()).slice(0, 5);
+      return (
+        <Section b={b}>
+          <div className="ss-wrap" style={{ maxWidth: 820 }}>
+            <Title text={s(p.title, "Spread the word")} />
+            {s(p.body) && <p className="ss-muted" data-el="body" style={{ margin: "0 0 20px" }}>{s(p.body)}</p>}
+            <Raid ticker={spec.ticker} chain={spec.chain} token={spec.token} posts={posts.length ? posts : RAID_POSTS} />
+          </div>
+        </Section>
+      );
+    }
+    case "milestones": return <Section b={b}><div className="ss-wrap"><Title text={s(p.title, "Next milestone")} /><Milestones token={spec.token} mode={mode} /></div></Section>;
     case "footer":
       return (
         <footer data-block-id={b.id} data-block-type="footer" data-block-label="Footer" className="ss-foot">

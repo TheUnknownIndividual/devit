@@ -114,6 +114,14 @@ export function PromptBox() {
     }).catch(() => undefined);
   }, []);
 
+  // /templates sends "?style=<id>&kind=<memecoin|dapp|nft>": choose them once on arrival.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const st = q.get("style"), k = q.get("kind");
+    if (st && st in THEME_LABELS) setStyle(st as ThemeId);
+    if (k === "memecoin" || k === "dapp" || k === "nft") setKind(k);
+  }, []);
+
   // Other parts of the page (template cards, "Get started") steer the box through one event.
   useEffect(() => {
     const on = (e: Event) => {

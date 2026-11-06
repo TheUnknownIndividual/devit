@@ -233,11 +233,11 @@ export function MotionFx({ mode, toTop = true, progress = false, nav = true }: {
 
 // ---------- trades ----------
 
-interface Trade { side: "buy" | "sell"; usd: number; who: string; at: number }
+export interface Trade { side: "buy" | "sell"; usd: number; who: string; at: number }
 
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 /** A made-up wallet for the showcase's trades. */
-function demoWho(): string { return Array.from({ length: 44 }, () => B58[Math.floor(Math.random() * B58.length)]).join(""); }
+export function demoWho(): string { return Array.from({ length: 44 }, () => B58[Math.floor(Math.random() * B58.length)]).join(""); }
 
 export function LiveTrades({ token, mode }: { token: TokenInfo | null; mode: Mode }) {
   const [trades, setTrades] = useState<Trade[] | null>(null);
@@ -314,7 +314,7 @@ export function Chart({ token, mode, dark }: { token: TokenInfo | null; mode: Mo
 interface PayOption { key: string; label: string; chain: string }
 interface IntentQuote { depositAddress: string | null; amountIn: string; amountOut: string; amountOutUsd: string | null; timeEstimate: number | null; deliver: { symbol: string; direct: boolean }; dry: boolean; private?: boolean }
 
-export function BuyBox({ chain, token, ticker }: { chain: Chain; token: TokenInfo | null; ticker: string }) {
+export function BuyBox({ chain, token, ticker, presets }: { chain: Chain; token: TokenInfo | null; ticker: string; presets?: number[] }) {
   const [tab, setTab] = useState<"same" | "any">("same");
   const native = CHAINS[chain].native;
   return (
@@ -323,12 +323,12 @@ export function BuyBox({ chain, token, ticker }: { chain: Chain; token: TokenInf
         <button type="button" role="tab" aria-selected={tab === "same"} onClick={() => setTab("same")}>With {native}</button>
         <button type="button" role="tab" aria-selected={tab === "any"} onClick={() => setTab("any")}><Globe2 size={14} style={{ display: "inline", marginRight: 6, verticalAlign: -2 }} />Any chain</button>
       </div>
-      {tab === "same" ? <SameChain chain={chain} token={token} ticker={ticker} /> : <AnyChain chain={chain} token={token} ticker={ticker} />}
+      {tab === "same" ? <SameChain chain={chain} token={token} ticker={ticker} presets={presets} /> : <AnyChain chain={chain} token={token} ticker={ticker} />}
     </div>
   );
 }
 
-function SameChain({ chain, token, ticker }: { chain: Chain; token: TokenInfo | null; ticker: string }) {
+function SameChain({ chain, token, ticker, presets }: { chain: Chain; token: TokenInfo | null; ticker: string; presets?: number[] }) {
   const { connected } = useWallets();
   const [amount, setAmount] = useState(chain === "solana" ? "0.1" : chain === "near" ? "1" : "0.01");
   const [q, setQ] = useState<{ out?: number; venue?: string; handoff?: string; impactPct?: number | null; swap?: boolean; error?: string } | null>(null);
@@ -392,6 +392,14 @@ function SameChain({ chain, token, ticker }: { chain: Chain; token: TokenInfo | 
     <>
       <label className="ss-label" htmlFor="ss-amt">You pay ({native})</label>
       <input id="ss-amt" className="ss-input" inputMode="decimal" value={amount} disabled={step === "building" || step === "signing"} onChange={(e) => { setAmount(e.target.value.replace(/[^0-9.]/g, "")); setStep("idle"); setTx(null); }} />
+      {presets && presets.length > 0 && (
+        // Presets only fill the amount: nothing is sent until the buyer presses Buy and confirms in their wallet.
+        <div className="ss-presets" data-el="presets">
+          {presets.map((n) => (
+            <button key={n} type="button" className="ss-btn ss-btn-ghost ss-btn-sm" disabled={step === "building" || step === "signing"} onClick={() => { setAmount(String(n)); setStep("idle"); setTx(null); }}>{n} {native}</button>
+          ))}
+        </div>
+      )}
       {q?.out != null && (
         <div className="ss-quote">
           You get about <b>{num(q.out)}</b> ${ticker}

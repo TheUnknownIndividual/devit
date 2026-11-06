@@ -314,3 +314,25 @@ export async function recentTrades(chain: Chain, pool: string): Promise<Trade[]>
     at: Date.parse(t.attributes.block_timestamp),
   }));
 }
+
+export interface PriceHistory { h1: number | null; h24: number | null; d7: number | null; launch: number | null }
+
+/** The pool's price an hour, a day and a week ago, and at its first candle, from GeckoTerminal candles (USD). */
+export async function priceHistory(chain: Chain, pool: string): Promise<PriceHistory> {
+  type R = { data?: { attributes?: { ohlcv_list?: number[][] } } };
+  const base = `https://api.geckoterminal.com/api/v2/networks/${GECKO_NETWORK[chain]}/pools/${encodeURIComponent(pool)}/ohlcv`;
+  const list = async (unit: string, aggregate: number, limit: number) => {
+    const r = await getJson<R>(`${base}/${unit}?aggregate=${aggregate}&limit=${limit}&currency=usd`, { headers: { accept: "application/json" } });
+    return (r?.data?.attributes?.ohlcv_list ?? []).filter((c) => c.length >= 5 && c[4] > 0);
+  };
+  // The candle closest to a moment, only if it is within one bucket of it.
+  const near = (cs: number[][], secsAgo: number, bucket: number): number | null => {
+    const want = Date.now() / 1000 - secsAgo;
+    let best: number[] | null = null;
+    for (const c of cs) if (!best || Math.abs(c[0] - want) < Math.abs(best[0] - want)) best = c;
+    return best && Math.abs(best[0] - want) <= bucket ? best[4] : null;
+  };
+  const [min, hour, four, day] = await Promise.all([list("minute", 1, 80), list("hour", 1, 30), list("hour", 4, 60), list("day", 1, 1000)]);
+  const first = day.reduce<number[] | null>((a, c) => (!a || c[0] < a[0] ? c : a), null);
+  return { h1: near(min, 3600, 180), h24: near(hour, 86400, 5400), d7: near(four, 7 * 86400, 14400), launch: first ? first[1] || first[4] : null };
+}
