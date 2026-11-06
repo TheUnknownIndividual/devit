@@ -1,3 +1,5 @@
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { isPublicHttps } from "./net";
 
 // A minimal MCP client over Streamable HTTP (JSON-RPC 2.0 POSTs). Replies come back as JSON or as an event stream;
@@ -51,6 +53,25 @@ function pick(body: string, type: string, id: number): { result?: unknown; error
   return (msgs.find((m) => (m as { id?: number })?.id === id) as { result?: unknown; error?: { message?: string } } | undefined) ?? null;
 }
 
+/** A private, loopback, link-local or otherwise internal address (v4 or v6). */
+function privateIp(ip: string): boolean {
+  if (isIP(ip) === 6) {
+    const v = ip.toLowerCase();
+    if (v.startsWith("::ffff:")) return privateIp(v.slice(7));
+    return v === "::" || v === "::1" || /^(fc|fd|fe8|fe9|fea|feb)/.test(v);
+  }
+  const [a, b] = ip.split(".").map(Number);
+  return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
+}
+
+/** The URL's name must resolve only to public addresses, so a public name pointing inside our network is refused. */
+async function assertPublicHost(url: string): Promise<void> {
+  const host = new URL(url).hostname;
+  const addrs = isIP(host) ? [{ address: host }] : await lookup(host, { all: true }).catch(() => []);
+  if (!addrs.length) throw new Error("That server's name doesn't resolve.");
+  if (addrs.some((x) => privateIp(x.address))) throw new Error("That server isn't on the public internet.");
+}
+
 class Session {
   private sid: string | null = null;
   private n = 0;
@@ -66,7 +87,9 @@ class Session {
     return h;
   }
 
+  private checked = false;
   private async post(payload: object, id?: number) {
+    if (!this.checked) { await assertPublicHost(this.t.url); this.checked = true; }
     const res = await fetch(this.t.url, { method: "POST", headers: this.headers(), body: JSON.stringify(payload), signal: AbortSignal.timeout(TIMEOUT), redirect: "error", cache: "no-store" });
     const sid = res.headers.get("mcp-session-id");
     if (sid) this.sid = sid;
@@ -99,7 +122,7 @@ function wrap<T>(f: () => Promise<T>): Promise<T> {
   return f().catch((e: unknown) => {
     const m = e instanceof Error ? e.message : "";
     if (/aborted|timeout/i.test(m) || (e as { name?: string })?.name === "TimeoutError") throw new Error("The server took too long to answer.");
-    if (m.startsWith("The server") || m.startsWith("Use a") || m.startsWith("That header")) throw e;
+    if (m.startsWith("The server") || m.startsWith("Use a") || m.startsWith("That ")) throw e;
     throw new Error("Couldn't reach that server.");
   });
 }
