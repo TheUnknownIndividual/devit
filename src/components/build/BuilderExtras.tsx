@@ -1,10 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BookOpen, Check, Copy, FileCode2, History, ImagePlus, Link2, Loader2, RotateCcw } from "lucide-react";
+import { BookOpen, Check, Copy, FileCode2, History, Link2, Loader2, RotateCcw } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
 import type { PublicProject } from "@/lib/public";
-import { prepareImage } from "./attach";
 
 // The builder's side tools: version history, the code view, project knowledge, the view-only share link, the
 // project logo tile and dictation.
@@ -161,59 +160,6 @@ export function ShareDialog({ open, onClose, project, onSaved }: { open: boolean
         )}
       </div>
     </Dialog>
-  );
-}
-
-/** The project's logo in the top bar: click to pick a picture, or drop one on it. */
-export function ProjectLogo({ project, editable, onSaved }: { project: PublicProject; editable: boolean; onSaved: (p: PublicProject) => void }) {
-  const input = useRef<HTMLInputElement>(null);
-  const [over, setOver] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const src = project.spec?.logo ?? project.spec?.token?.logo ?? project.spec?.x?.profile.avatar ?? null;
-  const letter = (project.spec?.ticker || project.title || "S").slice(0, 1).toUpperCase();
-
-  async function use(file: File | undefined) {
-    if (!file || !editable || !project.spec) return;
-    setErr(null);
-    const img = await prepareImage(file);
-    if ("error" in img) { setErr(img.error); return; }
-    setBusy(true);
-    try {
-      const r = await fetch(`/api/projects/${project.id}/assets`, { method: "POST", body: img.blob, headers: { "x-name": file.name.slice(0, 60), "x-w": String(img.w), "x-h": String(img.h), "content-type": img.blob.type } });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j.asset) { setErr(j.error ?? "That picture didn't upload."); return; }
-      const s = await fetch(`/api/projects/${project.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ logo: j.asset.url }) });
-      const p = await s.json().catch(() => null);
-      if (s.ok && p?.id) onSaved(p); else setErr("Couldn't set the logo.");
-    } finally { setBusy(false); }
-  }
-
-  const tile = (
-    <span className={`relative grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-[10px] border ${over ? "border-sel bg-sel/10" : "border-white/10 bg-ink-850"}`}>
-      {src ? <img src={src} alt="" className="h-full w-full object-cover" /> : <span className="text-[14px] font-semibold text-zinc-200">{letter}</span>}
-      {editable && <span className="absolute inset-0 grid place-items-center bg-black/55 opacity-0 transition-opacity group-hover:opacity-100">{busy ? <Loader2 size={14} className="animate-spin text-white" /> : <ImagePlus size={14} className="text-white" />}</span>}
-      {busy && <span className="absolute inset-0 grid place-items-center bg-black/55"><Loader2 size={14} className="animate-spin text-white" /></span>}
-    </span>
-  );
-  if (!editable || !project.spec) return <span className="ml-1">{tile}</span>;
-  return (
-    <span className="relative ml-1">
-      <button
-        type="button"
-        className="group block rounded-[10px]"
-        title={err ?? "Change the logo: click to pick a picture, or drop one here"}
-        aria-label="Change the project logo"
-        onClick={() => input.current?.click()}
-        onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); e.stopPropagation(); setOver(true); } }}
-        onDragLeave={() => setOver(false)}
-        onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setOver(false); void use(e.dataTransfer.files[0]); }}
-      >
-        {tile}
-      </button>
-      <input ref={input} type="file" hidden accept="image/png,image/jpeg,image/webp,image/gif" onChange={(e) => { void use(e.target.files?.[0]); e.target.value = ""; }} />
-      {err && <span role="alert" className="absolute left-0 top-11 z-40 w-[220px] rounded-[10px] border border-white/10 bg-ink-850 px-2.5 py-1.5 text-[11.5px] text-amber-300 shadow-lg">{err}</span>}
-    </span>
   );
 }
 

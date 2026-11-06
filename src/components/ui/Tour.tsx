@@ -101,9 +101,11 @@ export function Tour({ id, steps, delay = 900 }: { id: string; steps: TourStep[]
   return (
     <div className="fixed inset-0 z-[90]" role="dialog" aria-modal="true" aria-label={`Tour: ${step.title}`}>
       <div className="absolute inset-0" onClick={done} />
-      <div className="pointer-events-none absolute rounded-[12px] ring-2 ring-sel transition-all duration-300" style={{ ...hole, boxShadow: "0 0 0 9999px rgba(3,4,10,0.62)" }} />
-      <div className="absolute w-[320px] rounded-[14px] border border-white/10 bg-ink-850 p-4 shadow-[0_18px_50px_rgba(0,0,0,0.55)] transition-all duration-300" style={{ top: below || side ? top : undefined, bottom: !below && !side ? vh - (hole.top - 14) : undefined, left }}>
-        {!side && <span className="absolute h-3 w-3 rotate-45 border-white/10 bg-ink-850" style={{ left: arrowX - 6, ...(below ? { top: -6.5, borderLeftWidth: 1, borderTopWidth: 1 } : { bottom: -6.5, borderRightWidth: 1, borderBottomWidth: 1 }) }} />}
+      {/* The lit-up target: a darker page around it, a solid 3px frame in the accent and a pulsing outer ring so it can't be missed. */}
+      <div className="pointer-events-none absolute rounded-[12px] border-[3px] border-sel transition-all duration-300" style={{ ...hole, boxShadow: "0 0 0 4px rgba(124,156,255,0.35), 0 0 0 9999px rgba(3,4,10,0.78)" }} />
+      <div className="tour-pulse pointer-events-none absolute rounded-[12px]" style={hole} />
+      <div className="absolute w-[320px] rounded-[14px] border border-sel/50 bg-ink-850 p-4 shadow-[0_18px_50px_rgba(0,0,0,0.55)] transition-all duration-300" style={{ top: below || side ? top : undefined, bottom: !below && !side ? vh - (hole.top - 14) : undefined, left }}>
+        {!side && <span className="absolute h-3 w-3 rotate-45 border-sel/50 bg-ink-850" style={{ left: arrowX - 6, ...(below ? { top: -6.5, borderLeftWidth: 1, borderTopWidth: 1 } : { bottom: -6.5, borderRightWidth: 1, borderBottomWidth: 1 }) }} />}
         <div className="flex items-start gap-2">
           <p className="flex-1 text-[14px] font-semibold text-white">{step.title}</p>
           <button type="button" className="-mr-1 -mt-1 grid h-7 w-7 place-items-center rounded-md text-zinc-500 hover:text-white" aria-label="Close the tour" onClick={done}><X size={14} /></button>

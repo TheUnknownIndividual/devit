@@ -5,7 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowUp, BookOpen, HelpCircle, ChevronDown, Code2, Crosshair, Eye, ExternalLink, Globe, History, Lightbulb, Link2, Loader2, MessageCircleQuestion, MessageSquare, Mic, MicOff, Monitor, MousePointer2, Palette, Pencil, Plug, Server, FileText, ImagePlus, Smartphone, Tablet, Trash2, Undo2, X, Database, Hammer,
 } from "lucide-react";
-import { CodeView, HistoryPanel, KnowledgeDialog, ProjectLogo, ShareDialog, useDictation } from "./BuilderExtras";
+import { CodeView, HistoryPanel, KnowledgeDialog, ShareDialog, useDictation } from "./BuilderExtras";
+import { ProjectLogo } from "@/components/projects/ProjectList";
 import { LogoMark } from "@/components/Logo";
 import { Tour, BUILDER_TOUR, restartTour } from "@/components/ui/Tour";
 import { BRANDS, BrandIcon, ChainIcon } from "@/components/brand";
@@ -229,7 +230,11 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
     <div className="flex h-screen flex-col bg-ink-950">
       {/* Top bar */}
       <header className="flex h-14 shrink-0 items-center gap-2 border-b border-white/[0.07] px-3">
-        <ProjectLogo project={p} editable={canEdit} onSaved={setP} />
+        {/* Our logo (home) / the project's logo / its name */}
+        <Link href="/" className="btn btn-ghost btn-icon" aria-label="Home" title="Home"><LogoMark size={20} /></Link>
+        <span aria-hidden="true" className="select-none text-[18px] font-light text-zinc-700">/</span>
+        <span className="px-1" title={title}><ProjectLogo src={p.spec?.logo ?? p.spec?.token?.logo ?? p.spec?.x?.profile.avatar ?? null} name={p.spec?.ticker || title} size={28} /></span>
+        <span aria-hidden="true" className="hidden select-none text-[18px] font-light text-zinc-700 sm:inline">/</span>
         <ProjectName name={title} ticker={p.spec?.ticker ?? null} editable={canEdit} onSave={(name) => call("", { name }, "patch", "PATCH")} />
         {!canEdit && <span className="hidden h-6 shrink-0 items-center sm:inline-flex gap-1 rounded-md border border-white/10 bg-white/[0.04] px-1.5 text-[11px] text-zinc-400"><Eye size={12} /> View only</span>}
         {building && <span className="hidden items-center gap-1.5 text-[12px] text-zinc-400 sm:flex"><Loader2 size={13} className="animate-spin text-sel" /> Building</span>}
