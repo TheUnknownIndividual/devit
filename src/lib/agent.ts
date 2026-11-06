@@ -287,7 +287,7 @@ function layout(copy: Copy, token: TokenInfo | null, wants: Set<BlockType>, them
   ];
   const chart = hasPair || wants.has("chart") ? block("chart", { title: "Chart" }) : null;
   const trades = hasPair || wants.has("trades") ? block("trades", { title: themeId === "retro" ? "Live buys" : "Live trades" }) : null;
-  const buy = block("buy", { title: `Buy $${copy.ticker}` });
+  const buy = block("buy", { title: `Buy $${copy.ticker}`, presets: buyPresets(token?.chain) });
   if (themeId === "terminal") blocks.push(...[chart, trades, buy].filter((b): b is Block => !!b));
   else blocks.push(buy);
   if (copy.story && (copy.story.body || copy.story.points.length)) blocks.push(block("story", { title: copy.story.title, body: copy.story.body, points: copy.story.points }));
@@ -298,11 +298,51 @@ function layout(copy: Copy, token: TokenInfo | null, wants: Set<BlockType>, them
   if (wants.has("treasury")) blocks.push(block("treasury", { title: "Treasury", body: treasury.length ? "Everything the treasury holds and spends, read straight from the chain." : "Balances of the community multisig, read live.", accounts: treasury }));
   if (wants.has("roadmap") || themeId === "clean" || themeId === "retro") blocks.push(block("roadmap", { title: themeId === "retro" ? "Levels" : "Roadmap", items: copy.roadmap }));
   if (wants.has("signup")) blocks.push(signupBlock(copy.ticker));
+  blocks.push(...socialBlocks(wants, copy.ticker).filter((b) => b.type !== "toasts"));
   blocks.push(block("faq", { title: "FAQ", items: copy.faq }));
   if (r?.x?.posts.length) blocks.push(block("posts", { title: themeId === "cozy" ? `from @${r.x.profile.handle}` : `From @${r.x.profile.handle}`, count: 3 }));
   blocks.push(block("socials", { title: "Join us" }));
+  if (wants.has("toasts")) blocks.push(socialBlock("toasts", copy.ticker));
   blocks.push(block("footer", { disclaimer: `$${copy.ticker} is a memecoin with no promise of value. Nothing here is financial advice.` }));
   return blocks;
+}
+
+/** Amount chips in the buy box, in the chain's native coin. They only fill the amount; nothing is sent until the buyer buys. */
+function buyPresets(chain: Chain | undefined): number[] {
+  return chain === "solana" ? [0.1, 0.5, 1, 5] : chain === "near" ? [1, 5, 10, 50] : [0.01, 0.05, 0.1, 0.5];
+}
+
+// ---------- social blocks (toasts, top buyers, what-if, raid, milestones) ----------
+
+const SOCIAL: BlockType[] = ["toasts", "leaderboard", "pnl", "raid", "milestones"];
+
+function socialBlock(type: BlockType, ticker: string): Block {
+  switch (type) {
+    case "toasts": return block("toasts", { minUsd: 50, seconds: 6 });
+    case "leaderboard": return block("leaderboard", { title: "Top buyers", count: 10 });
+    case "pnl": return block("pnl", { title: "What if you'd bought", amount: 100 });
+    case "raid": return block("raid", { title: "Spread the word", body: `Post about $${ticker} in one tap.` });
+    default: return block("milestones", { title: "Next milestone" });
+  }
+}
+
+function socialBlocks(wants: Set<BlockType>, ticker: string): Block[] {
+  return SOCIAL.filter((t) => wants.has(t)).map((t) => socialBlock(t, ticker));
+}
+
+/** "add a leaderboard", "add buy toasts": adds the social block the words name (once). */
+function socialComment(spec: SiteSpec, c: PendingComment): boolean {
+  if (!/\b(add|put|need|want|include|make|create|give|show)\b/i.test(c.text)) return false;
+  const want = readIntent(c.text, spec.chain).wants;
+  const add = SOCIAL.filter((t) => want.has(t) && !spec.blocks.some((b) => b.type === t));
+  if (!add.length) return false;
+  for (const t of add) {
+    const foot = spec.blocks.findIndex((b) => b.type === "footer");
+    const faq = spec.blocks.findIndex((b) => b.type === "faq" || b.type === "footer");
+    const at = t === "toasts" ? foot : faq;
+    spec.blocks.splice(at < 0 ? spec.blocks.length : at, 0, socialBlock(t, spec.ticker));
+  }
+  return true;
 }
 
 const article = (w: string) => `${/^[aeiou]/i.test(w) ? "an" : "a"} ${w}`;
@@ -692,6 +732,7 @@ async function applyCommentsRaw(project: Project, comments: PendingComment[]): P
       "Comments can come with images the team uploaded (id, url, size). Use one by its url: props.image on a hero or story block shows it as that block's art; logo (top level) sets the site's logo. Never invent image urls.",
       "treasury block props: {title, body, accounts:[NEAR account or *.sputnik-dao.near, max 3]}. It reads balances, transfers and DAO proposals live from the chain; set only accounts the team gave, never invent one. Keep props.snapshot as it is.",
       "signup block props: {title, body, fields: email|wallet|both, button, success (shown after sending), kind: waitlist|whitelist|newsletter|contact}. Entries go to the project's database.",
+      "Live social blocks (props replace entirely): toasts {minUsd (only buys of at least this many USD pop up, default 50), seconds (how long each stays, default 6)}; leaderboard {title, count 3-20}: top buyers from the live trades feed; pnl {title, amount (starting USD, default 100)}: what a buy 1h/24h/7d ago or at launch would be worth now, with Share on X; raid {title, body, posts: up to 5 strings using $TICKER, {ca}, {url}, {chain} placeholders}: ready-made X posts; milestones {title}: market cap and holders progress to the next round number. The buy block also takes presets: up to 5 amounts in the chain's native coin (chips that fill the amount, never send). Never add figures to these; they are read live.",
       "Never invent prices, holder counts or tokenomics numbers; use [PLACEHOLDER] text for facts you don't have.",
       project.knowledge?.trim() ? `The team's standing instructions (always follow, they win over style habits): ${project.knowledge.trim().slice(0, 1500)}` : "",
     ].filter(Boolean).join("\n");
@@ -797,11 +838,13 @@ export async function applyComments(project: Project, comments: PendingComment[]
   const next: SiteSpec = structuredClone(project.spec!);
   const treasury = comments.filter((c) => treasuryComment(next, c));
   const forms = comments.filter((c) => !treasury.includes(c) && signupComment(next, c));
-  const mine = [...treasury, ...forms];
+  const social = comments.filter((c) => !treasury.includes(c) && !forms.includes(c) && socialComment(next, c));
+  const mine = [...treasury, ...forms, ...social];
   const rest = comments.filter((c) => !mine.includes(c));
   const res = rest.length ? await applyCommentsRaw({ ...project, spec: next }, rest) : { spec: next, message: "", via: "offline editor" };
   await hydrateTreasury(res.spec);
   if (forms.length) res.message = `Added a signup form; entries show under Database in the toolbar.${res.message ? ` ${res.message}` : ""}`;
+  if (social.length) res.message = `Added ${[...new Set(social.flatMap((c) => SOCIAL.filter((t) => readIntent(c.text, next.chain).wants.has(t))))].map((t) => BLOCK_LABELS[t].toLowerCase()).join(", ")}.${res.message ? ` ${res.message}` : ""}`;
   if (treasury.length) res.message = `Treasury set to ${(res.spec.blocks.find((b) => b.type === "treasury")?.props.accounts as string[]).join(", ")}.${res.message ? ` ${res.message}` : ""}`;
   return res;
 }

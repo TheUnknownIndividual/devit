@@ -20,7 +20,7 @@ export default function Home() {
         <Logo />
         <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
           <a href="#how" className="btn btn-ghost">How it works</a>
-          <a href="#templates" className="btn btn-ghost">Templates</a>
+          <Link href="/templates" className="btn btn-ghost">Templates</Link>
           <a href="#integrations" className="btn btn-ghost">Integrations</a>
           <Link href="/pricing" className="btn btn-ghost">Pricing</Link>
         </nav>
@@ -55,7 +55,7 @@ export default function Home() {
       <Faq />
 
       <footer className="mx-auto flex max-w-[1240px] flex-wrap items-center justify-between gap-4 px-5 py-10 text-[13px] text-zinc-500">
-        <span className="flex items-center gap-4"><span>Built for NEAR HACKATHON 2026</span><a href="/privacy" className="hover:text-zinc-300">Privacy</a><a href="/terms" className="hover:text-zinc-300">Terms</a><a href="/llms.txt" className="hover:text-zinc-300">llms.txt</a></span>
+        <span className="flex items-center gap-4"><span>Built for NEAR HACKATHON 2026</span><a href="/templates" className="hover:text-zinc-300">Templates</a><a href="/privacy" className="hover:text-zinc-300">Privacy</a><a href="/terms" className="hover:text-zinc-300">Terms</a><a href="/llms.txt" className="hover:text-zinc-300">llms.txt</a></span>
         <span className="flex items-center gap-4">
           <span className="flex items-center gap-1.5"><BrandIcon icon={BRANDS.near} size={13} color="#a1a1aa" /> NEAR AI Cloud</span>
           <span className="flex items-center gap-1.5"><BrandIcon icon={BRANDS.near} size={13} color="#a1a1aa" /> NEAR Intents</span>

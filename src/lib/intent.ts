@@ -34,6 +34,11 @@ const CHAIN_WORDS: Array<[Chain, RegExp]> = [
 const WANT_WORDS: Array<[BlockType, RegExp]> = [
   ["holders", /\bholders?\b/i], ["roadmap", /\broadmap|milestones?|plans?\b/i], ["treasury", /\btreasury|multisig|dao|grants?\b/i],
   ["faq", /\bfaq|questions\b/i], ["chart", /\bchart|price\b/i], ["trades", /\btrades|buys|live\b/i], ["tokenomics", /\btokenomics|supply|split\b/i],
+  ["toasts", /\b(buy|trade|live) (toasts?|alerts?|notifications?)|toasts?\b|\bfomo\b|pop-?ups? (of )?(buys|trades)/i],
+  ["leaderboard", /\bleaderboard|top (buyers|traders)|biggest buyers|\bfomo\b/i],
+  ["pnl", /\bpnl\b|profit and loss|what[ -]if (you|i|they)('d| had| bought)|profit calculator|gains? calculator/i],
+  ["raid", /\braid(s|ers|ing)?\b|\bshill|share kit|post templates?|ready-?made posts?|tweet templates?/i],
+  ["milestones", /(market ?cap|mcap) (goals?|milestones?|progress|bar)|progress (bar )?to (the )?next|next milestone|milestone bar/i],
   ["signup", /\b(wait ?list|white ?list|allow ?list|sign ?-?ups?|newsletter|early access|mailing list|email list|pre-?register|presale list)\b/i],
 ];
 
