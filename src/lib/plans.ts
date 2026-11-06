@@ -41,6 +41,17 @@ export const priceUsd = (p: Plan, cycle: Cycle) => (cycle === "yearly" ? p.yearl
 /** Days one payment adds to a plan. */
 export const cycleDays = (cycle: Cycle) => (cycle === "yearly" ? 365 : 30);
 
+/**
+ * Build packs: extra builds paid for up front, used one at a time once a Free day's builds are gone. A pack is a plain
+ * prepaid purchase: no borrowing ahead, no interest, and the builds never expire.
+ */
+export interface CreditPack { id: string; builds: number; usd: number }
+export const CREDIT_PACKS: CreditPack[] = [
+  { id: "builds-25", builds: 25, usd: 5 },
+  { id: "builds-100", builds: 100, usd: 15 },
+];
+export const creditPack = (id: string) => CREDIT_PACKS.find((p) => p.id === id) ?? null;
+
 /** "Unlimited" builds still stop here in a day; past it is scripted or resold use. */
 export const FAIR_USE_BUILDS_PER_DAY = 100;
 /** Builds an hour from one IP, before and after a paid plan. */
@@ -50,7 +61,7 @@ export const BUILD_SLOTS = 3;
 
 /** Rows of the comparison table: a label and each plan's value (true = included, false = not, text = the detail). */
 export const COMPARE: Array<{ label: string; values: Record<PlanId, string | boolean> }> = [
-  { label: "Builds", values: { free: "5 a day", pro: "Unlimited*", team: "Unlimited*" } },
+  { label: "Builds", values: { free: "5 a day, or top up", pro: "Unlimited*", team: "Unlimited*" } },
   { label: "Edits and comments", values: { free: "Unlimited", pro: "Unlimited", team: "Unlimited" } },
   { label: "Hosting", values: { free: "sitesmith subdomain", pro: "Custom domain", team: "Custom domain" } },
   { label: "“Built with sitesmith” footer", values: { free: "Shown", pro: false, team: false } },
@@ -65,6 +76,7 @@ export const FAQ: Array<{ q: string; a: string }> = [
   { q: "What counts as a build?", a: "Writing a new site from a sentence. Edits, comments, restyles and publishing never count. Builds that run on your own API key don't count either." },
   { q: "How do I pay?", a: "With any token on any chain through NEAR Intents. You get a one-time deposit address; send the amount shown and the plan turns on once it lands. No card, no subscription to cancel." },
   { q: "What does “fair use” mean?", a: "Unlimited builds for people building their own sites. Scripted or resold builds get a friendly email first." },
+  { q: "What are build packs?", a: "Extra builds you pay for once, for when a Free day's builds run out. Each one is used only after the day's free builds are gone, and they never expire. Pro and Team builds are unlimited, so packs aren't used there; any you have are kept." },
   { q: "Can I use my own model keys?", a: "Yes, on every plan. Add a NEAR AI Cloud, Anthropic, OpenAI or OpenRouter key in Settings and your builds run on it first, then on ours if it fails." },
   { q: "What happens when a plan runs out?", a: "Your sites stay up. You go back to Free limits and the footer comes back until you renew." },
 ];

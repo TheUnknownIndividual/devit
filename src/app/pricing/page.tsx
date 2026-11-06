@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Check, Minus } from "lucide-react";
 import { TopBar } from "@/components/account/TopBar";
-import { PlanCards } from "@/components/pricing/PlanCards";
+import { PlanCards, TopUp } from "@/components/pricing/PlanCards";
 import { BrandIcon, BRANDS } from "@/components/brand";
 import { COMPARE, FAQ, PLANS } from "@/lib/plans";
 import { publicUser, viewer } from "@/lib/accounts";
@@ -39,6 +39,7 @@ export default async function Pricing() {
         )}
 
         <PlanCards current={user ? await planOf(user) : null} paymentsOn={!!process.env.PAYMENTS_NEAR_ACCOUNT?.trim()} />
+        <TopUp paymentsOn={!!process.env.PAYMENTS_NEAR_ACCOUNT?.trim()} />
 
         <section className="mt-16" aria-labelledby="compare">
           <h2 id="compare" className="text-[18px] font-semibold text-white">Compare plans</h2>

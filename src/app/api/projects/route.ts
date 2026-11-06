@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { runBuild } from "@/lib/agent";
-import { saveProject, updateProject } from "@/lib/store";
+import { getProject, saveProject, updateProject } from "@/lib/store";
 import { CHAIN_IDS, THEME_IDS, newId, type Project } from "@/lib/spec";
 import { overLimit } from "@/lib/net";
-import { buildsToday, countBuild, ensureAnon, ownerKeysFor, viewer } from "@/lib/accounts";
+import { buildsToday, countBuild, ensureAnon, ownerKeysFor, refundCredit, takeCredit, viewer } from "@/lib/accounts";
 import { entitled, planOf } from "@/lib/entitlements";
 import { hasOwnLlm, runWithKeys } from "@/lib/keyscope";
 import { withBuildSlot } from "@/lib/buildqueue";
@@ -38,10 +38,18 @@ export async function POST(req: Request) {
   const keys = await ownerKeysFor(v.user?.id);
   const who = v.user ? `user:${v.user.id}` : `anon:${anon}`;
   const cap = paid ? FAIR_USE_BUILDS_PER_DAY : plan(await planOf(v.user)).buildsPerDay ?? FAIR_USE_BUILDS_PER_DAY;
+  // Past a Free day's builds, a build pack credit pays for this one instead (taken under the account lock).
+  let credit = false;
   if (!hasOwnLlm(keys) && (await buildsToday(who)) >= cap) {
-    const error = paid ? `That's ${cap} builds today, the fair-use cap. Edits still work; builds open again tomorrow (UTC).` : `That's the ${cap} free builds for today. Edits still work, or go Pro or add your own model key in Settings for more.`;
-    return NextResponse.json({ error, limit: true, upgrade: paid ? undefined : "pro" }, { status: 429 });
+    credit = !paid && !!v.user && (await takeCredit(v.user.id));
+    if (!credit) {
+      const error = paid
+        ? `That's ${cap} builds today, the fair-use cap. Edits still work; builds open again tomorrow (UTC).`
+        : v.user ? `You've used today's ${cap} builds. Top up or go Pro.` : `You've used today's ${cap} builds. Sign in to top up, or go Pro.`;
+      return NextResponse.json({ error, limit: true, upgrade: paid ? undefined : "pro", topup: !paid || undefined }, { status: 429 });
+    }
   }
+  const giveBack = () => (credit && v.user ? refundCredit(v.user.id) : Promise.resolve());
   const full = address && !prompt.includes(address) ? `${prompt} ${address}` : prompt;
   const now = Date.now();
   const p: Project = {
@@ -50,13 +58,22 @@ export async function POST(req: Request) {
     spec: null, history: [], network: { chain }, integrations: {}, published: null, version: 0,
     ...(v.user ? { ownerId: v.user.id } : { anon }),
   };
-  await saveProject(p);
+  try {
+    await saveProject(p);
+  } catch {
+    await giveBack();
+    return NextResponse.json({ error: "Couldn't start the build. Try again." }, { status: 500 });
+  }
   const own = hasOwnLlm(keys);
-  if (!own) await countBuild(who);
+  if (!own && !credit) await countBuild(who);
   // The build writes its progress into the project; the workspace polls it. On our models it takes a slot first.
   const priority = await entitled(v.user, "priorityModels");
   let waited = false;
   const slot = () => withBuildSlot(priority, async () => { if (waited) await started(p.id); return runBuild(p.id); }, () => { waited = true; return queued(p.id); });
-  void runWithKeys(keys, () => (own ? runBuild(p.id) : slot()), priority, modelFrom(req)).catch(() => undefined);
+  // A credit spent on a build that never produced a site goes back.
+  const ran = runWithKeys(keys, () => (own ? runBuild(p.id) : slot()), priority, modelFrom(req));
+  void ran
+    .then(async () => { if (credit && !(await getProject(p.id))?.spec) await giveBack(); }, () => giveBack())
+    .catch(() => undefined);
   return NextResponse.json({ id: p.id });
 }

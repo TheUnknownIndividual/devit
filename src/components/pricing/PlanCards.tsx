@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, ArrowRight, Check, CheckCircle2, Copy, Loader2, Wallet } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
 import { openSignIn, setSessionUser, useSession } from "@/components/account/session";
-import { PLANS, priceUsd, type Cycle, type Plan, type PlanId } from "@/lib/plans";
+import { CREDIT_PACKS, PLANS, priceUsd, type CreditPack, type Cycle, type Plan, type PlanId } from "@/lib/plans";
 
 export function PlanCards({ current, paymentsOn }: { current: PlanId | null; paymentsOn: boolean }) {
   const [cycle, setCycle] = useState<Cycle>("monthly");
@@ -17,7 +17,7 @@ export function PlanCards({ current, paymentsOn }: { current: PlanId | null; pay
       <div className="mt-8 inline-flex items-center gap-1 rounded-[11px] border border-white/[0.07] bg-ink-900 p-0.5" role="radiogroup" aria-label="Billing">
         {(["monthly", "yearly"] as const).map((c) => (
           <button key={c} type="button" role="radio" aria-checked={cycle === c} onClick={() => setCycle(c)} className={`btn h-8 ${cycle === c ? "bg-white/[0.09] text-white" : "btn-ghost"}`}>
-            {c === "monthly" ? "Monthly" : "Yearly"}{c === "yearly" && <span className="text-[11px] text-lime">−20%</span>}
+            {c === "monthly" ? "Monthly" : "Yearly"}{c === "yearly" && <span className="text-[11px] text-lime">save 20%</span>}
           </button>
         ))}
       </div>
@@ -59,14 +59,74 @@ export function PlanCards({ current, paymentsOn }: { current: PlanId | null; pay
         })}
       </div>
 
-      {paying && <PayDialog plan={paying} cycle={cycle} onClose={() => setPaying(null)} />}
+      {paying && (
+        <PayDialog
+          title={`${paying.name} · $${priceUsd(paying, cycle)} ${cycle === "yearly" ? "for a year" : "for a month"}`}
+          endpoint="/api/billing"
+          body={{ plan: paying.id, cycle }}
+          paidText="Paid. Your plan is on."
+          shortText={(got, usd) => `Only $${got} of $${usd} arrived, so the plan isn't on. Get in touch and we'll sort it out.`}
+          after="the plan turns on once the swap lands"
+          onClose={() => setPaying(null)}
+        />
+      )}
     </>
+  );
+}
+
+/** Build packs under the plan cards: extra builds for a Free day, paid once, never expiring. */
+export function TopUp({ paymentsOn }: { paymentsOn: boolean }) {
+  const [buying, setBuying] = useState<CreditPack | null>(null);
+  const { user } = useSession();
+  const credits = user?.credits ?? 0;
+  return (
+    <section id="topup" className="mt-12 scroll-mt-6" aria-labelledby="topup-h">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 lg:max-w-[700px]">
+        <h2 id="topup-h" className="text-[18px] font-semibold text-white">Top up builds</h2>
+        {user && <p className="text-[12.5px] text-zinc-400">You have {credits} extra {credits === 1 ? "build" : "builds"}</p>}
+      </div>
+      <p className="mt-1 max-w-[620px] text-[13px] leading-relaxed text-zinc-400">
+        On Free and out of builds for the day? Buy a pack once. A build from the pack is used only after the day&apos;s free builds are gone, and they never expire. Pro and Team builds are unlimited, so packs aren&apos;t needed there.
+      </p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:max-w-[700px]">
+        {CREDIT_PACKS.map((k) => (
+          <div key={k.id} className="flex items-center gap-4 rounded-2xl border border-white/[0.08] bg-ink-900 p-4">
+            <div className="min-w-0 flex-1">
+              <div className="text-[15px] font-semibold text-white">{k.builds} builds</div>
+              <div className="mt-0.5 text-[12.5px] text-zinc-400">${k.usd} once · ${(k.usd / k.builds).toFixed(2)} a build</div>
+            </div>
+            {!paymentsOn ? (
+              <button type="button" className="btn btn-outline" disabled>Coming soon</button>
+            ) : (
+              <button type="button" className="btn btn-outline" onClick={() => (user ? setBuying(k) : openSignIn())}><Wallet size={15} /> Buy</button>
+            )}
+          </div>
+        ))}
+      </div>
+      {buying && (
+        <PayDialog
+          title={`${buying.builds} builds · $${buying.usd}`}
+          endpoint="/api/billing/credits"
+          body={{ pack: buying.id }}
+          paidText={`Paid. ${buying.builds} builds added.`}
+          shortText={(got, usd) => `Only $${got} of $${usd} arrived, so no builds were added. Get in touch and we'll sort it out.`}
+          after="the builds are added once the swap lands"
+          onClose={() => setBuying(null)}
+        />
+      )}
+    </section>
   );
 }
 
 interface Quote { depositAddress: string; amountIn: string; symbol: string; chain: string; usd: number }
 
-function PayDialog({ plan, cycle, onClose }: { plan: Plan; cycle: Cycle; onClose: () => void }) {
+/**
+ * Paying for something with any token: pick a coin, get a 1-Click deposit address from `endpoint`, then poll it there.
+ * Plans (/api/billing) answer a short payment with outcome "short"; build packs (/api/billing/credits) with state "refund".
+ */
+function PayDialog({ title, endpoint, body, paidText, shortText, after, onClose }: {
+  title: string; endpoint: string; body: Record<string, string>; paidText: string; shortText: (got: number, usd: number) => string; after: string; onClose: () => void;
+}) {
   const [coins, setCoins] = useState<Array<{ key: string; label: string; chain: string }>>([]);
   const [pay, setPay] = useState("base:USDC");
   const [refundTo, setRefundTo] = useState("");
@@ -74,40 +134,40 @@ function PayDialog({ plan, cycle, onClose }: { plan: Plan; cycle: Cycle; onClose
   const [error, setError] = useState<string | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const [outcome, setOutcome] = useState<{ outcome: string; received: number | null } | null>(null);
+  const [outcome, setOutcome] = useState<{ short: boolean; received: number | null } | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => { fetch("/api/intents").then((r) => r.json()).then((j) => setCoins(j.payWith ?? [])).catch(() => undefined); }, []);
 
-  // Poll the deposit until 1-Click is done with it (or the dialog closes). The server turns the plan on.
+  // Poll the deposit until 1-Click is done with it (or the dialog closes). The server does the rest.
   const done = status === "SUCCESS" || status === "REFUNDED" || status === "FAILED";
   useEffect(() => {
     if (!quote || done) return;
     const h = setInterval(async () => {
-      const j = await fetch(`/api/billing?depositAddress=${encodeURIComponent(quote.depositAddress)}`, { cache: "no-store" }).then((r) => r.json()).catch(() => null);
+      const j = await fetch(`${endpoint}?depositAddress=${encodeURIComponent(quote.depositAddress)}`, { cache: "no-store" }).then((r) => r.json()).catch(() => null);
       if (j?.status) setStatus(j.status);
-      if (j?.outcome) setOutcome({ outcome: j.outcome, received: j.received ?? null });
+      if (j?.outcome || j?.state) setOutcome({ short: j.outcome === "short" || j.state === "refund", received: j.received ?? null });
       if (j?.user) setSessionUser(j.user);
     }, 8000);
     return () => clearInterval(h);
-  }, [quote, done]);
-  const short = status === "SUCCESS" && outcome?.outcome === "short";
+  }, [quote, done, endpoint]);
+  const short = status === "SUCCESS" && !!outcome?.short;
 
   const coin = coins.find((c) => c.key === pay);
 
   async function getQuote() {
     setBusy(true); setError(null);
-    const r = await fetch("/api/billing", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ plan: plan.id, cycle, pay, refundTo: refundTo.trim() }) });
+    const r = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, pay, refundTo: refundTo.trim() }) });
     const j = await r.json().catch(() => ({}));
     setBusy(false);
     if (!r.ok) return setError(j.error ?? "No quote right now. Try again.");
     setQuote(j as Quote);
   }
 
-  const WORDS: Record<string, string> = { PENDING_DEPOSIT: "Waiting for your deposit", KNOWN_DEPOSIT_TX: "Deposit seen", PROCESSING: "Swapping", SUCCESS: "Paid. Your plan is on.", INCOMPLETE_DEPOSIT: "The deposit was short", REFUNDED: "Refunded", FAILED: "Failed, refund on the way" };
+  const WORDS: Record<string, string> = { PENDING_DEPOSIT: "Waiting for your deposit", KNOWN_DEPOSIT_TX: "Deposit seen", PROCESSING: "Swapping", SUCCESS: paidText, INCOMPLETE_DEPOSIT: "The deposit was short", REFUNDED: "Refunded", FAILED: "Failed, refund on the way" };
 
   return (
-    <Dialog open onClose={onClose} title={`${plan.name} · $${priceUsd(plan, cycle)} ${cycle === "yearly" ? "for a year" : "for a month"}`} icon={<Wallet size={15} />} width={460}>
+    <Dialog open onClose={onClose} title={title} icon={<Wallet size={15} />} width={460}>
       <div className="space-y-4 p-5">
         {!quote ? (
           <>
@@ -137,9 +197,9 @@ function PayDialog({ plan, cycle, onClose }: { plan: Plan; cycle: Cycle; onClose
             </div>
             <p className="flex items-center gap-2 text-[12.5px] text-zinc-400">
               {short ? <AlertTriangle size={14} className="text-amber-200" /> : status === "SUCCESS" ? <CheckCircle2 size={14} className="text-lime" /> : done ? <AlertTriangle size={14} className="text-zinc-400" /> : <Loader2 size={14} className="animate-spin" />}
-              {short ? `Only $${outcome?.received ?? 0} of $${quote.usd} arrived, so the plan isn't on. Get in touch and we'll sort it out.` : WORDS[status ?? "PENDING_DEPOSIT"] ?? status}
+              {short ? shortText(outcome?.received ?? 0, quote.usd) : WORDS[status ?? "PENDING_DEPOSIT"] ?? status}
             </p>
-            <p className="text-[11.5px] text-zinc-500">This address is for this payment only and expires in an hour. Keep this window open, or come back to Settings; the plan turns on once the swap lands.</p>
+            <p className="text-[11.5px] text-zinc-500">This address is for this payment only and expires in an hour. Keep this window open, or come back to Settings; {after}.</p>
           </>
         )}
         {error && <p role="alert" className="text-[12.5px] text-amber-200">{error}</p>}
