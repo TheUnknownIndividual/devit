@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { AlertTriangle, ArrowUpRight, Check, CheckCircle2, ClipboardPaste, Copy, Loader2, MousePointerClick, Plug, ShieldCheck, UserPlus } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Check, CheckCircle2, ClipboardPaste, Copy, Loader2, MousePointerClick, Plug, ShieldCheck, Cable, UserPlus } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
 import { BrandLogo, LogoStack, LOGOS } from "@/components/brand";
+import { Connectors } from "./Connectors";
 import type { PublicProject } from "@/lib/public";
 
 // Guided setup for services that need an ID from their own dashboard. Each guide is a short run of
 // illustrated steps, a button that opens the right page, a paste box, and a live check before saving.
 
-type Id = "evm" | "solana" | "near" | "intents" | "walletconnect" | "privy" | "helius";
+type Id = "evm" | "solana" | "near" | "intents" | "walletconnect" | "privy" | "helius" | "connectors";
 
 interface GuideStep { title: string; body: string; art: ReactNode }
 
@@ -171,6 +172,7 @@ export function IntegrationsDialog({ open, onClose, project, onSaved, heliusOnSe
     { id: "walletconnect", name: "WalletConnect", mark: <BrandLogo src={LOGOS.walletconnect} />, on: !!ints.walletconnectProjectId, status: ints.walletconnectProjectId ? "Connected" : "Needs a Project ID" },
     { id: "privy", name: "Privy", mark: <BrandLogo src={LOGOS.privy} />, on: !!ints.privyAppId, status: ints.privyAppId ? "Connected" : project.kind === "dapp" ? "Recommended for dApps" : "Email and social sign-in" },
     { id: "helius", name: "Helius", mark: <BrandLogo src={LOGOS.helius} />, on: heliusOnServer, status: heliusOnServer ? "On for Solana data" : "Public Solana RPC" },
+    { id: "connectors", name: "Connectors (MCP)", mark: <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-white/[0.07] text-zinc-300"><Cable size={15} /></span>, on: false, status: "Data the agent can read" },
   ];
 
   return (
@@ -179,8 +181,10 @@ export function IntegrationsDialog({ open, onClose, project, onSaved, heliusOnSe
         <div className="space-y-0.5 border-b border-white/[0.07] p-2 md:border-b-0 md:border-r">
           {rows.map((r) => <Row key={r.id} {...r} active={active === r.id} onClick={() => setActive(r.id)} />)}
         </div>
-        <div className="p-5">
-          {active === "walletconnect" || active === "privy"
+        <div className="min-w-0 p-5">
+          {active === "connectors"
+            ? <Connectors project={project} onSaved={onSaved} onClose={onClose} />
+            : active === "walletconnect" || active === "privy"
             ? <Guide key={active} which={active} project={project} onSaved={onSaved} />
             : <BuiltIn which={active} heliusOnServer={heliusOnServer} />}
         </div>
@@ -195,7 +199,7 @@ const PANE_LOGOS: Record<"evm" | "solana" | "near" | "intents" | "helius", strin
   near: [LOGOS.hot, LOGOS.meteor, LOGOS.intear], intents: [LOGOS.nearIntents], helius: [LOGOS.helius],
 };
 
-function BuiltIn({ which, heliusOnServer }: { which: Exclude<Id, "walletconnect" | "privy">; heliusOnServer: boolean }) {
+function BuiltIn({ which, heliusOnServer }: { which: Exclude<Id, "walletconnect" | "privy" | "connectors">; heliusOnServer: boolean }) {
   const copy: Record<typeof which, { title: string; points: string[] }> = {
     evm: { title: "MetaMask, Rabby, Coinbase Wallet and more", points: ["Every installed EVM wallet announces itself (EIP-6963), so visitors see their own wallet with its real logo.", "On Robinhood Chain the site asks the wallet to switch networks, or adds the network if it's new.", "Buys swap right on the site through KyberSwap; the visitor confirms in their wallet.", "No setup needed."] },
     solana: { title: "Phantom, Solflare and Backpack", points: ["Found through the Wallet Standard, with each wallet's own logo. If none is installed, the menu links to Phantom and Solflare.", "Buys swap right on the site through Jupiter; the visitor confirms in their wallet.", "No setup needed."] },

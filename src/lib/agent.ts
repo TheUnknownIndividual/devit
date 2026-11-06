@@ -739,7 +739,7 @@ async function applyCommentsRaw(project: Project, comments: PendingComment[]): P
       project.knowledge?.trim() ? `The team's standing instructions (always follow, they win over style habits): ${project.knowledge.trim().slice(0, 1500)}` : "",
     ].filter(Boolean).join("\n");
     const imagesOf = (c: PendingComment) => (c.assets ?? []).map((id) => assets.get(id)).filter((a): a is Asset => !!a).map((a) => ({ id: a.id, url: a.url, name: a.name, w: a.w, h: a.h }));
-    const user = JSON.stringify({ theme: { id: spec.theme.id, accent: spec.theme.accent, radius: spec.theme.radius, fx: fxOf(spec.theme) }, blocks: touched, comments: comments.map((c) => ({ blockId: c.blockId, element: c.element, text: c.text, images: imagesOf(c) })) });
+    const user = JSON.stringify({ theme: { id: spec.theme.id, accent: spec.theme.accent, radius: spec.theme.radius, fx: fxOf(spec.theme) }, blocks: touched, comments: comments.map((c) => ({ blockId: c.blockId, element: c.element, text: c.text, images: imagesOf(c), ...(c.context ? { "Context from your connectors": c.context } : {}) })) });
     const res = await askJson(system, user, (v) => {
       const p = EditSchema.safeParse(v);
       return p.success ? p.data : null;

@@ -33,6 +33,12 @@ export interface Method {
   email?: string;
   passkey?: { publicKey: string; counter: number; transports?: string[] };
 }
+/** A remote MCP server the person connected (lib/mcp.ts). The agent reads from its read-only tools while it plans, answers and edits. */
+export interface StoredConnector {
+  id: string; name: string; url: string; header?: string; enc?: string; last4?: string;
+  tools?: Array<{ name: string; description: string; readOnly: boolean }>;
+  at: number; checkedAt: number; error?: string;
+}
 export interface StoredKey { enc: string; last4: string; host?: string; at: number; verifiedAt: number | null; use: boolean }
 /** status is 1-Click's word for the deposit; received is the USDC it delivered; settledAt is set once, when the plan turned on. */
 export interface Payment { depositAddress: string; plan: PlanId; cycle: Cycle; usd: number; pay: string; at: number; status?: string; received?: number; settledAt?: number; checkedAt?: number }
@@ -65,6 +71,8 @@ export interface User {
   createdAt: number;
   methods: Method[];
   keys: Partial<Record<KeyId, StoredKey>>;
+  /** Connectors (MCP) follow the person across projects; max 8. */
+  connectors?: StoredConnector[];
   plan: PlanId;
   planUntil?: number;
   payments?: Payment[];
@@ -359,3 +367,9 @@ export async function ownerKeysFor(ownerId: string | undefined): Promise<OwnerKe
   }
   return Object.keys(out).length ? out : null;
 }
+
+/** A connector as the browser sees it: never the secret. */
+export const connectorView = (c: StoredConnector) => ({
+  id: c.id, name: c.name, host: new URL(c.url).host, header: c.header ?? null, last4: c.last4 ?? null, at: c.at, checkedAt: c.checkedAt,
+  error: c.error ?? null, tools: c.tools ?? [],
+});

@@ -30,6 +30,8 @@ const Patch = z.object({
   accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   /** A picture uploaded to this project (its /api/assets url) as the site's logo; "" goes back to the token's. */
   logo: z.string().max(400).optional(),
+  /** Connector (MCP) ids switched off for this project. */
+  connectorsOff: z.array(z.string().max(24)).max(8).optional(),
 });
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -66,6 +68,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
     if (b.rpcUrl !== undefined) p.network.rpcUrl = b.rpcUrl || undefined;
     if (b.walletconnectProjectId !== undefined) p.integrations.walletconnectProjectId = b.walletconnectProjectId || undefined;
+    if (b.connectorsOff) p.connectorsOff = b.connectorsOff.length ? [...new Set(b.connectorsOff)] : undefined;
     if (b.privyAppId !== undefined) p.integrations.privyAppId = b.privyAppId || undefined;
     if (p.spec && b.logo !== undefined && (b.logo === "" || (p.assets ?? []).some((a) => a.url === b.logo))) {
       snapshot(p, b.logo ? "New logo" : "Logo reset");
