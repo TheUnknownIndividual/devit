@@ -59,7 +59,7 @@ export function Menu<T extends string>({
               aria-checked={value === it.value}
               disabled={it.disabled}
               onClick={() => { onPick(it.value); setOpen(false); }}
-              className="group/item flex h-10 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] text-zinc-200 transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent"
+              className={`group/item flex h-10 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] transition-colors hover:bg-white/[0.06] ${value === it.value ? "bg-white/[0.06] text-white" : "text-zinc-200"} disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent`}
             >
               <span className="grid w-5 shrink-0 place-items-center transition-transform duration-300 group-hover/item:scale-110">{it.icon}</span>
               <span className="flex-1 truncate">{it.label}</span>

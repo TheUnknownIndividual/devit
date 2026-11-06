@@ -4,6 +4,7 @@ import { applyComments } from "@/lib/agent";
 import { updateProject } from "@/lib/store";
 import { newId } from "@/lib/spec";
 import { publicProject } from "@/lib/public";
+import { snapshot } from "@/lib/history";
 import { overLimit } from "@/lib/net";
 import { ownerKeysFor } from "@/lib/accounts";
 import { editable } from "@/lib/access";
@@ -38,8 +39,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const res = await runWithKeys(await ownerKeysFor(p.ownerId), () => applyComments(p, comments), await projectEntitled(p, "priorityModels"), modelFrom(req));
   const out = await updateProject(id, (q) => {
     if (!q.spec) return;
-    q.history.push(structuredClone(q.spec));
-    if (q.history.length > 30) q.history.shift();
+    snapshot(q, comments.map((c) => `${c.blockLabel}: ${c.text}`).join("; "));
     q.spec = res.spec;
     q.version += 1;
     const list = comments.map((c) => `${c.blockLabel}: ${c.text}`).join("\n");

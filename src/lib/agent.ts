@@ -693,7 +693,8 @@ async function applyCommentsRaw(project: Project, comments: PendingComment[]): P
       "treasury block props: {title, body, accounts:[NEAR account or *.sputnik-dao.near, max 3]}. It reads balances, transfers and DAO proposals live from the chain; set only accounts the team gave, never invent one. Keep props.snapshot as it is.",
       "signup block props: {title, body, fields: email|wallet|both, button, success (shown after sending), kind: waitlist|whitelist|newsletter|contact}. Entries go to the project's database.",
       "Never invent prices, holder counts or tokenomics numbers; use [PLACEHOLDER] text for facts you don't have.",
-    ].join("\n");
+      project.knowledge?.trim() ? `The team's standing instructions (always follow, they win over style habits): ${project.knowledge.trim().slice(0, 1500)}` : "",
+    ].filter(Boolean).join("\n");
     const imagesOf = (c: PendingComment) => (c.assets ?? []).map((id) => assets.get(id)).filter((a): a is Asset => !!a).map((a) => ({ id: a.id, url: a.url, name: a.name, w: a.w, h: a.h }));
     const user = JSON.stringify({ theme: { id: spec.theme.id, accent: spec.theme.accent, radius: spec.theme.radius, fx: fxOf(spec.theme) }, blocks: touched, comments: comments.map((c) => ({ blockId: c.blockId, element: c.element, text: c.text, images: imagesOf(c) })) });
     const res = await askJson(system, user, (v) => {

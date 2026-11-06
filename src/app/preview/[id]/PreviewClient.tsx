@@ -22,7 +22,21 @@ export type FromPreview =
   | { type: "ss:pick"; blockId: string; label: string; element: string | null; add: boolean }
   /** A drag-select: everything the box covered, replacing the selection unless shift was held. */
   | { type: "ss:picks"; items: Array<{ blockId: string; label: string; element: string | null }>; add: boolean }
-  | { type: "ss:clear" };
+  | { type: "ss:clear" }
+  /** Double-click typing: the words as they were and as typed, in one block. */
+  | { type: "ss:text"; blockId: string; before: string; after: string };
+
+/** Text a double-click can type over: an element whose words are its own (no blocks inside), short enough to be copy. */
+const INLINE = new Set(["SPAN", "B", "STRONG", "EM", "I", "U", "A", "BR", "SMALL", "MARK", "SUP", "SUB"]);
+function typeable(t: EventTarget | null): HTMLElement | null {
+  let el = t instanceof HTMLElement ? t : null;
+  // A click on an inline word inside a heading types over the whole heading.
+  while (el && INLINE.has(el.tagName) && el.parentElement && !el.parentElement.hasAttribute("data-block-id") && [...el.parentElement.childNodes].some((n) => n.nodeType === 3 && n.textContent?.trim())) el = el.parentElement;
+  if (!el || !el.closest("[data-block-id]") || el.closest("button, input, textarea, select, svg, canvas, iframe")) return null;
+  if (![...el.children].every((c) => INLINE.has(c.tagName))) return null;
+  const words = (el.textContent ?? "").trim();
+  return words.length > 0 && words.length <= 600 ? el : null;
+}
 
 export interface Sel { blockId: string; element: string | null }
 const same = (a: Sel, b: Sel) => a.blockId === b.blockId && (a.element ?? null) === (b.element ?? null);
@@ -76,6 +90,45 @@ export function PreviewClient({ initial, walletconnect, credit }: { initial: Sit
   const pointer = useRef<{ x: number; y: number; alt: boolean } | null>(null);
 
   const post = useCallback((m: FromPreview) => window.parent?.postMessage(m, window.location.origin), []);
+  // Typing over words in place: a textarea laid over the element (React keeps its own nodes untouched).
+  const [editing, setEditing] = useState<{ el: HTMLElement; blockId: string; before: string; value: string; style: React.CSSProperties } | null>(null);
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
+  const finish = useCallback((save: boolean) => {
+    const e = editingRef.current;
+    if (!e) return;
+    editingRef.current = null;
+    e.el.style.visibility = "";
+    setEditing(null);
+    const after = e.value.replace(/\s+/g, " ").trim();
+    if (save && after && after !== e.before) post({ type: "ss:text", blockId: e.blockId, before: e.before, after });
+  }, [post]);
+  useEffect(() => {
+    if (!selectOn) return;
+    const dbl = (ev: MouseEvent) => {
+      if ((ev.target as Element | null)?.closest?.("[data-ss-editor]")) return;
+      const el = typeable(ev.target);
+      const block = el?.closest("[data-block-id]");
+      if (!el || !block) return;
+      ev.preventDefault();
+      getSelection()?.removeAllRanges();
+      const cs = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      const before = (el.textContent ?? "").replace(/\s+/g, " ").trim();
+      const style: React.CSSProperties = {
+        position: "fixed", top: r.top, left: r.left, width: Math.max(r.width, 60), minHeight: r.height,
+        font: cs.font, letterSpacing: cs.letterSpacing, textTransform: cs.textTransform as React.CSSProperties["textTransform"], textAlign: cs.textAlign as React.CSSProperties["textAlign"],
+        color: cs.color, lineHeight: cs.lineHeight, padding: cs.padding, background: "transparent", border: 0, outline: "2px solid #C6F24E", outlineOffset: 2, borderRadius: 4, resize: "none", overflow: "hidden", pointerEvents: "auto", margin: 0,
+      };
+      el.style.visibility = "hidden";
+      setEditing({ el, blockId: block.getAttribute("data-block-id")!, before, value: el.textContent?.trim() ?? "", style });
+    };
+    document.addEventListener("dblclick", dbl, true);
+    return () => document.removeEventListener("dblclick", dbl, true);
+  }, [selectOn]);
+  // A new spec (the save came back) or leaving select mode ends any typing.
+  useEffect(() => () => { const e = editingRef.current; if (e) e.el.style.visibility = ""; }, []);
+  useEffect(() => { if (!selectOn) finish(false); }, [selectOn, finish]);
 
   useEffect(() => {
     const on = (e: MessageEvent) => {
@@ -126,7 +179,9 @@ export function PreviewClient({ initial, walletconnect, credit }: { initial: Sit
       const text = el ? `${label} · ${el}` : label;
       setHover((h) => (h?.el === next && h.label === text ? h : { el: next, label: text }));
     };
+    const inEditor = (e: Event) => !!(e.target as Element | null)?.closest?.("[data-ss-editor]");
     const move = (e: MouseEvent) => {
+      if (inEditor(e)) return;
       pointer.current = { x: e.clientX, y: e.clientY, alt: e.altKey };
       hoverAt(e.target, e.altKey);
     };
@@ -185,6 +240,7 @@ export function PreviewClient({ initial, walletconnect, credit }: { initial: Sit
     };
     const noNativeDrag = (e: DragEvent) => e.preventDefault();
     const click = (e: MouseEvent) => {
+      if (inEditor(e)) return;
       if (swallowClick.current) { e.preventDefault(); e.stopPropagation(); swallowClick.current = false; return; }
       const t = targetOf(e.target, e.altKey);
       e.preventDefault();
@@ -197,6 +253,7 @@ export function PreviewClient({ initial, walletconnect, credit }: { initial: Sit
       post({ type: "ss:pick", blockId, label: t.block.getAttribute("data-block-label") ?? "Block", element, add: e.shiftKey });
     };
     const key = (e: KeyboardEvent) => {
+      if (inEditor(e)) return;
       if (e.key === "Escape") { setSel([]); post({ type: "ss:clear" }); }
       // Arrow up widens the last pick from an element to its block, like bolt's select tool.
       const last = sel[sel.length - 1];
@@ -214,6 +271,8 @@ export function PreviewClient({ initial, walletconnect, credit }: { initial: Sit
     const leave = () => { pointer.current = null; setHover(null); };
     // Shift-click would select the page's text between the two clicks.
     const down = (e: MouseEvent) => {
+      if (inEditor(e)) return;
+      if (editingRef.current) finish(true);
       if (e.shiftKey) e.preventDefault();
       if (e.button === 0) { const x = e.clientX + scrollX, y = e.clientY + scrollY; drag = { start: { x1: x, y1: y, x2: x, y2: y }, add: e.shiftKey, on: false, x: e.clientX, y: e.clientY }; }
     };
@@ -244,7 +303,7 @@ export function PreviewClient({ initial, walletconnect, credit }: { initial: Sit
       document.removeEventListener("keydown", key);
       document.documentElement.removeEventListener("mouseleave", leave);
     };
-  }, [selectOn, targetOf, post, sel]);
+  }, [selectOn, targetOf, post, sel, finish]);
 
   const hoverBox = hover && hover.el.isConnected ? rectOf(hover.el) : null;
 
@@ -274,6 +333,19 @@ export function PreviewClient({ initial, walletconnect, credit }: { initial: Sit
         {selBoxes.map(({ key, box }) => (
           <div key={key} style={{ position: "fixed", top: box.top, left: box.left, width: box.width, height: box.height, outline: "2px solid #C6F24E", outlineOffset: -2, borderRadius: 4 }} />
         ))}
+        {editing && (
+          <textarea
+            data-ss-editor=""
+            autoFocus
+            aria-label="Edit text"
+            style={editing.style}
+            value={editing.value}
+            onFocus={(e) => e.currentTarget.select()}
+            onChange={(e) => { const value = e.target.value; setEditing((x) => (x ? { ...x, value } : x)); e.currentTarget.style.height = "auto"; e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`; }}
+            onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); finish(true); } if (e.key === "Escape") { e.preventDefault(); finish(false); } }}
+            onBlur={() => finish(true)}
+          />
+        )}
         {markers.map((m) => {
           const el = document.querySelector(`[data-block-id="${CSS.escape(m.blockId)}"]`);
           if (!el) return null;

@@ -9,13 +9,14 @@ import { cfRemove } from "@/lib/domains";
 import { dropRouting } from "@/lib/routing";
 import { readableOn, restyle } from "@/lib/themes";
 import { publicProject } from "@/lib/public";
+import { snapshot } from "@/lib/history";
 import { isPublicHttps } from "@/lib/net";
 import { CHAIN_IDS, THEME_IDS } from "@/lib/spec";
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const p = await getProject(id).catch(() => null);
-  if (!p || !(await canRead(p))) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!p || !(await canRead(p, undefined, new URL(req.url).searchParams.get("share")))) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json(publicProject(p), { headers: { "cache-control": "no-store" } });
 }
 
@@ -27,6 +28,8 @@ const Patch = z.object({
   privyAppId: z.union([z.literal(""), z.string().regex(/^[a-z0-9]{25}$/i)]).optional(),
   themeId: z.enum(THEME_IDS).optional(),
   accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  /** A picture uploaded to this project (its /api/assets url) as the site's logo; "" goes back to the token's. */
+  logo: z.string().max(400).optional(),
 });
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -46,8 +49,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (b.rpcUrl !== undefined) p.network.rpcUrl = b.rpcUrl || undefined;
     if (b.walletconnectProjectId !== undefined) p.integrations.walletconnectProjectId = b.walletconnectProjectId || undefined;
     if (b.privyAppId !== undefined) p.integrations.privyAppId = b.privyAppId || undefined;
+    if (p.spec && b.logo !== undefined && (b.logo === "" || (p.assets ?? []).some((a) => a.url === b.logo))) {
+      snapshot(p, b.logo ? "New logo" : "Logo reset");
+      p.spec.logo = b.logo || null;
+      p.version += 1;
+    }
     if (p.spec && (b.themeId || b.accent)) {
-      p.history.push(structuredClone(p.spec));
+      snapshot(p, b.themeId ? `Style changed to ${b.themeId}` : `Accent changed to ${b.accent}`);
       if (b.themeId) p.spec.theme = restyle(p.spec.theme, b.themeId);
       if (b.accent) p.spec.theme = { ...p.spec.theme, accent: b.accent, accentText: readableOn(b.accent) };
       p.version += 1;

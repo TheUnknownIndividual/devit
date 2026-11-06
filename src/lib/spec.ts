@@ -239,6 +239,10 @@ export interface ChatMessage {
   via?: string;
   /** Images sent with the message (Asset urls). */
   assets?: string[];
+  /** A message sent in Plan or Ask mode (nothing on the site changed). */
+  mode?: "plan" | "ask";
+  /** A plan waiting for a go-ahead: the request and the changes it would make. */
+  plan?: { request: string; steps: string[] };
 }
 
 export interface PendingComment {
@@ -279,6 +283,12 @@ export interface Project {
   messages: ChatMessage[];
   spec: SiteSpec | null;
   history: SiteSpec[];
+  /** When and why each history entry was saved (lib/history.ts), alongside history. */
+  historyMeta?: Array<{ at: number; label: string }>;
+  /** Standing instructions the agent reads on every build and change (tone, words to avoid, links). */
+  knowledge?: string;
+  /** Secret for the view-only builder link (/build/<id>?share=<key>). Missing: no share link. */
+  shareKey?: string;
   network: { chain: Chain; rpcUrl?: string };
   integrations: Integrations;
   published: { slug: string; at: number } | null;

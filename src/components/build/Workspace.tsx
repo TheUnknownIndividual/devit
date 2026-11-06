@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowUp, ChevronDown, Crosshair, Eye, ExternalLink, Globe, Loader2, MessageSquare, Monitor, MousePointer2, Palette, Plug, Server, FileText, ImagePlus, Smartphone, Tablet, Trash2, Undo2, X, Database,
+  ArrowUp, BookOpen, HelpCircle, ChevronDown, Code2, Crosshair, Eye, ExternalLink, Globe, History, Lightbulb, Link2, Loader2, MessageCircleQuestion, MessageSquare, Mic, MicOff, Monitor, MousePointer2, Palette, Pencil, Plug, Server, FileText, ImagePlus, Smartphone, Tablet, Trash2, Undo2, X, Database, Hammer,
 } from "lucide-react";
+import { CodeView, HistoryPanel, KnowledgeDialog, ProjectLogo, ShareDialog, useDictation } from "./BuilderExtras";
 import { LogoMark } from "@/components/Logo";
+import { Tour, BUILDER_TOUR, restartTour } from "@/components/ui/Tour";
 import { BRANDS, BrandIcon, ChainIcon } from "@/components/brand";
 import { ThemeSwatch } from "@/components/ThemeSwatch";
 import { Menu } from "@/components/ui/Menu";
@@ -28,8 +30,21 @@ const WIDTH: Record<Device, string> = { desktop: "100%", tablet: "820px", phone:
 
 const VIA: Record<string, string> = { "near-ai": "NEAR AI Cloud", claude: "Claude", "offline writer": "Offline writer", "offline editor": "Offline editor" };
 
-export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }: { initial: PublicProject; heliusOnServer: boolean; canEdit?: boolean; viewNote?: string }) {
+type Mode = "edit" | "plan" | "ask";
+const MODES: Array<{ id: Mode; label: string; hint: string }> = [
+  { id: "edit", label: "Edit", hint: "Changes the site" },
+  { id: "plan", label: "Plan", hint: "Says what it would change, then waits for your go" },
+  { id: "ask", label: "Ask", hint: "Answers questions, changes nothing" },
+];
+
+export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, share }: { initial: PublicProject; heliusOnServer: boolean; canEdit?: boolean; viewNote?: string; share?: string }) {
   const [p, setP] = useState(initial);
+  const q = share ? `?share=${encodeURIComponent(share)}` : "";
+  const [mode, setMode] = useState<Mode>("edit");
+  const [side, setSide] = useState<null | "history">(null);
+  const [viewing, setViewing] = useState<number | null>(null);
+  const [view, setView] = useState<"preview" | "code">("preview");
+  const [notice, setNotice] = useState<string | null>(null);
   const [device, setDevice] = useState<Device>("desktop");
   const [selectOn, setSelectOn] = useState(canEdit);
   // Every pick in the preview; shift-click adds or removes one, and a comment goes to all of them.
@@ -47,7 +62,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
   const fileInput = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState<null | "apply" | "chat" | "undo" | "patch">(null);
-  const [dialog, setDialog] = useState<null | "integrations" | "rpc" | "publish" | "export" | "database">(null);
+  const [dialog, setDialog] = useState<null | "integrations" | "rpc" | "publish" | "export" | "database" | "knowledge" | "share">(null);
   // Back from connecting GitHub (?export=1): reopen the export dialog where it left off.
   useEffect(() => {
     const u = new URL(window.location.href);
@@ -68,11 +83,11 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
   useEffect(() => {
     if (!building) return;
     const h = setInterval(async () => {
-      const r = await fetch(`/api/projects/${p.id}`, { cache: "no-store" }).catch(() => null);
+      const r = await fetch(`/api/projects/${p.id}${q}`, { cache: "no-store" }).catch(() => null);
       if (r?.ok) setP((await r.json()) as PublicProject);
     }, 600);
     return () => clearInterval(h);
-  }, [building, p.id]);
+  }, [building, p.id, q]);
 
   useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight, behavior: "smooth" }); }, [p.messages.length, p.steps.length, comments.length]);
 
@@ -106,13 +121,22 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
         input.current?.focus();
       }
       else if (m?.type === "ss:clear") setPicks([]);
+      else if (m?.type === "ss:text") void typeOver(m.blockId, m.before, m.after);
     };
     window.addEventListener("message", on);
     return () => window.removeEventListener("message", on);
   }, []);
 
-  // Keep the preview in step without reloading it.
-  useEffect(() => { if (frameReady && p.spec) send({ type: "ss:spec", spec: p.spec }); }, [frameReady, p.version, p.spec, send]);
+  // Keep the preview in step without reloading it; while a saved version is open in History, show that one instead.
+  useEffect(() => {
+    if (!frameReady || !p.spec) return;
+    if (viewing === null) { send({ type: "ss:spec", spec: p.spec }); return; }
+    let live = true;
+    fetch(`/api/projects/${p.id}/history${q ? `${q}&` : "?"}i=${viewing}`, { cache: "no-store" }).then((r) => r.json()).then((j) => { if (live && j.spec) send({ type: "ss:spec", spec: j.spec }); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [frameReady, p.version, p.spec, send, viewing, p.id, q]);
+  // A change from anywhere drops the History preview: the numbering moved.
+  useEffect(() => { setViewing(null); }, [p.version]);
   useEffect(() => { if (frameReady) send({ type: "ss:select", on: selectOn }); }, [frameReady, selectOn, send]);
   useEffect(() => { if (frameReady) send({ type: "ss:markers", items: markers }); }, [frameReady, markers, send]);
   useEffect(() => { if (frameReady) send({ type: "ss:selected", items: picks.map(({ blockId, element }) => ({ blockId, element })) }); }, [frameReady, picks, send]);
@@ -145,6 +169,18 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
     }
   }
 
+  // Double-click typing in the preview: no model call, saved as its own version.
+  const typeOver = useCallback(async (blockId: string, before: string, after: string) => {
+    if (!canEdit) return;
+    setNotice(null);
+    const r = await fetch(`/api/projects/${p.id}/text`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ blockId, before, after }) }).catch(() => null);
+    const j = await r?.json().catch(() => null);
+    if (r?.ok && j?.id) setP(j as PublicProject);
+    else { setNotice(j?.error ?? "That edit didn't save."); setP((cur) => ({ ...cur, version: cur.version })); if (frameReady && p.spec) send({ type: "ss:spec", spec: p.spec }); }
+  }, [canEdit, p.id, p.spec, frameReady, send]);
+
+  const dictation = useDictation((said) => setText((t) => (t ? `${t.trimEnd()} ${said}` : said)));
+
   async function call(path: string, body: unknown, kind: NonNullable<typeof busy>, method = "POST") {
     setBusy(kind);
     try {
@@ -168,7 +204,14 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
       void apply([...comments, ...fresh]);
       return;
     }
-    void call("/chat", { text: t, ...(assets.length ? { assets } : {}), ...(docs.length ? { docs } : {}) }, "chat");
+    void call("/chat", { text: t, ...(assets.length ? { assets } : {}), ...(docs.length ? { docs } : {}), ...(mode !== "edit" ? { mode } : {}) }, "chat");
+  }
+
+  // A plan's go-ahead: the request and its steps go in as one edit.
+  function buildPlan(plan: { request: string; steps: string[] }) {
+    if (busy || building || !canEdit) return;
+    setMode("edit");
+    void call("/chat", { text: `${plan.request}\n\nDo it like this:\n${plan.steps.map((s) => `- ${s}`).join("\n")}`.slice(0, 1200) }, "chat");
   }
 
   async function apply(all = comments) {
@@ -186,7 +229,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
     <div className="flex h-screen flex-col bg-ink-950">
       {/* Top bar */}
       <header className="flex h-14 shrink-0 items-center gap-2 border-b border-white/[0.07] px-3">
-        <Link href="/" className="btn btn-ghost btn-icon" aria-label="Home"><LogoMark size={20} /></Link>
+        <ProjectLogo project={p} editable={canEdit} onSaved={setP} />
         <ProjectName name={title} ticker={p.spec?.ticker ?? null} editable={canEdit} onSave={(name) => call("", { name }, "patch", "PATCH")} />
         {!canEdit && <span className="hidden h-6 shrink-0 items-center sm:inline-flex gap-1 rounded-md border border-white/10 bg-white/[0.04] px-1.5 text-[11px] text-zinc-400"><Eye size={12} /> View only</span>}
         {building && <span className="hidden items-center gap-1.5 text-[12px] text-zinc-400 sm:flex"><Loader2 size={13} className="animate-spin text-sel" /> Building</span>}
@@ -231,9 +274,14 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
           <button type="button" className="btn btn-outline btn-icon hidden sm:inline-flex" disabled={!canEdit} onClick={() => setDialog("database")} aria-label="Database" title="Database (signup form entries)"><Database size={15} /></button>
           <button type="button" className="btn btn-outline btn-icon hidden sm:inline-flex" disabled={!ready || !canEdit} onClick={() => setDialog("export")} aria-label="Export code" title="Export code (GitHub or zip)"><BrandIcon icon={BRANDS.github} size={15} color="currentColor" /></button>
           <span className="mx-0.5 hidden h-5 w-px bg-white/10 sm:block" />
-          <button type="button" className="btn btn-ghost btn-icon hidden sm:inline-flex" disabled={!canEdit || !p.history.length || !!busy} onClick={() => void call("/undo", {}, "undo")} aria-label="Undo" title="Undo"><Undo2 size={16} /></button>
+          <button type="button" className="btn btn-outline btn-icon hidden sm:inline-flex" disabled={!canEdit} onClick={() => setDialog("knowledge")} aria-label="Project knowledge" title={p.knowledge ? "Project knowledge (set)" : "Project knowledge: instructions the agent always follows"}><span className="relative"><BookOpen size={15} />{p.knowledge && <span className="absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full bg-lime" />}</span></button>
+          <button type="button" className="btn btn-outline btn-icon hidden sm:inline-flex" disabled={!canEdit} onClick={() => setDialog("share")} aria-label="Share a view-only link" title="Share a view-only link to this builder"><Link2 size={15} /></button>
+          <span className="mx-0.5 hidden h-5 w-px bg-white/10 sm:block" />
+          <button type="button" className="btn btn-ghost btn-icon hidden lg:inline-flex" onClick={() => restartTour("builder")} aria-label="Show the tour" title="Show the tour again"><HelpCircle size={16} /></button>
+          <button type="button" data-tour="history" className={`btn btn-icon hidden sm:inline-flex ${side === "history" ? "bg-white/[0.09] text-white" : "btn-ghost"}`} disabled={!ready} onClick={() => setSide((x) => (x === "history" ? null : "history"))} aria-label="History" title="History: every earlier version"><History size={16} /></button>
+          <button type="button" className="btn btn-ghost btn-icon hidden sm:inline-flex" disabled={!canEdit || !p.versions.length || !!busy} onClick={() => void call("/undo", {}, "undo")} aria-label="Undo" title="Undo"><Undo2 size={16} /></button>
           <a className={`btn btn-ghost btn-icon hidden sm:inline-flex ${ready ? "" : "pointer-events-none opacity-50"}`} href={`/live/${p.id}`} target="_blank" rel="noreferrer" aria-label="Open live" title="Open live"><ExternalLink size={16} /></a>
-          <button type="button" className="btn btn-primary" disabled={!ready || !canEdit} onClick={() => setDialog("publish")}>
+          <button type="button" data-tour="publish" className="btn btn-primary" disabled={!ready || !canEdit} onClick={() => setDialog("publish")}>
             <Globe size={15} /> <span className="hidden sm:inline">{p.published ? (p.publishedIsCurrent ? "Published" : "Update") : "Publish"}</span>
           </button>
           <AccountMenu compact />
@@ -249,6 +297,12 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
           onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
           onDrop={(e) => { if (!e.dataTransfer.files.length) return; e.preventDefault(); setDragOver(false); if (ready && !building && canEdit) void attach(e.dataTransfer.files); }}
         >
+          {side === "history" && (
+            <HistoryPanel versions={p.versions} viewing={viewing} canEdit={canEdit} busy={!!busy}
+              onView={setViewing}
+              onRestore={(i) => { void call("/history", { i }, "undo").then((ok) => { if (ok) { setViewing(null); setSide(null); } }); }}
+              onClose={() => setSide(null)} />
+          )}
           {dragOver && (
             <div className="pointer-events-none absolute inset-2 z-20 grid place-items-center rounded-[14px] border border-dashed border-sel/60 bg-ink-950/90 text-center">
               <div><ImagePlus size={20} className="mx-auto text-sel" /><p className="mt-2 text-[13px] text-white">Drop pictures or a .txt / .md file</p><p className="mt-1 text-[11.5px] text-zinc-500">PNG, JPEG, WebP or GIF. Big pictures are shrunk to 400 KB.</p></div>
@@ -259,6 +313,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
               <div key={m.id} className="animate-rise">
                 {m.role === "user" ? (
                   <div className="ml-8 whitespace-pre-line break-words [overflow-wrap:anywhere] rounded-[14px] rounded-tr-md border border-white/[0.07] bg-ink-850 px-3.5 py-2.5 text-[13.5px] leading-relaxed text-zinc-100">
+                    {m.mode && <span className="mb-1 flex items-center gap-1 text-[11px] font-medium text-zinc-500">{m.mode === "plan" ? <Lightbulb size={11} /> : <MessageCircleQuestion size={11} />} {m.mode === "plan" ? "Plan" : "Ask"}</span>}
                     {m.text}
                     {!!m.assets?.length && <div className="mt-2 flex flex-wrap gap-1.5">{m.assets.map((u) => <img key={u} src={u} alt="" className="h-12 w-12 rounded-md border border-white/10 object-cover" />)}</div>}
                   </div>
@@ -266,7 +321,20 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
                   <div className="flex gap-2.5">
                     <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/[0.07] bg-ink-900"><LogoMark size={13} /></span>
                     <div className="min-w-0">
-                      <p className="text-[13.5px] leading-relaxed text-zinc-200">{m.text}</p>
+                      <p className="whitespace-pre-line text-[13.5px] leading-relaxed text-zinc-200">{m.text}</p>
+                      {m.plan && (
+                        <div className="mt-2 rounded-[12px] border border-white/[0.08] bg-ink-900 p-3">
+                          <ol className="space-y-1.5">
+                            {m.plan.steps.map((st, k) => <li key={k} className="flex gap-2 text-[12.5px] leading-snug text-zinc-200"><span className="w-4 shrink-0 text-right text-zinc-500">{k + 1}.</span><span>{st}</span></li>)}
+                          </ol>
+                          {canEdit && i === p.messages.length - 1 && (
+                            <div className="mt-3 flex items-center gap-2">
+                              <button type="button" className="btn btn-primary h-8" disabled={!!busy || building} onClick={() => buildPlan(m.plan!)}><Hammer size={14} /> Build this</button>
+                              <span className="text-[11.5px] text-zinc-500">or reply to change the plan</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                       {m.via && <span className="mt-1.5 inline-flex h-5 items-center rounded-md bg-white/[0.05] px-1.5 text-[10.5px] text-zinc-500">{VIA[m.via] ?? m.via}</span>}
                     </div>
                   </div>
@@ -275,8 +343,9 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
               </div>
             ))}
             {busy === "apply" || busy === "chat" ? (
-              <div className="flex items-center gap-2.5 text-[13px] text-zinc-400"><Loader2 size={14} className="animate-spin text-sel" /> {busy === "apply" ? `Applying ${applying} change${applying === 1 ? "" : "s"}…` : "Working on it…"}</div>
+              <div className="flex items-center gap-2.5 text-[13px] text-zinc-400"><Loader2 size={14} className="animate-spin text-sel" /> {busy === "apply" ? `Applying ${applying} change${applying === 1 ? "" : "s"}…` : mode === "plan" ? "Drafting a plan…" : mode === "ask" ? "Thinking…" : "Working on it…"}</div>
             ) : null}
+            {notice && <div className="flex items-start gap-2 rounded-[10px] border border-amber-300/20 bg-amber-300/[0.05] px-3 py-2 text-[12.5px] text-amber-200"><span className="flex-1">{notice}</span><button type="button" aria-label="Dismiss" className="text-amber-200/70 hover:text-amber-100" onClick={() => setNotice(null)}><X size={13} /></button></div>}
           </div>
 
           {comments.length > 0 && busy !== "apply" && (
@@ -301,7 +370,18 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
             </div>
           )}
 
-          <div className="p-3 pt-0">
+          <div className="p-3 pt-0" data-tour="composer">
+            {canEdit && ready && (
+              <div className="mb-1.5 flex items-center gap-1" role="radiogroup" aria-label="What the agent does with your message">
+                {MODES.map((x) => (
+                  <button key={x.id} type="button" role="radio" aria-checked={mode === x.id} title={x.hint} onClick={() => setMode(x.id)}
+                    className={`h-7 rounded-[8px] px-2.5 text-[12px] ${mode === x.id ? "bg-white/[0.09] text-white" : "text-zinc-500 hover:text-zinc-200"}`}>
+                    {x.label}
+                  </button>
+                ))}
+                <span className="ml-auto truncate text-[11px] text-zinc-500">{MODES.find((x) => x.id === mode)!.hint}</span>
+              </div>
+            )}
             <div className="rounded-[16px] border border-white/10 bg-ink-900 focus-within:border-white/20">
               {(attached.length > 0 || docs.length > 0 || uploading > 0 || attachError) && (
                 <div className="flex flex-wrap items-center gap-1.5 px-3 pt-2.5">
@@ -341,12 +421,13 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}
                 onPaste={(e) => { const f = [...e.clipboardData.files]; if (f.length && ready) { e.preventDefault(); void attach(f); } }}
-                placeholder={!canEdit ? "View only" : building ? "Building…" : picks.length > 1 ? `What should change in these ${picks.length}?` : selected ? `What should change in ${selected.label}?` : "Ask for a change, or paste a contract address…"}
+                placeholder={!canEdit ? "View only" : building ? "Building…" : mode === "ask" ? "Ask anything about your site…" : mode === "plan" ? "Describe the change; I'll plan it before touching anything…" : picks.length > 1 ? `What should change in these ${picks.length}?` : selected ? `What should change in ${selected.label}?` : "Ask for a change, or paste a contract address…"}
                 className="block w-full resize-none bg-transparent px-3.5 pt-3 text-[13.5px] leading-relaxed text-white outline-none placeholder:text-zinc-500"
               />
               <div className="flex items-center gap-1.5 p-2">
                 <button
                   type="button"
+                  data-tour="select"
                   onClick={() => setSelectOn((s) => !s)}
                   disabled={!canEdit}
                   aria-pressed={selectOn}
@@ -356,9 +437,14 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
                   <MousePointer2 size={14} /> Select
                 </button>
                 <button type="button" className="btn btn-ghost btn-icon h-8 w-8" disabled={!ready || building || !canEdit} onClick={() => fileInput.current?.click()} aria-label="Add a picture or text file" title="Add a picture or text file"><ImagePlus size={15} /></button>
+                {dictation.can && (
+                  <button type="button" className={`btn btn-icon h-8 w-8 ${dictation.on ? "bg-red-500/15 text-red-300" : "btn-ghost"}`} disabled={!canEdit || building} onClick={dictation.toggle} aria-label={dictation.on ? "Stop dictation" : "Dictate"} title={dictation.on ? "Stop dictation" : "Dictate"}>
+                    {dictation.on ? <MicOff size={15} /> : <Mic size={15} />}
+                  </button>
+                )}
                 <ModelPicker disabled={!canEdit} />
                 <input ref={fileInput} type="file" multiple hidden accept="image/png,image/jpeg,image/webp,image/gif,.txt,.md,text/plain,text/markdown" onChange={(e) => { if (e.target.files) void attach(e.target.files); e.target.value = ""; }} />
-                <span className="ml-1 hidden text-[11.5px] text-zinc-500 lg:inline">{selected ? "Enter applies · Esc clears" : selectOn ? "Click or drag over blocks" : ""}</span>
+                <span className="ml-1 hidden text-[11.5px] text-zinc-500 lg:inline">{selected ? "Enter applies · Esc clears" : ""}</span>
                 <button type="button" className="btn btn-primary btn-icon ml-auto h-8 w-8" disabled={!canEdit || !text.trim() || !!busy || building || uploading > 0} onClick={submit} aria-label={selected ? "Apply" : "Send"}>
                   {busy === "chat" ? <Loader2 size={15} className="animate-spin" /> : <ArrowUp size={15} />}
                 </button>
@@ -376,10 +462,22 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
                 <span className="mx-auto flex h-6 min-w-0 max-w-[360px] flex-1 items-center justify-center gap-1.5 truncate rounded-md bg-white/[0.04] px-2 font-mono text-[11px] text-zinc-500">
                   <Globe size={11} />{p.published ? `${p.published.slug}${p.sitesDomain ? `.${p.sitesDomain}` : ".sitesmith"}` : "preview"}
                 </span>
-                <span className="text-[11px] text-zinc-600">{selectOn ? "Select on" : "Browse"}</span>
+                <div className="flex items-center gap-0.5 rounded-md bg-white/[0.04] p-0.5" role="radiogroup" aria-label="Preview or code">
+                  <button type="button" role="radio" aria-checked={view === "preview"} onClick={() => setView("preview")} className={`flex h-6 items-center gap-1 rounded px-1.5 text-[11px] ${view === "preview" ? "bg-white/[0.09] text-white" : "text-zinc-500 hover:text-zinc-300"}`}><Eye size={12} /> Preview</button>
+                  <button type="button" role="radio" aria-checked={view === "code"} disabled={!ready || !canEdit} onClick={() => setView("code")} className={`flex h-6 items-center gap-1 rounded px-1.5 text-[11px] disabled:opacity-40 ${view === "code" ? "bg-white/[0.09] text-white" : "text-zinc-500 hover:text-zinc-300"}`}><Code2 size={12} /> Code</button>
+                </div>
               </div>
+              {viewing !== null && view === "preview" && (
+                <div className="flex shrink-0 items-center gap-2 border-b border-sel/30 bg-sel/[0.07] px-3 py-1.5 text-[12px] text-zinc-200">
+                  <History size={13} className="text-sel" />
+                  <span className="min-w-0 flex-1 truncate">Previewing an earlier version: before {p.versions.find((v) => v.i === viewing)?.label ?? "a change"}</span>
+                  {canEdit && <button type="button" className="btn btn-primary h-7 px-2.5 text-[12px]" disabled={!!busy} onClick={() => { const i = viewing; void call("/history", { i }, "undo").then((ok) => { if (ok) { setViewing(null); setSide(null); } }); }}>Restore</button>}
+                  <button type="button" className="btn btn-ghost h-7 px-2.5 text-[12px]" onClick={() => setViewing(null)}>Back to current</button>
+                </div>
+              )}
+              {ready && view === "code" && <CodeView projectId={p.id} version={p.version} />}
               {ready ? (
-                <iframe ref={frame} key={p.id} src={`/preview/${p.id}`} title="Site preview" className="min-h-0 w-full flex-1 bg-white" />
+                <iframe ref={frame} key={p.id} src={`/preview/${p.id}${q}`} title="Site preview" data-tour="preview" className={`min-h-0 w-full flex-1 bg-white ${view === "code" ? "hidden" : ""}`} />
               ) : (
                 <Skeleton failed={p.status === "error"} />
               )}
@@ -392,6 +490,9 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote }:
       <RpcDialog key={`rpc-${dialog === "rpc"}`} open={dialog === "rpc"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
       <PublishDialog open={dialog === "publish"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
       <ExportDialog open={dialog === "export"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
+      <KnowledgeDialog open={dialog === "knowledge"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
+      <ShareDialog open={dialog === "share"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
+      {canEdit && ready && <Tour id="builder" steps={BUILDER_TOUR} />}
       <DatabaseDialog open={dialog === "database"} onClose={() => setDialog(null)} project={p} hasForm={!!p.spec?.blocks.some((b) => b.type === "signup")} />
     </div>
   );
@@ -426,11 +527,15 @@ function ProjectName({ name, ticker, editable, onSave }: { name: string; ticker:
     );
   }
   const label = <><span className="truncate font-semibold text-white">{name}</span>{ticker && <span className="text-zinc-500">${ticker}</span>}</>;
-  if (!editable) return <span className="btn hidden max-w-[240px] cursor-default sm:inline-flex">{label}</span>;
   return (
-    <button type="button" className="btn btn-ghost hidden max-w-[240px] sm:inline-flex" title="Rename" onClick={() => { settled.current = false; setDraft(name); setEditing(true); }}>
-      {label}
-    </button>
+    <span className="hidden min-w-0 items-center sm:inline-flex">
+      <Link href="/projects" className="btn btn-ghost max-w-[240px]" title="All projects">{label}</Link>
+      {editable && (
+        <button type="button" className="btn btn-ghost btn-icon h-8 w-8 text-zinc-500 hover:text-white" title="Rename" aria-label="Rename project" onClick={() => { settled.current = false; setDraft(name); setEditing(true); }}>
+          <Pencil size={13} />
+        </button>
+      )}
+    </span>
   );
 }
 

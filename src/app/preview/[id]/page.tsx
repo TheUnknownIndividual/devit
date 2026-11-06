@@ -6,9 +6,10 @@ import { PreviewClient } from "./PreviewClient";
 
 export const dynamic = "force-dynamic";
 
-export default async function Preview({ params }: { params: Promise<{ id: string }> }) {
+export default async function Preview({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ share?: string }> }) {
   const { id } = await params;
+  const { share } = await searchParams;
   const p = await getProject(id).catch(() => null);
-  if (!p?.spec || !(await canRead(p))) notFound();
+  if (!p?.spec || !(await canRead(p, undefined, share))) notFound();
   return <PreviewClient initial={p.spec} walletconnect={p.integrations.walletconnectProjectId ?? null} credit={await siteCredit(p)} />;
 }

@@ -55,6 +55,10 @@ export async function siteGate(p: Project, slug: string, v?: Viewer): Promise<"o
 }
 
 /** Builder pages (/build, /preview, /live, the project API) of a private project are for its owner and team only. */
-export async function canRead(p: Project, v?: Viewer): Promise<boolean> {
-  return !isPrivateSite(p) || !!(await accessTo(p, v ?? (await viewer())));
+export async function canRead(p: Project, v?: Viewer, share?: string | null): Promise<boolean> {
+  if (!isPrivateSite(p) || sharedWith(p, share)) return true;
+  return !!(await accessTo(p, v ?? (await viewer())));
 }
+
+/** The builder's view-only link key matches. */
+export const sharedWith = (p: Pick<Project, "shareKey">, share?: string | null) => !!(p.shareKey && share && sameSecret(share, p.shareKey));

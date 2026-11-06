@@ -16,10 +16,16 @@ import { detectAddress } from "@/lib/address";
 import { readToken } from "@/lib/venues";
 import { THEME_LABELS } from "@/lib/themes";
 import { usd } from "@/blocks/format";
-import { BLOCK_LABELS, CHAINS, type Chain, type Finding, type ThemeId, type TokenInfo } from "@/lib/spec";
+import { BLOCK_LABELS, CHAINS, type BlockType, type Chain, type Finding, type ThemeId, type TokenInfo } from "@/lib/spec";
 import { Upsell, refusalOf, type PlanRefusal } from "@/components/ui/Upsell";
+import { Tour, LANDING_TOUR } from "@/components/ui/Tour";
 
 type Kind = "memecoin" | "dapp" | "nft";
+type SitePlan = { name: string | null; style: ThemeId; sections: Array<{ type: BlockType; label: string; why: string; on: boolean }>; notes: string[]; via: string };
+type Imported = { source: "github" | "figma"; title: string; text: string; accent: string | null; image: string | null };
+// Plan sections that change the build, as words the request reader (lib/intent.ts) picks up.
+const SECTION_WORDS: Partial<Record<BlockType, string>> = { chart: "chart", trades: "live trades", tokenomics: "tokenomics", holders: "holders", roadmap: "roadmap", signup: "waitlist", treasury: "treasury" };
+const OPTIONAL = new Set<BlockType>(["chart", "trades", "story", "tokenomics", "holders", "roadmap", "signup", "treasury", "posts"]);
 type Style = ThemeId | "auto";
 type SocialKey = "x" | "telegram" | "website";
 
@@ -86,6 +92,14 @@ export function PromptBox() {
   const [style, setStyle] = useState<Style>("auto");
   const [kind, setKind] = useState<Kind>("memecoin");
   const [plan, setPlan] = useState(false);
+  const [sitePlan, setSitePlan] = useState<SitePlan | null>(null);
+  const [planFor, setPlanFor] = useState("");
+  const [planning, setPlanning] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importUrl, setImportUrl] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importErr, setImportErr] = useState<string | null>(null);
+  const [imported, setImported] = useState<Imported | null>(null);
   const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -210,17 +224,47 @@ export function PromptBox() {
 
   const ready = (prompt.trim().length >= 3 || !!lookup) && !busy;
 
+  async function draftPlan() {
+    const text = prompt.trim() || (lookup ? `A website for ${lookup.token.name} ($${lookup.token.symbol})` : "");
+    if (text.length < 3 || planning) return;
+    setPlanning(true);
+    const r = await fetch("/api/plan", { method: "POST", headers: { "content-type": "application/json", ...modelHeader() }, body: JSON.stringify({ prompt: text, kind, chain, style: style === "auto" ? undefined : style }) }).catch(() => null);
+    const j = r?.ok ? ((await r.json()) as SitePlan) : null;
+    setPlanning(false);
+    if (j) { setSitePlan(j); setPlanFor(text); }
+  }
+
+  async function runImport() {
+    const url = importUrl.trim();
+    if (!url || importing) return;
+    setImporting(true); setImportErr(null);
+    const r = await fetch("/api/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: /^https?:\/\//.test(url) ? url : `https://${url}` }) }).catch(() => null);
+    const j = await r?.json().catch(() => null);
+    setImporting(false);
+    if (!r?.ok || !j?.text) { setImportErr(j?.error ?? "Couldn't read that link."); return; }
+    setImported(j as Imported);
+    setImportOpen(false); setImportUrl("");
+  }
+
   async function submit() {
     if (!ready) return;
     setBusy(true);
     setError(null);
-    const text = prompt.trim() || `A website for ${lookup!.token.name} ($${lookup!.token.symbol})`;
+    let text = prompt.trim() || `A website for ${lookup!.token.name} ($${lookup!.token.symbol})`;
+    // An accepted plan adds the sections it switched on; an import adds what the repo or design said.
+    if (plan && sitePlan) {
+      const on = sitePlan.sections.filter((x) => x.on && SECTION_WORDS[x.type] && !text.toLowerCase().includes(SECTION_WORDS[x.type]!)).map((x) => SECTION_WORDS[x.type]!);
+      if (on.length) text = `${text}. Include ${on.join(", ")}.`;
+    }
+    if (imported) text = `${text}\n${imported.text}`;
+    text = text.slice(0, 1200);
+    const pickedStyle = style === "auto" ? (plan && sitePlan ? sitePlan.style : undefined) : style;
     try {
       const r = await fetch("/api/projects", {
         method: "POST",
         headers: { "content-type": "application/json", ...modelHeader() },
         body: JSON.stringify({
-          prompt: text, chain, kind, address: address.trim() || undefined, style: style === "auto" ? undefined : style,
+          prompt: text, chain, kind, address: address.trim() || undefined, style: pickedStyle,
           socials: { x: socials.x.trim() || undefined, telegram: socials.telegram.trim() || undefined, website: socials.website.trim() || undefined },
         }),
       });
@@ -446,6 +490,31 @@ export function PromptBox() {
           </div>
         </div>
 
+        {(importOpen || imported) && (
+          <div className="mx-4 mt-3 rounded-[12px] border border-white/[0.07] bg-white/[0.02] p-3">
+            {imported ? (
+              <div className="flex items-center gap-2.5">
+                {imported.image ? <img src={imported.image} alt="" className="h-9 w-12 rounded-md border border-white/10 object-cover" /> : <span className="grid h-9 w-9 place-items-center rounded-md border border-white/10 bg-ink-850"><BrandIcon icon={BRANDS[imported.source]} size={15} color="#e4e4e7" /></span>}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[12.5px] text-zinc-100">Starting from {imported.source === "github" ? "GitHub" : "Figma"}: {imported.title}</p>
+                  <p className="truncate text-[11.5px] text-zinc-500">{imported.text}</p>
+                </div>
+                {imported.accent && <span className="h-4 w-4 shrink-0 rounded" style={{ background: imported.accent }} title={`Accent ${imported.accent}`} />}
+                <button type="button" className="btn btn-ghost btn-icon h-7 w-7" aria-label="Remove import" onClick={() => setImported(null)}><X size={13} /></button>
+              </div>
+            ) : (
+              <>
+                <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); void runImport(); }}>
+                  <input autoFocus className="field h-9 min-w-0 flex-1 font-mono text-[12.5px]" placeholder="github.com/you/project or figma.com/design/…" value={importUrl} onChange={(e) => setImportUrl(e.target.value)} aria-label="GitHub repo or Figma file link" spellCheck={false} />
+                  <button type="submit" className="btn btn-outline h-9" disabled={importing || !importUrl.trim()}>{importing ? <Loader2 size={14} className="animate-spin" /> : null} Read it</button>
+                  <button type="button" className="btn btn-ghost h-9" onClick={() => { setImportOpen(false); setImportErr(null); }}>Cancel</button>
+                </form>
+                <p className="mt-1.5 text-[11.5px] text-zinc-500">{importErr ?? "A public GitHub repo (its description, site and README) or a Figma file shared by link (its title and main colour)."}</p>
+              </>
+            )}
+          </div>
+        )}
+
         <div className="grow" data-open={plan}>
           <div>
             <div className="mx-4 mt-3 rounded-[12px] border border-white/[0.07] bg-white/[0.02] p-3">
@@ -456,6 +525,36 @@ export function PromptBox() {
                     <span className="text-zinc-400">{c.icon}</span><span className="text-zinc-500">{c.k}</span><span className="text-zinc-100">{c.v}</span>
                   </span>
                 ))}
+              </div>
+              <div className="mt-3 border-t border-white/[0.06] pt-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-[12px] font-medium text-zinc-400">Sections</span>
+                  {sitePlan && planFor !== (prompt.trim() || planFor) && <span className="text-[11px] text-zinc-500">Your sentence changed since this plan.</span>}
+                  <button type="button" className="btn btn-outline ml-auto h-7 px-2.5 text-[12px]" disabled={planning || (prompt.trim().length < 3 && !lookup)} onClick={() => void draftPlan()}>
+                    {planning ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />} {sitePlan ? "Plan again" : "Draft the plan"}
+                  </button>
+                </div>
+                {!sitePlan && !planning && <p className="mt-1.5 text-[12px] text-zinc-500">The agent lists the sections and style it would build. Switch any off or on, then build.</p>}
+                {sitePlan && (
+                  <>
+                    <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                      {sitePlan.sections.map((x) => {
+                        const locked = !OPTIONAL.has(x.type);
+                        return (
+                          <label key={x.type} className={`flex items-start gap-2 rounded-[10px] border px-2.5 py-2 ${x.on ? "border-white/[0.09] bg-ink-850" : "border-white/[0.05] opacity-60"} ${locked ? "" : "cursor-pointer hover:border-white/20"}`}>
+                            <input type="checkbox" className="mt-0.5 accent-lime" checked={x.on} disabled={locked} onChange={() => setSitePlan((cur) => cur && { ...cur, sections: cur.sections.map((y) => (y.type === x.type ? { ...y, on: !y.on } : y)) })} />
+                            <span className="min-w-0">
+                              <span className="block text-[12.5px] text-zinc-100">{x.label}{locked && <span className="text-zinc-500"> · always</span>}</span>
+                              {x.why && <span className="block text-[11.5px] leading-snug text-zinc-500">{x.why}</span>}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <p className="mt-2 text-[12px] text-zinc-400">Style: <span className="text-zinc-100">{THEME_LABELS[sitePlan.style]}</span>{style === "auto" ? " (pick another under Style)" : ""}</p>
+                    {sitePlan.notes.map((n) => <p key={n} className="mt-1 text-[12px] text-zinc-500">{n}</p>)}
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -469,7 +568,7 @@ export function PromptBox() {
             onPick={setChain}
             items={chainItems}
             trigger={(o) => (
-              <button type="button" className="btn btn-outline" aria-label={`Chain: ${CHAINS[chain].name}`}>
+              <button type="button" data-tour="options" className="btn btn-outline" aria-label={`Chain: ${CHAINS[chain].name}`}>
                 <span key={chain} className="animate-pop"><ChainIcon chain={chain} size={15} /></span>
                 <span className="hidden sm:inline">{CHAINS[chain].name}</span>
                 <ChevronDown size={14} className={`text-zinc-500 transition-transform duration-300 ${o ? "rotate-180" : ""}`} />
@@ -499,14 +598,18 @@ export function PromptBox() {
           >
             <Sparkles size={15} className="pop" />
           </button>
+          <button type="button" data-tour="import" className={`btn btn-icon ${importOpen || imported ? "bg-white/[0.08] text-white" : "btn-ghost"}`} title="Start from a GitHub repo or Figma file" aria-label="Start from a GitHub repo or Figma file" onClick={() => setImportOpen((o) => !o)}>
+            <BrandIcon icon={BRANDS.github} size={15} color="currentColor" />
+          </button>
 
           <div className="ml-auto flex items-center gap-1.5">
             <button
               type="button"
+              data-tour="plan"
               onClick={() => setPlan((p) => !p)}
               aria-pressed={plan}
               className={`btn ${plan ? "border border-lime/40 bg-lime/10 text-lime" : "btn-ghost"}`}
-              title="See what the agent read before it builds"
+              title="See the sections and style before it builds"
             >
               <Lightbulb size={15} className="pop" /> <span className="hidden sm:inline">Plan</span>
             </button>
@@ -515,7 +618,7 @@ export function PromptBox() {
                 {listening ? <MicOff size={16} /> : <Mic size={16} className="pop" />}
               </button>
             )}
-            <button type="button" onClick={() => void submit()} disabled={!ready} className="btn btn-primary" aria-label="Build now">
+            <button type="button" data-tour="build" onClick={() => void submit()} disabled={!ready} className="btn btn-primary" aria-label="Build now">
               {busy ? <Loader2 size={16} className="animate-spin" /> : <ArrowUp size={16} className="nudge-up" />}
               <span className="hidden sm:inline">{busy ? "Starting" : "Build now"}</span>
             </button>
@@ -525,7 +628,8 @@ export function PromptBox() {
 
       {error && (refusal ? <Upsell body={refusal} className="mt-3 animate-rise" /> : <p role="alert" className="mt-3 animate-rise text-[13px] text-red-300">{error}</p>)}
 
-      <KindPicker kind={kind} onPick={setKind} />
+      <div data-tour="kinds"><KindPicker kind={kind} onPick={setKind} /></div>
+      <Tour id="landing" steps={LANDING_TOUR} delay={1400} />
     </div>
   );
 }

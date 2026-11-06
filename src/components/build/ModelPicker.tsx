@@ -21,12 +21,13 @@ export function usePickedModel(): ModelChoice {
 export const modelHeader = (): Record<string, string> => { const m = read(); return m === "auto" ? {} : { "x-model": m }; };
 function setPicked(m: ModelChoice) { try { localStorage.setItem(KEY, m); } catch { /* private mode */ } subs.forEach((f) => f()); }
 
-function Mark({ id }: { id: ModelChoice }) {
-  if (id === "glm") return <BrandIcon icon={BRANDS.near} size={13} color="#d4d4d8" />;
-  if (id === "claude-sonnet" || id === "claude-haiku") return <BrandIcon icon={BRANDS.claude} size={13} color="#d4d4d8" />;
-  if (id === "gpt") return <Bot size={13} className="text-zinc-300" />;
-  if (id === "openrouter") return <BrandIcon icon={BRANDS.openrouter} size={13} color="#d4d4d8" />;
-  return <Sparkles size={13} className="text-lime" />;
+/** The model's mark: grey in the list, its own brand colour once it's the one picked. */
+function Mark({ id, on = false }: { id: ModelChoice; on?: boolean }) {
+  if (id === "glm") return <BrandIcon icon={BRANDS.near} size={13} color={on ? "#00EC97" : "#a1a1aa"} />;
+  if (id === "claude-sonnet" || id === "claude-haiku") return <BrandIcon icon={BRANDS.claude} size={13} color={on ? "#D97757" : "#a1a1aa"} />;
+  if (id === "gpt") return <Bot size={13} className={on ? "text-[#10A37F]" : "text-zinc-400"} />;
+  if (id === "openrouter") return <BrandIcon icon={BRANDS.openrouter} size={13} color={on ? "#94A3FF" : "#a1a1aa"} />;
+  return <Sparkles size={13} className={on ? "text-lime" : "text-zinc-400"} />;
 }
 
 export function ModelPicker({ disabled }: { disabled?: boolean }) {
@@ -43,15 +44,16 @@ export function ModelPicker({ disabled }: { disabled?: boolean }) {
         label="Model"
         up
         width={280}
+        header={<div><p className="text-[12px] font-medium text-zinc-200">Pick a model</p><p className="text-[11px] text-zinc-500">Which AI writes and edits your site. Auto picks for each job.</p></div>}
         value={picked}
         onPick={(v) => { if (v === "keys") setKeys(true); else if (avail && !avail[v]) setKeys(true); else setPicked(v); }}
         items={[
-          ...MODEL_CHOICES.map((m) => ({ value: m.id as ModelChoice, label: m.label, icon: <Mark id={m.id} />, hint: avail && !avail[m.id] ? "Add a key" : m.id === "auto" ? "default" : undefined })),
+          ...MODEL_CHOICES.map((m) => ({ value: m.id as ModelChoice, label: m.label, icon: <Mark id={m.id} on={m.id === picked} />, hint: avail && !avail[m.id] ? "Add a key" : m.id === "auto" ? "default" : undefined })),
           { value: "keys" as const, label: "Your API keys…", icon: <KeyRound size={13} className="text-zinc-400" /> },
         ]}
         trigger={(open) => (
           <button type="button" disabled={disabled} title={cur.note} className={`btn h-8 gap-1.5 px-2 text-[12.5px] ${open ? "bg-white/[0.08] text-white" : "btn-ghost text-zinc-300"}`}>
-            <Mark id={cur.id} /> {cur.label} <ChevronDown size={12} className={`text-zinc-500 transition-transform ${open ? "rotate-180" : ""}`} />
+            <Mark id={cur.id} on /> {cur.label} <ChevronDown size={12} className={`text-zinc-500 transition-transform ${open ? "rotate-180" : ""}`} />
           </button>
         )}
       />

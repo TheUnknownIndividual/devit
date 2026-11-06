@@ -8,6 +8,8 @@ import { research, socialsFromText } from "@/lib/research";
 import { getProject, updateProject } from "@/lib/store";
 import { CHAINS, newId, type Block, type SiteSpec } from "@/lib/spec";
 import { publicProject } from "@/lib/public";
+import { snapshot } from "@/lib/history";
+import { askAbout, planChange } from "@/lib/assist";
 import { THEMES, fitAccent, readableOn } from "@/lib/themes";
 import { overLimit } from "@/lib/net";
 import { ownerKeysFor } from "@/lib/accounts";
@@ -22,6 +24,8 @@ const Body = z.object({
   assets: z.array(z.string().max(24)).max(6).optional(),
   /** Text files the person dropped in (read in the browser), passed along as context. */
   docs: z.array(z.object({ name: z.string().max(80), text: z.string().max(6000) })).max(3).optional(),
+  /** plan: say what would change and wait; ask: answer without changing anything. */
+  mode: z.enum(["edit", "plan", "ask"]).optional(),
 });
 
 /** A posts block goes in above the socials once there are posts to show. */
@@ -59,6 +63,19 @@ async function chat(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const assets = (parsed.data.assets ?? []).filter((a) => own.has(a));
   const assetUrls = (p.assets ?? []).filter((a) => assets.includes(a.id)).map((a) => a.url);
 
+  // Plan and Ask answer in the chat and leave the site as it is.
+  if (parsed.data.mode === "plan" || parsed.data.mode === "ask") {
+    const mode = parsed.data.mode;
+    const plan = mode === "plan";
+    const res = plan ? await planChange(p, text) : await askAbout(p, text);
+    const steps: string[] = "steps" in res ? (res.steps as string[]) : [];
+    const out = await updateProject(id, (q) => {
+      q.messages.push({ id: newId(), role: "user", text, at: Date.now(), mode });
+      q.messages.push({ id: newId(), role: "agent", text: res.reply, at: Date.now(), via: res.via, ...(plan && steps.length ? { plan: { request: text, steps } } : {}) });
+    });
+    return NextResponse.json(out ? publicProject(out) : { error: "not found" });
+  }
+
   // "ref: https://…": read that site and take its look and section order, keeping the team's words and colour.
   const refs = refsIn(text);
   if (refs.length) {
@@ -70,8 +87,7 @@ async function chat(req: Request, ctx: { params: Promise<{ id: string }> }) {
         q.messages.push({ id: newId(), role: "agent", text: `I couldn't open ${refs.map((u) => new URL(u).host).join(", ")}. If it's up, it may block automated visits; try another page of it.`, at: Date.now() });
         return;
       }
-      q.history.push(structuredClone(q.spec));
-      if (q.history.length > 30) q.history.shift();
+      snapshot(q, `Look taken from ${read[0].host}`);
       const r = read[0];
       // The team's colour stays: an accent that isn't the style's stock one was theirs.
       const stock = THEMES[q.spec.theme.id];
@@ -101,7 +117,7 @@ async function chat(req: Request, ctx: { params: Promise<{ id: string }> }) {
         q.messages.push({ id: newId(), role: "agent", text: "I couldn't find that token on NEAR, Solana, Ethereum, Base, BNB Chain or Robinhood Chain.", at: Date.now() });
         return;
       }
-      q.history.push(structuredClone(q.spec));
+      snapshot(q, addr ? "Token pulled in" : "Socials added");
       const said: string[] = [];
       if (addr && token) {
         q.spec.token = token;
@@ -136,10 +152,9 @@ async function chat(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const res = await applyComments(p, [{ id: newId(), blockId: target.id, blockLabel: "Whole page", text: text + context, assets }]);
   const out = await updateProject(id, (q) => {
     if (!q.spec) return;
-    q.history.push(structuredClone(q.spec));
+    snapshot(q, text);
     q.spec = res.spec;
     q.version += 1;
-    if (q.history.length > 30) q.history.shift();
     q.messages.push({ id: newId(), role: "user", text: docs?.length ? `${text} (with ${docs.map((d) => d.name).join(", ")})` : text, at: Date.now(), ...(assetUrls.length ? { assets: assetUrls } : {}) });
     q.messages.push({ id: newId(), role: "agent", text: res.message, at: Date.now(), via: res.via });
   });

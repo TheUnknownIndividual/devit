@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { Copy, FolderInput, FolderOutput, Globe, Loader2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { prepareImage } from "@/components/build/attach";
+import { Copy, FolderInput, FolderOutput, Globe, ImagePlus, Loader2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { ChainIcon } from "@/components/brand";
 import { Dialog } from "@/components/ui/Dialog";
 import { Menu } from "@/components/ui/Menu";
@@ -33,6 +34,47 @@ export function ProjectLogo({ src, name, size = 36 }: { src: string | null; name
 }
 
 const host = (u: string) => u.replace(/^https?:\/\//, "");
+
+/** The logo on a row you can edit: click to pick a picture, or drop one on it. */
+function LogoDrop({ row, name, onDone }: { row: ProjectRow; name: string; onDone: (err: string | null) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [over, setOver] = useState(false);
+  const [busy, setBusy] = useState(false);
+  async function use(file: File | undefined) {
+    if (!file) return;
+    const img = await prepareImage(file);
+    if ("error" in img) { onDone(img.error); return; }
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/projects/${row.id}/assets`, { method: "POST", body: img.blob, headers: { "x-name": file.name.slice(0, 60), "x-w": String(img.w), "x-h": String(img.h), "content-type": img.blob.type } });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.asset) { onDone(j.error ?? "That picture didn't upload."); return; }
+      const s = await fetch(`/api/projects/${row.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ logo: j.asset.url }) });
+      onDone(s.ok ? null : "Couldn't set the logo.");
+    } finally { setBusy(false); }
+  }
+  return (
+    <>
+      <button
+        type="button"
+        title={row.status === "ready" ? "Change the logo: click to pick a picture, or drop one here" : "The logo can change once the site is built"}
+        aria-label={`Change the logo of ${name}`}
+        disabled={row.status !== "ready" || busy}
+        onClick={() => input.current?.click()}
+        onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setOver(true); } }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => { e.preventDefault(); setOver(false); void use(e.dataTransfer.files[0]); }}
+        className={`group/logo relative ml-4 shrink-0 rounded-lg ${over ? "ring-2 ring-sel" : ""}`}
+      >
+        <ProjectLogo src={row.logo} name={name} />
+        <span className={`absolute inset-0 grid place-items-center rounded-lg bg-black/55 transition-opacity ${busy ? "opacity-100" : "opacity-0 group-hover/logo:opacity-100"}`}>
+          {busy ? <Loader2 size={14} className="animate-spin text-white" /> : <ImagePlus size={14} className="text-white" />}
+        </span>
+      </button>
+      <input ref={input} type="file" hidden accept="image/png,image/jpeg,image/webp,image/gif" onChange={(e) => { void use(e.target.files?.[0]); e.target.value = ""; }} />
+    </>
+  );
+}
 
 type Pick = "rename" | "duplicate" | "delete" | `move:${string}`;
 
@@ -105,8 +147,10 @@ export function ProjectList({ rows, current = null, teams = [] }: { rows: Projec
                   />
                 </div>
               ) : (
-                <Link href={`/build/${p.id}`} className="flex h-full min-w-0 flex-1 items-center gap-4 pl-4">
-                  <ProjectLogo src={p.logo} name={title} />
+                <>
+                {p.access !== "viewer" && <LogoDrop row={p} name={title} onDone={(err) => { if (err) setError(err); else { setError(null); router.refresh(); } }} />}
+                <Link href={`/build/${p.id}`} className={`flex h-full min-w-0 flex-1 items-center gap-4 ${p.access !== "viewer" ? "pl-2" : "pl-4"}`}>
+                  {p.access === "viewer" && <ProjectLogo src={p.logo} name={title} />}
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[14px] font-medium text-white">{title}{p.ticker ? <span className="ml-2 text-zinc-500">${p.ticker}</span> : null}</div>
                     <div className="flex items-center gap-3 truncate text-[12px] text-zinc-500">
@@ -117,6 +161,7 @@ export function ProjectList({ rows, current = null, teams = [] }: { rows: Projec
                   </div>
                   <span className="w-16 shrink-0 text-right text-[12px] text-zinc-500">{p.edited}</span>
                 </Link>
+                </>
               )}
               {p.liveUrl && (
                 <a href={p.liveUrl} target="_blank" rel="noreferrer" className="hidden max-w-[220px] items-center gap-1.5 truncate px-2 text-[12px] text-lime hover:underline md:flex" title="Open the live site">

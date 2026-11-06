@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { updateProject } from "@/lib/store";
 import { newId } from "@/lib/spec";
 import { publicProject } from "@/lib/public";
+import { popVersion } from "@/lib/history";
 import { editable } from "@/lib/access";
 
 export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -9,7 +10,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
   const g = await editable(id);
   if (g instanceof Response) return g;
   const p = await updateProject(id, (q) => {
-    const prev = q.history.pop();
+    const prev = popVersion(q);
     if (!prev) return;
     q.spec = prev;
     q.version += 1;
