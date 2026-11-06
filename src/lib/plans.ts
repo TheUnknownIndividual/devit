@@ -25,7 +25,7 @@ export const PLANS: Plan[] = [
   },
   {
     id: "pro", name: "Pro", blurb: "For teams shipping a token for real.", monthly: 20, yearly: 16, buildsPerDay: null, seats: 1,
-    perks: ["Unlimited builds within fair use", "Custom domain", "No sitesmith footer", "Private projects", "Priority models"],
+    perks: ["Unlimited builds within fair use", "Custom domain, or buy one in the builder", "No sitesmith footer", "Private projects", "Priority models"],
   },
   {
     id: "team", name: "Team", blurb: "One workspace for the whole crew.", monthly: 49, yearly: 39, buildsPerDay: null, seats: 5,

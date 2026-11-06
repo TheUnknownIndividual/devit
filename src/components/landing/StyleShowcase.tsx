@@ -87,7 +87,7 @@ export function StyleShowcase() {
   }
   function use() {
     window.dispatchEvent(new CustomEvent("sitesmith:prompt", { detail: { style: item.id, prompt: item.prompt } }));
-    document.getElementById("start")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    document.getElementById("start")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   return (

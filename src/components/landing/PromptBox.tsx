@@ -289,7 +289,7 @@ export function PromptBox() {
   const found = lookup?.links.filter((l) => !["x", "telegram", "website"].includes(l.type)) ?? [];
 
   return (
-    <div id="start" className="enter mt-10 w-full max-w-[760px] scroll-mt-24 text-left [--d:3]">
+    <div id="prompt-box" className="enter mt-10 w-full max-w-[760px] text-left [--d:3]">
       <div className="composer rounded-[22px] border border-white/10 bg-ink-900/85 shadow-[0_24px_80px_rgba(4,8,30,0.6)] backdrop-blur-xl" data-live={looking || busy}>
         {/* The sentence comes first; everything else is optional. */}
         <label htmlFor="prompt" className="sr-only">Describe your site</label>

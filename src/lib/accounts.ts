@@ -36,6 +36,16 @@ export interface Method {
 export interface StoredKey { enc: string; last4: string; host?: string; at: number; verifiedAt: number | null; use: boolean }
 /** status is 1-Click's word for the deposit; received is the USDC it delivered; settledAt is set once, when the plan turned on. */
 export interface Payment { depositAddress: string; plan: PlanId; cycle: Cycle; usd: number; pay: string; at: number; status?: string; received?: number; settledAt?: number; checkedAt?: number }
+/**
+ * A domain bought through sitesmith (lib/domain-orders.ts). awaiting: deposit address handed out; paid: 1-Click
+ * delivered the full amount; registering: Spaceship is registering it; live: registered and pointed at the site;
+ * refund: paid but couldn't be bought (taken or the price rose), for the owner to refund by hand.
+ */
+export interface DomainOrder {
+  depositAddress: string; domain: string; projectId: string; usd: number; cost: number; pay: string; refundTo: string; at: number;
+  state: "awaiting" | "paid" | "registering" | "live" | "refund" | "closed";
+  status?: string; received?: number; paidAt?: number; op?: string; opAt?: number; liveAt?: number; error?: string; checkedAt?: number;
+}
 /** A plan set by hand (support, testing): who set it and for how long. */
 export interface Grant { plan: PlanId; days: number | null; by: string; at: number }
 export interface User {
@@ -48,6 +58,7 @@ export interface User {
   plan: PlanId;
   planUntil?: number;
   payments?: Payment[];
+  domainOrders?: DomainOrder[];
   grants?: Grant[];
   /** The picture the sign-in provider gave us (Google); shown unless the user uploaded their own. */
   picture?: string | null;

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, ArrowUpRight, CheckCircle2, Copy, Database, Download, Loader2, Lock, RefreshCw, Sparkles, Unplug } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
+import { BRANDS, BrandIcon } from "@/components/brand";
 import type { PublicProject } from "@/lib/public";
 
 type Row = { site: string; kind: string; email?: string | null; wallet?: string | null; name?: string | null; message?: string | null; created_at?: string };
@@ -70,7 +71,7 @@ export function DatabaseDialog({ open, onClose, project, hasForm }: { open: bool
         {v && db && (
           <div className="rounded-[12px] border border-white/[0.08] bg-ink-850 p-3.5">
             <div className="flex items-start gap-3">
-              <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/[0.06] text-zinc-300"><Database size={15} /></span>
+              <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/[0.06]"><BrandIcon icon={BRANDS[db.provider]} size={18} /></span>
               <div className="min-w-0 flex-1">
                 <div className="text-[13.5px] font-medium text-white">{PROVIDER[db.provider]}{db.instant && " · free instant database"}</div>
                 <div className="truncate font-mono text-[12px] text-zinc-500">{db.host}</div>
@@ -83,7 +84,7 @@ export function DatabaseDialog({ open, onClose, project, hasForm }: { open: bool
             {db.instant && v.claimUrl && !db.expired && (
               <div className="mt-3 rounded-[10px] border border-amber-300/20 bg-amber-300/[0.05] p-3 text-[12.5px] text-amber-200">
                 <div className="flex items-start gap-2"><AlertTriangle size={14} className="mt-0.5 shrink-0" /> Claim it into your Neon account within {hoursLeft(db.expiresAt)} to keep it. Unclaimed instant databases are deleted after 72 hours.</div>
-                <a className="btn btn-outline mt-2.5 h-8 text-[12.5px]" href={v.claimUrl} target="_blank" rel="noreferrer">Claim on Neon <ArrowUpRight size={13} /></a>
+                <a className="btn btn-outline mt-2.5 h-8 text-[12.5px]" href={v.claimUrl} target="_blank" rel="noreferrer"><BrandIcon icon={BRANDS.neon} size={13} /> Claim on Neon <ArrowUpRight size={13} /></a>
               </div>
             )}
             {db.expired && <div className="mt-3 flex items-start gap-2 text-[12.5px] text-amber-300"><AlertTriangle size={14} className="mt-0.5 shrink-0" /> This instant database expired before it was claimed. New entries are held here; connect another database below.</div>}
@@ -104,22 +105,23 @@ export function DatabaseDialog({ open, onClose, project, hasForm }: { open: bool
         {v && (!db || db.expired) && (
           <div className="space-y-2.5">
             {([
-              ["instant", "Create a free database", "A Postgres on Neon in one click. Claim it into your Neon account to keep it.", true],
-              ["neon", "Use my Neon database", "Paste a connection string from the Neon console.", false],
-              ["supabase", "Use my Supabase project", "Paste the project URL and service_role key.", false],
-            ] as const).map(([id, title, body, rec]) => (
-              <button key={id} type="button" onClick={() => setPick(id)} className={`flex w-full items-start gap-3 rounded-[12px] border p-3.5 text-left ${pick === id ? "border-sel/60 bg-sel/[0.06]" : "border-white/[0.08] bg-ink-850 hover:border-white/15"}`}>
-                <span className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border ${pick === id ? "border-sel bg-sel" : "border-white/25"}`}>{pick === id && <span className="h-1.5 w-1.5 rounded-full bg-ink-950" />}</span>
-                <span>
+              ["instant", "Create a free database", "A Postgres on Neon in one click. Claim it into your Neon account to keep it.", true, "neon"],
+              ["neon", "Use my Neon database", "Paste a connection string from the Neon console.", false, "neon"],
+              ["supabase", "Use my Supabase project", "Paste the project URL and service_role key.", false, "supabase"],
+            ] as const).map(([id, title, body, rec, brand]) => (
+              <button key={id} type="button" onClick={() => setPick(id)} className={`flex w-full items-center gap-3 rounded-[12px] border p-3.5 text-left ${pick === id ? "border-sel/60 bg-sel/[0.06]" : "border-white/[0.08] bg-ink-850 hover:border-white/15"}`}>
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/[0.05]"><BrandIcon icon={BRANDS[brand]} size={18} /></span>
+                <span className="min-w-0 flex-1">
                   <span className="block text-[13.5px] font-medium text-white">{title}{rec && <span className="ml-2 text-[12px] font-normal text-zinc-500">recommended</span>}</span>
                   <span className="mt-0.5 block text-[12.5px] text-zinc-400">{body}</span>
                 </span>
+                <span className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border ${pick === id ? "border-sel bg-sel" : "border-white/25"}`}>{pick === id && <span className="h-1.5 w-1.5 rounded-full bg-ink-950" />}</span>
               </button>
             ))}
             {pick === "neon" && (
               <div className="animate-rise space-y-2 rounded-[12px] border border-white/[0.08] bg-ink-850 p-3.5">
                 <input className="field font-mono text-[12.5px]" placeholder="postgresql://user:password@ep-….neon.tech/neondb?sslmode=require" value={cs} spellCheck={false} onChange={(e) => setCs(e.target.value)} aria-label="Neon connection string" />
-                <a className="chip h-7 text-[12px]" href="https://console.neon.tech" target="_blank" rel="noreferrer">Neon console <ArrowUpRight size={12} /></a>
+                <a className="chip h-7 text-[12px]" href="https://console.neon.tech" target="_blank" rel="noreferrer"><BrandIcon icon={BRANDS.neon} size={12} /> Neon console <ArrowUpRight size={12} /></a>
               </div>
             )}
             {pick === "supabase" && (
@@ -127,7 +129,7 @@ export function DatabaseDialog({ open, onClose, project, hasForm }: { open: bool
                 <input className="field font-mono text-[12.5px]" placeholder="https://abcd1234.supabase.co" value={url} spellCheck={false} onChange={(e) => setUrl(e.target.value)} aria-label="Supabase project URL" />
                 <input className="field font-mono text-[12.5px]" type="password" placeholder="service_role key" value={key} spellCheck={false} autoComplete="off" onChange={(e) => setKey(e.target.value)} aria-label="Supabase service_role key" />
                 <div className="text-[12px] text-zinc-500">Both are under Project Settings → API. Row-level security stays on, so the table can&apos;t be read from the browser.</div>
-                <a className="chip h-7 text-[12px]" href="https://supabase.com/dashboard/projects" target="_blank" rel="noreferrer">Supabase dashboard <ArrowUpRight size={12} /></a>
+                <a className="chip h-7 text-[12px]" href="https://supabase.com/dashboard/projects" target="_blank" rel="noreferrer"><BrandIcon icon={BRANDS.supabase} size={12} /> Supabase dashboard <ArrowUpRight size={12} /></a>
               </div>
             )}
             <div className="flex items-start gap-2 text-[12px] text-zinc-500"><Lock size={13} className="mt-0.5 shrink-0" /> Credentials are encrypted on our server and never reach your site&apos;s visitors.</div>

@@ -43,7 +43,7 @@ export default function Home() {
         </div>
 
         <div className="relative z-10 mx-auto flex max-w-[860px] flex-col items-center px-5 pb-24 pt-24 text-center sm:pt-32">
-          <h1 className="enter text-[40px] font-semibold leading-[1.05] tracking-[-0.035em] text-white [--d:1] sm:text-[64px]">What are you launching today?</h1>
+          <h1 id="start" className="enter scroll-mt-6 text-[40px] font-semibold leading-[1.05] tracking-[-0.035em] text-white [--d:1] sm:text-[64px]">What are you launching today?</h1>
           <p className="enter mt-4 max-w-[620px] text-[17px] leading-relaxed text-zinc-300 [--d:2] sm:text-[19px]">
             Describe it in a sentence. Add your contract address and it reads your chain data, socials and posts too, then builds a site that sounds like you, with live charts, wallets and buys from any chain.
           </p>

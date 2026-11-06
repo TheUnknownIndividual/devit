@@ -7,7 +7,7 @@ export function GetStarted() {
     <button
       type="button"
       className="btn btn-primary"
-      onClick={() => { document.getElementById("start")?.scrollIntoView({ behavior: "smooth", block: "center" }); window.dispatchEvent(new CustomEvent("sitesmith:prompt", { detail: { focus: "address" } })); }}
+      onClick={() => { document.getElementById("start")?.scrollIntoView({ behavior: "smooth", block: "start" }); window.dispatchEvent(new CustomEvent("sitesmith:prompt", { detail: { focus: "address" } })); }}
     >
       Get started <ArrowRight size={15} className="nudge-r" />
     </button>

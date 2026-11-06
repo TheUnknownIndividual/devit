@@ -12,6 +12,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const { id } = await ctx.params;
   const g = await editable(id);
   if (g instanceof Response) return g;
+  if (!g.v.user) return NextResponse.json({ error: "Sign in to download the code." }, { status: 401 });
   if (!g.p.spec) return NextResponse.json({ error: "The site isn't built yet." }, { status: 409 });
   const origin = publicOrigin(req);
   const credit = await siteCredit(g.p);

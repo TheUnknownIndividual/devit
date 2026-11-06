@@ -72,7 +72,7 @@ export function PublishDialog({ open, onClose, project, onSaved }: { open: boole
         </div>
 
         <VisibilitySection projectId={project.id} open={open} />
-        <DomainSection projectId={project.id} open={open} />
+        <DomainSection projectId={project.id} open={open} suggest={suggest(project)} />
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-[12px] border border-sel/60 bg-sel/[0.06] p-3.5">

@@ -64,8 +64,8 @@ export function ExportDialog({ open, onClose, project: p, onSaved }: { open: boo
 
   return (
     <Dialog open={open} onClose={onClose} title="Export code" icon={<BrandIcon icon={BRANDS.github} size={15} color="#e4e4e7" />} width={520}>
-      <div className="space-y-5">
-        <p className="text-[13px] text-zinc-400">Your site as a Next.js app: the page, its blocks and its spec. Live price, trades and cross-chain buys keep running through sitesmith, no keys needed.</p>
+      <div className="space-y-4 p-5">
+        <p className="text-[13px] leading-relaxed text-zinc-400">Your site as a Next.js app: the page, its blocks and its spec. Live price, trades and cross-chain buys keep running through sitesmith, no keys needed.</p>
 
         <section className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
           <div className="flex items-center gap-2.5">
@@ -127,11 +127,16 @@ export function ExportDialog({ open, onClose, project: p, onSaved }: { open: boo
         </section>
 
         <section className="flex items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/[0.05] text-zinc-300"><Download size={16} /></span>
           <div className="min-w-0 flex-1">
             <h3 className="text-[14px] font-medium text-zinc-100">Download</h3>
-            <p className="mt-0.5 text-[12.5px] text-zinc-500">A zip of the same app. <span className="font-mono">npm install && npm run dev</span>.</p>
+            <p className="mt-0.5 text-[12.5px] text-zinc-500">{user ? <>A zip of the same app. <span className="font-mono">npm install && npm run dev</span>.</> : "Sign in to download the code."}</p>
           </div>
-          <a className={`btn btn-outline shrink-0 ${p.spec ? "" : "pointer-events-none opacity-50"}`} href={`/api/projects/${p.id}/export`} download><Download size={15} /> .zip</a>
+          {user ? (
+            <a className={`btn btn-outline shrink-0 ${p.spec ? "" : "pointer-events-none opacity-50"}`} href={`/api/projects/${p.id}/export`} download><Download size={15} /> .zip</a>
+          ) : (
+            <button type="button" className="btn btn-outline shrink-0" onClick={() => { onClose(); openSignIn(); }}><LogIn size={15} /> Sign in</button>
+          )}
         </section>
       </div>
     </Dialog>

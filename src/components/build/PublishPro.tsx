@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { DomainBuy, SpaceshipConnect } from "./DomainBuy";
 import { AlertTriangle, Check, CheckCircle2, Copy, Crown, Globe, KeyRound, Link2, Loader2, Lock, RefreshCw, Trash2 } from "lucide-react";
 
 // The Pro parts of the Publish dialog: who can open the site, and a custom domain. Both read their own endpoint;
@@ -144,13 +145,14 @@ function FoundRow({ label, f, bad }: { label: string; f: Found; bad: string }) {
   );
 }
 
-export function DomainSection({ projectId, open }: { projectId: string; open: boolean }) {
+export function DomainSection({ projectId, open, suggest = "" }: { projectId: string; open: boolean; suggest?: string }) {
   const url = `/api/projects/${projectId}/domain`;
   const [s, apply] = useEndpoint<DomainState>(url, open);
   const [input, setInput] = useState("");
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState<"add" | "check" | "remove" | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [mode, setMode] = useState<"buy" | "connect">("buy");
 
   async function call(kind: "add" | "check" | "remove") {
     setBusy(kind);
@@ -174,7 +176,19 @@ export function DomainSection({ projectId, open }: { projectId: string; open: bo
   return (
     <div>
       <Head icon={<Globe size={13} />} title="Custom domain" hint={d ? undefined : "Apex (example.com) or subdomain (app.example.com)"} />
-      {(!d || editing) && (
+      {!d && !editing && v.entitled && v.target && (
+        <div className="mt-2 inline-flex rounded-[10px] border border-white/[0.08] p-0.5" role="tablist">
+          {(["buy", "connect"] as const).map((m) => (
+            <button key={m} type="button" role="tab" aria-selected={mode === m} onClick={() => setMode(m)} className={`h-7 rounded-[8px] px-3 text-[12px] ${mode === m ? "bg-white/[0.08] text-white" : "text-zinc-400 hover:text-zinc-200"}`}>
+              {m === "buy" ? "Buy a domain" : "I have a domain"}
+            </button>
+          ))}
+        </div>
+      )}
+      {!d && !editing && v.entitled && v.target && mode === "buy" && (
+        <div className="mt-2.5"><DomainBuy projectId={projectId} suggest={suggest} onLive={() => void call("check")} /></div>
+      )}
+      {(editing || (!d && (mode === "connect" || !v.entitled || !v.target))) && (
         <form className="mt-2 flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); void call("add"); }}>
           <input className="h-9 min-w-0 flex-1 rounded-[10px] border border-white/10 bg-white/[0.04] px-3 font-mono text-[13px] text-white outline-none focus:border-sel/60" placeholder="example.com" spellCheck={false} value={input} onChange={(e) => setInput(e.target.value)} aria-label="Domain" disabled={!v.entitled || !v.target} />
           <button type="submit" className="btn btn-outline" disabled={!input.trim() || !!busy || !v.entitled || !v.target}>{busy === "add" ? <Loader2 size={14} className="animate-spin" /> : null} {d ? "Replace" : "Connect"}</button>
@@ -214,6 +228,7 @@ export function DomainSection({ projectId, open }: { projectId: string; open: bo
             {d.cf && <p className="text-[12px] text-zinc-400">Certificate: <span className={d.cf.ssl === "active" ? "text-lime" : "text-zinc-200"}>{d.cf.ssl.replace(/_/g, " ")}</span>{d.cf.error && <span className="text-amber-300"> ({d.cf.error})</span>}</p>}
             {!v.cloudflare && d.status !== "pending" && <p className="text-[12px] text-zinc-500">Certificates aren&rsquo;t automatic on this server yet: its admin adds {d.host} under Cloudflare Custom Hostnames.</p>}
             {!v.published && <p className="text-[12px] text-zinc-500">Publish the site and the domain serves it.</p>}
+            {d.status !== "live" && v.entitled && <SpaceshipConnect projectId={projectId} onDone={() => void call("check")} />}
             <div className="flex items-center gap-2 pt-1">
               <button type="button" className="btn btn-outline" disabled={!!busy || !v.entitled} onClick={() => void call("check")}>{busy === "check" ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Check DNS</button>
               <span className="text-[11px] text-zinc-500">{d.checkedAt ? `Last checked ${new Date(d.checkedAt).toLocaleTimeString()}` : "DNS changes can take a few minutes to show."}</span>
