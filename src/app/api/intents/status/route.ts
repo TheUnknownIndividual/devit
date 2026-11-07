@@ -12,7 +12,7 @@ export async function GET(req: Request) {
     const r = await fetch(`${ONECLICK}/v0/status?depositAddress=${encodeURIComponent(dep)}`, { headers, signal: AbortSignal.timeout(8000), cache: "no-store" });
     const j = (await r.json()) as { status?: string };
     const words: Record<string, string> = { PENDING_DEPOSIT: "waiting for your deposit", KNOWN_DEPOSIT_TX: "deposit seen", PROCESSING: "swapping", SUCCESS: "done, it's in your wallet", INCOMPLETE_DEPOSIT: "deposit was short", REFUNDED: "refunded", FAILED: "failed, refund on the way" };
-    return NextResponse.json({ status: j.status ? words[j.status] ?? j.status.toLowerCase() : null });
+    return NextResponse.json({ status: j.status ? words[j.status] ?? j.status.toLowerCase() : null, code: j.status ?? null });
   } catch {
     return NextResponse.json({ status: null });
   }

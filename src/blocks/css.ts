@@ -113,6 +113,27 @@ export const SITE_CSS = `
 .ss-quote b{font-family:var(--font-display);font-size:22px}
 .ss-note{font-size:12px;color:var(--muted);margin-top:10px}
 .ss-err{color:#ef4444;font-size:13px;margin-top:10px}
+.ss-coin{display:flex;align-items:center;gap:10px;width:100%;min-width:0;height:52px;padding:0 12px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--bg);color:var(--text);cursor:pointer;font-family:var(--font-body);text-align:left}
+.ss-coin:disabled{cursor:default;opacity:.7}
+.ss-coin[aria-selected=true]{border-color:var(--accent)}
+.ss-coin-name{display:flex;flex-direction:column;min-width:0;flex:1;line-height:1.2}
+.ss-coin-name b{font-size:15px}
+.ss-coin-name span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ss-coin-bal{font-family:var(--font-mono);font-size:13px;color:var(--muted);flex:none}
+.ss-coins{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;margin-top:6px}
+.ss-amt{display:flex;gap:8px;align-items:center;min-width:0}
+.ss-amt .ss-input{flex:1;min-width:0}
+.ss-amt .ss-btn{flex:none;height:48px}
+.ss-link-btn{border:0;background:none;padding:0;color:var(--muted);font:inherit;font-size:12px;cursor:pointer;text-decoration:underline}
+.ss-link-btn:disabled{cursor:default;text-decoration:none;opacity:.6}
+.ss-steps{list-style:none;margin:14px 0 0;padding:12px 14px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--bg);display:grid;gap:10px}
+.ss-steps li{display:flex;gap:10px;align-items:flex-start;font-size:14px;color:var(--muted);min-width:0}
+.ss-steps li[data-state=now],.ss-steps li[data-state=done]{color:var(--text)}
+.ss-steps li[data-state=fail]{color:#ef4444}
+.ss-step-ic{flex:none;width:22px;height:22px;border-radius:50%;border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+.ss-steps li[data-state=done] .ss-step-ic{background:var(--accent);border-color:var(--accent);color:var(--accent-text)}
+.ss-step-tx{display:flex;flex-direction:column;min-width:0;overflow-wrap:anywhere}
+.ss-step-tx span{font-size:12px;color:var(--muted)}
 
 /* chart + trades */
 .ss-chart{height:460px;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);background:var(--surface)}

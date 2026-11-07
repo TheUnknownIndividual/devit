@@ -6,6 +6,7 @@ import { CHAINS, isEvm, type Chain, type TokenInfo } from "@/lib/spec";
 import { venue } from "@/lib/venues";
 import { explorerTx, familyOf, sendEvm, sendNear, sendSolana, short, useWallets, waitEvm } from "./wallet";
 import { WalletButton } from "./connect";
+import { WalletTrade } from "./xbuy";
 import type { BuiltTx } from "@/lib/swap";
 import { ago, num, pct, usd } from "../format";
 
@@ -315,15 +316,21 @@ interface PayOption { key: string; label: string; chain: string }
 interface IntentQuote { depositAddress: string | null; amountIn: string; amountOut: string; amountOutUsd: string | null; timeEstimate: number | null; deliver: { symbol: string; direct: boolean }; dry: boolean; private?: boolean }
 
 export function BuyBox({ chain, token, ticker, presets }: { chain: Chain; token: TokenInfo | null; ticker: string; presets?: number[] }) {
-  const [tab, setTab] = useState<"same" | "any">("same");
+  const { connected } = useWallets();
+  // NEAR tokens can also be bought straight from an Ethereum wallet (ETH/USDC), so that tab opens first when one is connected.
+  const withEth = chain === "near" && !!token;
+  const evmOn = !!connected && familyOf(connected.wallet) === "evm";
+  const [tab, setTab] = useState<"same" | "eth" | "any">(withEth && evmOn ? "eth" : "same");
+  useEffect(() => { if (withEth && evmOn) setTab((t) => (t === "same" ? "eth" : t)); }, [withEth, evmOn]);
   const native = CHAINS[chain].native;
   return (
     <div className="ss-card ss-buy" data-el="buybox">
       <div className="ss-tabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === "same"} onClick={() => setTab("same")}>With {native}</button>
-        <button type="button" role="tab" aria-selected={tab === "any"} onClick={() => setTab("any")}><Globe2 size={14} style={{ display: "inline", marginRight: 6, verticalAlign: -2 }} />Other chains</button>
+        {withEth && <button type="button" role="tab" aria-selected={tab === "eth"} onClick={() => setTab("eth")}>With ETH</button>}
+        <button type="button" role="tab" aria-selected={tab === "any"} onClick={() => setTab("any")}>{!withEth && <Globe2 size={14} style={{ display: "inline", marginRight: 6, verticalAlign: -2 }} />}Other chains</button>
       </div>
-      {tab === "same" ? <SameChain chain={chain} token={token} ticker={ticker} presets={presets} /> : <AnyChain chain={chain} token={token} ticker={ticker} />}
+      {tab === "same" ? <SameChain chain={chain} token={token} ticker={ticker} presets={presets} /> : tab === "eth" && withEth ? <WalletTrade token={token!} ticker={ticker} /> : <AnyChain chain={chain} token={token} ticker={ticker} />}
     </div>
   );
 }
@@ -563,22 +570,8 @@ function IntentsRoute({ chain, token, ticker }: { chain: Chain; token: TokenInfo
         </div>
       )}
       {err && <div className="ss-err">{err}</div>}
-      {!live && (
-        <div className="ss-note">
-          Rather use an exchange app? <a className="ss-tr-link" href={hexUrl(pay, chain, token)} target="_blank" rel="noreferrer">Swap on HEX Exchange</a>, HOT Labs&apos; cross-chain swap across 35+ networks, with this token already picked.
-        </div>
-      )}
     </>
   );
-}
-
-// HEX Exchange (hex.exchange, HOT Labs) takes ?from=<chain>:<token|native>&to=<chain>:<token|native>. Its chain keys
-// match our pay-with prefixes (eth, sol, btc, near, base, arb, op, avax, pol, sui, aptos, doge, zec).
-const HEX_CHAIN: Record<Chain, string> = { near: "near", solana: "sol", ethereum: "eth", base: "base", bsc: "bsc", robinhood: "hood" };
-function hexUrl(pay: string, chain: Chain, token: TokenInfo | null): string {
-  const from = `${pay.split(":")[0]}:native`;
-  const to = `${HEX_CHAIN[chain]}:${token && !token.demo ? token.address : "native"}`;
-  return `https://hex.exchange/?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
 }
 
 interface RelayQ { requestId: string | null; amountOut: string; amountOutUsd: string | null; symbol: string; impactPct: number | null; timeEstimate: number | null; feesUsd: number | null; txs: Array<{ to: string; data: string; value: string; chainId: number; gas: string | null }>; walletChain: Chain }

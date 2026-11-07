@@ -337,6 +337,30 @@ export async function ensureChain(chain: Chain): Promise<void> {
   if (connected?.wallet === w) { connected = { ...connected, chainId: c.id }; emit(); }
 }
 
+/** The connected Ethereum wallet, for flows that run on chains other than the site's own. */
+export function evmSession(): { provider: Eip1193; address: string } | null {
+  const p = eip1193(connected?.wallet);
+  return p && connected ? { provider: p, address: connected.address } : null;
+}
+
+/** Puts the connected EVM wallet on any chain, adding the chain first when the wallet doesn't know it. */
+export async function switchEvm(c: { chainId: string; chainName: string; rpcUrls: string[]; blockExplorerUrls: string[]; nativeCurrency: { name: string; symbol: string; decimals: number } }): Promise<void> {
+  const w = connected?.wallet;
+  const p = eip1193(w);
+  if (!p || !connected) throw new Error("Connect an Ethereum wallet first.");
+  const now = hexChain(await p.request({ method: "eth_chainId" }).catch(() => ""));
+  if (now !== c.chainId) {
+    try {
+      await p.request({ method: "wallet_switchEthereumChain", params: [{ chainId: c.chainId }] });
+    } catch (e) {
+      const code = (e as { code?: number; data?: { originalError?: { code?: number } } }).code ?? (e as { data?: { originalError?: { code?: number } } }).data?.originalError?.code;
+      if (code !== 4902) throw e;
+      await p.request({ method: "wallet_addEthereumChain", params: [c] });
+    }
+  }
+  if (connected?.wallet === w) { connected = { ...connected, chainId: c.chainId }; emit(); }
+}
+
 /** Opens the wallet's own account chooser. Returns false when the wallet has none (the picker opens instead). */
 export async function switchAccount(): Promise<boolean> {
   const w = connected?.wallet;
