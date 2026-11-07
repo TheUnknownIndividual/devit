@@ -54,7 +54,7 @@ With no model key, an offline writer and editor build and edit sites from templa
 - **NEAR AI Cloud**: the first-choice model for writing and editing sites (private inference in TEEs), with Claude and OpenAI as fallbacks: `src/lib/llm.ts`. Measured cost per call feeds the credit meter: `src/lib/meter.ts`, `src/lib/credits.ts`.
 - **NEAR RPC**: `ft_metadata` and `ft_total_supply` for NEP-141 tokens (`src/lib/chain.ts`). The Treasury block reads account balances, Sputnik DAO v2 policy and proposals (the contracts behind Trezu), and `intents.near` balances (`src/lib/treasury.ts`, `src/blocks/client/treasury.tsx`).
 - **NEAR wallets**: HOT, Meteor and Intear through `@hot-labs/near-connect` on generated sites (`src/blocks/client/wallet.ts`). Sign-in to the builder with a NEAR wallet uses a NEP-413 signed message, checked against a full-access key of the account (`src/lib/walletauth.ts`).
-- **Rhea**: NEAR swaps in the buy box (`src/lib/swap.ts`, `src/lib/venues.ts`).
+- **Rhea**: NEAR swaps in the buy box, quoted through neartrade's public API (see Hackathon notes) and signed in the buyer's NEAR wallet (`src/lib/swap.ts`, `src/lib/venues.ts`).
 
 ## Other services
 
@@ -71,7 +71,8 @@ The agent writes a JSON site spec (theme plus ordered blocks with stable ids), n
 
 ## Hackathon notes
 
-- All code was written during the hackathon. The first commit is 2026-11-04; there is no earlier code.
+- Timeline: work started on 2026-10-26, after the hackathon announcement on 2026-10-19, which the rules count as inside the window (HACKATHON.md Q-001). Nothing was committed until 2026-11-04, so the first commit holds the work from Oct 26 onward and later commits are day by day. No code was brought in from an earlier project.
+- One dependency comes from an earlier project by the same author: NEAR swap quotes in the buy box use the public developer API of neartrade (`dev.neartrade.lol`, routing on Rhea pools). It is called over HTTP like any other service; its code is not in this repo and is not part of this submission.
 - Written with AI coding help (Claude Code). Libraries: Next.js 16, React 19, Tailwind CSS 3, zod, `@hot-labs/near-connect`, `@solana/kit`, `@noble/curves` and `@noble/hashes`, `@simplewebauthn`, `@walletconnect/universal-provider`, `@privy-io/react-auth`, `lucide-react`, `simple-icons`, `uqr`, `playwright-core` (style-reference screenshots).
 - Swaps and payments were tested with quotes only. sitesmith never holds user funds; buyers sign in their own wallet or send to a 1-Click deposit address.
 
