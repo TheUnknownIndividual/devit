@@ -91,12 +91,27 @@ async function dexPairs(chain: Chain, address: string): Promise<DsPair[]> {
   return one?.pairs ?? [];
 }
 
+// When Alchemy refuses (over its monthly capacity, a network not enabled, an outage), reads drop to the public RPC
+// for that network and Alchemy is skipped for ten minutes, so a dead key never costs a site its token data.
+const PUBLIC_EVM: Record<string, string> = {
+  "eth-mainnet": "https://ethereum-rpc.publicnode.com", "base-mainnet": "https://base-rpc.publicnode.com", "bnb-mainnet": "https://bsc-rpc.publicnode.com",
+};
+const alchemyDown = new Map<string, number>();
+
 async function rpc<T>(url: string, method: string, params: unknown): Promise<T | null> {
-  const r = await getJson<{ result?: T }>(url, {
+  const net = url.match(/^https:\/\/([a-z0-9-]+)\.g\.alchemy\.com\//)?.[1];
+  const own = method.startsWith("alchemy_");
+  if (net && PUBLIC_EVM[net] && (alchemyDown.get(net) ?? 0) > Date.now()) return own ? null : rpc<T>(PUBLIC_EVM[net], method, params);
+  const r = await getJson<{ result?: T; error?: unknown }>(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
   });
+  if (net && PUBLIC_EVM[net] && (!r || r.error || r.result === undefined)) {
+    // A plain "no such token" answer from alchemy_getTokenMetadata isn't Alchemy being down.
+    if (!own || !r) alchemyDown.set(net, Date.now() + 10 * 60_000);
+    return own ? null : rpc<T>(PUBLIC_EVM[net], method, params);
+  }
   return r?.result ?? null;
 }
 

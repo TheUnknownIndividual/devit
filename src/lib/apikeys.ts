@@ -10,7 +10,7 @@ export const KEY_LABELS: Record<KeyId, { name: string; hint: string; get: string
   openai: { name: "OpenAI", hint: "GPT models.", get: "https://platform.openai.com/api-keys" },
   openrouter: { name: "OpenRouter", hint: "Optional. Any model, one key.", get: "https://openrouter.ai/keys" },
   helius: { name: "Helius", hint: "Solana names, logos and reads.", get: "https://dashboard.helius.dev" },
-  alchemy: { name: "Alchemy", hint: "Ethereum, Base and BNB Chain reads and token logos.", get: "https://dashboard.alchemy.com" },
+  alchemy: { name: "Alchemy", hint: "Ethereum, Base and BNB Chain reads and token logos. Paste the API key or any Alchemy RPC URL.", get: "https://dashboard.alchemy.com" },
   twitterapi: { name: "twitterapi.io", hint: "Your X posts in builds, and kept fresh on your live site.", get: "https://twitterapi.io/dashboard" },
   "rpc:near": { name: "NEAR RPC", hint: "Used for NEAR reads in your builds.", get: "https://fastnear.com" },
   "rpc:solana": { name: "Solana RPC", hint: "Wins over Helius for Solana reads.", get: "https://drpc.org" },
@@ -19,6 +19,14 @@ export const KEY_LABELS: Record<KeyId, { name: string; hint: string; get: string
 };
 
 const PROBE: Record<string, string> = { near: "status", solana: "getHealth", ethereum: "eth_chainId", robinhood: "eth_chainId" };
+
+/** People often paste the whole RPC URL from a dashboard; keep just the key part. */
+export function normalizeKey(id: KeyId, v: string): string {
+  const t = v.trim();
+  if (id === "alchemy") return t.match(/^https:\/\/[a-z0-9-]+\.g\.alchemy\.com\/v2\/([A-Za-z0-9_-]+)/i)?.[1] ?? t;
+  if (id === "helius") return t.match(/^https:\/\/[a-z0-9.-]*helius-rpc\.com\/?\?api-key=([A-Za-z0-9-]+)/i)?.[1] ?? t;
+  return t;
+}
 
 export function shapeOk(id: KeyId, v: string): string | null {
   if (id.startsWith("rpc:")) return isPublicHttps(v) ? null : "Use a public https RPC URL.";

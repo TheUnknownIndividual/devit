@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { keyOf, publicUser, saveKey, updateUser, viewer } from "@/lib/accounts";
 import { KEY_IDS } from "@/lib/keyscope";
-import { verifyKey } from "@/lib/apikeys";
+import { normalizeKey, verifyKey } from "@/lib/apikeys";
 import { overLimit } from "@/lib/net";
 
 // Bring your own keys. A key is checked with its provider, sealed (AES-256-GCM) and stored; only its last four
@@ -20,13 +20,14 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: "bad request" }, { status: 400 });
   const { id, save } = parsed.data;
   // No key sent: re-check the saved one.
-  const key = parsed.data.key || keyOf(user, id);
+  const sent = parsed.data.key ? normalizeKey(id, parsed.data.key) : "";
+  const key = sent || keyOf(user, id);
   if (!key) return NextResponse.json({ ok: false, reason: "Paste a key first." }, { status: 400 });
   const r = await verifyKey(id, key);
   if (!r.ok) return NextResponse.json(r);
   let u = user;
-  if (save && parsed.data.key) u = (await saveKey(user.id, id, key, id.startsWith("rpc:") ? new URL(key).host : undefined)) ?? user;
-  else if (!parsed.data.key) u = (await updateUser(user.id, (x) => { const k = x.keys[id]; if (k) k.verifiedAt = Date.now(); })) ?? user;
+  if (save && sent) u = (await saveKey(user.id, id, key, id.startsWith("rpc:") ? new URL(key).host : undefined)) ?? user;
+  else if (!sent) u = (await updateUser(user.id, (x) => { const k = x.keys[id]; if (k) k.verifiedAt = Date.now(); })) ?? user;
   return NextResponse.json({ ok: true, user: publicUser(u) });
 }
 
