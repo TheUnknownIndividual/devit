@@ -13,14 +13,14 @@ export interface Template { key: string; style: ThemeId; kind: TemplateKind; tit
 
 // Which kind each sample is a start for, and a plain line on what it is. NFT starts reuse a sample's look.
 const TAGS: Array<{ style: ThemeId; kind: TemplateKind; title: string; note: string }> = [
-  { style: "degen", kind: "memecoin", title: "Loud dog coin", note: "Big yellow headline, live chart and trades, one huge buy button." },
-  { style: "clean", kind: "dapp", title: "Community grants", note: "Calm and readable, with a roadmap, treasury and FAQ." },
-  { style: "retro", kind: "memecoin", title: "Arcade coin", note: "Pixel arcade look with a hi-score board for holders." },
-  { style: "cozy", kind: "memecoin", title: "Pond coin", note: "Soft, friendly and rounded for a gentle community token." },
+  { style: "degen", kind: "memecoin", title: "Loud dog coin", note: "Mascot up top, a huge yellow headline and one big buy button." },
+  { style: "launchpad", kind: "memecoin", title: "Fresh launch", note: "Dark and sharp, the token in a featured banner with live numbers." },
+  { style: "retro", kind: "memecoin", title: "Arcade coin", note: "The whole hero inside a pixel window, with a hi-score board for holders." },
+  { style: "platform", kind: "dapp", title: "Protocol site", note: "White and professional, with an app screen beside the headline." },
+  { style: "cozy", kind: "memecoin", title: "Pond coin", note: "Soft and rounded, the mascot in a blob with a sticker." },
   { style: "terminal", kind: "dapp", title: "Trading tape", note: "Chart and live trades first, in monospace." },
-  { style: "app", kind: "dapp", title: "Wallet app", note: "A big centred headline in the style of a wallet app." },
+  { style: "forest", kind: "memecoin", title: "Illustrated poster", note: "A full-width illustration behind a chunky title." },
   { style: "brutal", kind: "memecoin", title: "No filter", note: "Huge type, hard edges, nothing polite about it." },
-  { style: "glass", kind: "dapp", title: "Liquidity app", note: "Frosted panels on a dark gradient for DeFi." },
   { style: "retro", kind: "nft", title: "Pixel mint page", note: "Retro pixel mint page with a roadmap and FAQ." },
   { style: "cozy", kind: "nft", title: "Gentle gallery mint", note: "A quiet, rounded gallery-style mint page." },
 ];
