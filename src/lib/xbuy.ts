@@ -4,6 +4,7 @@ import { b58encode } from "./solana";
 import type { NearTx } from "./swap";
 import { RELAYER_RPC } from "./ethnear";
 import { XCOINS, xcoin, fromUnits } from "./xpay";
+import { restoreOwed, sponsorAccount, takeOwed } from "./nearsponsor";
 
 // Buy or sell a NEAR token straight from an Ethereum wallet. The coins stay in the visitor's own 0x account on NEAR
 // (every 0x address is a NEAR account, NEP-518), so nothing is created or held for them.
@@ -133,7 +134,7 @@ export async function xState(evm: string, token: string): Promise<XState> {
 
 interface OneClickQuote { depositAddress?: string; amountIn: string; amountOut: string; amountOutFormatted: string; amountOutUsd?: string; minAmountOut?: string; timeEstimate?: number }
 
-async function oneClick(o: { origin: string; dest: string; amount: string; recipient: string; refundTo: string; dry: boolean }): Promise<OneClickQuote | { error: string }> {
+async function oneClick(o: { origin: string; dest: string; amount: string; recipient: string; refundTo: string; dry: boolean; extraFees?: Array<{ recipient: string; fee: number }> }): Promise<OneClickQuote | { error: string }> {
   const body: Record<string, unknown> = {
     dry: o.dry, swapType: "EXACT_INPUT", slippageTolerance: 100,
     originAsset: o.origin, depositType: "ORIGIN_CHAIN", destinationAsset: o.dest, amount: o.amount,
@@ -141,7 +142,8 @@ async function oneClick(o: { origin: string; dest: string; amount: string; recip
     deadline: new Date(Date.now() + 60 * 60_000).toISOString(), referral: "devit",
   };
   const fee = Number(process.env.ONECLICK_FEE_BPS || 0);
-  if (fee > 0 && process.env.ONECLICK_FEE_RECIPIENT) body.appFees = [{ recipient: process.env.ONECLICK_FEE_RECIPIENT, fee }];
+  const fees = [...(fee > 0 && process.env.ONECLICK_FEE_RECIPIENT ? [{ recipient: process.env.ONECLICK_FEE_RECIPIENT, fee }] : []), ...(o.extraFees ?? [])];
+  if (fees.length) body.appFees = fees;
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (process.env.ONECLICK_JWT) headers.authorization = `Bearer ${process.env.ONECLICK_JWT}`;
   try {
@@ -205,6 +207,13 @@ async function depositTxs(contract: string, depositAddress: string, amount: stri
   return txs;
 }
 
+/** Pays the sponsor back in wNEAR from inside the trade (registers the sponsor with wrap.near first if it isn't). */
+function repayTxs(owed: bigint): NearTx[] {
+  const to = sponsorAccount();
+  if (!to || owed <= 0n) return [];
+  return [fc(WNEAR, "storage_deposit", { account_id: to, registration_only: true }, STORAGE), fc(WNEAR, "ft_transfer", { receiver_id: to, amount: owed.toString(), memo: "starter NEAR repaid" }, "1")];
+}
+
 // ---------- quotes ----------
 
 export interface XQuote {
@@ -238,8 +247,19 @@ export async function xQuote(o: { side: "buy" | "sell"; pay: string; amount: str
 
   // Sell
   if (hit) {
-    const q = await oneClick({ origin: hit.assetId, dest: coin.asset, amount: o.amount, recipient: o.evm, refundTo: account, dry: o.dry });
-    if ("error" in q) return q;
+    // Starter NEAR fronted for this sell comes back as a 1-Click app fee to the sponsor, sized to the same dollar value.
+    const owed = o.dry ? 0n : await takeOwed(account);
+    let extraFees: Array<{ recipient: string; fee: number }> | undefined;
+    if (owed > 0n) {
+      const list = await oneClickTokens();
+      const nearUsd = list.find((x) => x.assetId === `nep141:${WNEAR}`)?.price ?? 0;
+      const tradeUsd = fromUnits(o.amount, decimals) * hit.price;
+      const bps = tradeUsd > 0 ? Math.max(1, Math.ceil((fromUnits(owed, 24) * nearUsd * 10_000) / tradeUsd)) : 10_000;
+      if (bps > 500) { await restoreOwed(account, owed); return { error: "That amount is too small to sell. Try a bit more." }; }
+      extraFees = [{ recipient: sponsorAccount()!, fee: bps }];
+    }
+    const q = await oneClick({ origin: hit.assetId, dest: coin.asset, amount: o.amount, recipient: o.evm, refundTo: account, dry: o.dry, extraFees });
+    if ("error" in q) { await restoreOwed(account, owed); return q; }
     return { route: "direct", depositAddress: q.depositAddress ?? null, out: Number(q.amountOutFormatted), outUsd: q.amountOutUsd ? Number(q.amountOutUsd) : null, timeEstimate: q.timeEstimate ?? null, transactions: q.depositAddress && !o.dry ? await depositTxs(o.token, q.depositAddress, o.amount) : [] };
   }
   const nt = await ntQuote(o.token, "sell", o.amount, account);
@@ -252,11 +272,12 @@ export async function xQuote(o: { side: "buy" | "sell"; pay: string; amount: str
       for (const a of tx.actions) { const d = String(a.params.deposit ?? "0"); fees += BigInt(d); legs.push(fc(WNEAR, "ft_transfer", { receiver_id: tx.receiverId, amount: d, memo: "neartrade fee" }, "1")); }
     } else legs.push(tx);
   }
-  const net = BigInt(nt.minOut) - fees;
-  if (net <= 0n) return { error: "That amount is too small to sell." };
+  const owed = o.dry ? 0n : await takeOwed(account);
+  const net = BigInt(nt.minOut) - fees - owed;
+  if (net <= 0n) { await restoreOwed(account, owed); return { error: "That amount is too small to sell." }; }
   const q = await oneClick({ origin: `nep141:${WNEAR}`, dest: coin.asset, amount: net.toString(), recipient: o.evm, refundTo: account, dry: o.dry });
-  if ("error" in q) return q;
-  const transactions = o.dry || !q.depositAddress ? [] : [...(await prune(legs, account, ["near_withdraw"])), ...(await depositTxs(WNEAR, q.depositAddress, net.toString()))];
+  if ("error" in q) { await restoreOwed(account, owed); return q; }
+  const transactions = o.dry || !q.depositAddress ? [] : [...(await prune([...legs, ...repayTxs(owed)], account, ["near_withdraw"])), ...(await depositTxs(WNEAR, q.depositAddress, net.toString()))];
   return { route: "swap", depositAddress: q.depositAddress ?? null, out: Number(q.amountOutFormatted), outUsd: q.amountOutUsd ? Number(q.amountOutUsd) : null, timeEstimate: q.timeEstimate ?? null, transactions };
 }
 
@@ -265,10 +286,13 @@ export async function xSwapLeg(evm: string, token: string): Promise<{ transactio
   const account = evm.toLowerCase();
   const w = await ftBalance(WNEAR, account);
   if (w <= 0n) return { error: "The bridged wNEAR hasn't arrived yet." };
-  const nt = await ntQuote(token, "buy", w.toString(), account);
-  if ("error" in nt) return nt;
+  // Starter NEAR fronted for this buy is paid back first, out of the bridged wNEAR.
+  const owed = await takeOwed(account);
+  if (w <= owed) { await restoreOwed(account, owed); return { error: "Too little wNEAR arrived to swap." }; }
+  const nt = await ntQuote(token, "buy", (w - owed).toString(), account);
+  if ("error" in nt) { await restoreOwed(account, owed); return nt; }
   // Already wrapped: skip neartrade's wrap step.
-  const transactions = await prune(nt.transactions, account, ["near_deposit"]);
+  const transactions = await prune([...repayTxs(owed), ...nt.transactions], account, ["near_deposit"]);
   return { transactions, out: fromUnits(nt.expectedOut, nt.tokenDecimals ?? (await ftDecimals(token))) };
 }
 

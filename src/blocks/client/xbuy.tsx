@@ -217,7 +217,7 @@ export function WalletTrade({ token, ticker }: { token: TokenInfo; ticker: strin
     const direct = st.token.direct;
     const p = stepper(direct
       ? [`Send ${coin.symbol} from your wallet`, `Bridge to NEAR and buy $${ticker}`]
-      : [`Send ${coin.symbol} from your wallet`, "Bridge to NEAR as wNEAR", "Gas for your NEAR account", `Swap for $${ticker} on NEAR`]);
+      : [`Send ${coin.symbol} from your wallet`, "Bridge to NEAR as wNEAR", "Starter NEAR deposit, paid back from this trade", `Swap for $${ticker} on NEAR`]);
     try {
       p.set(0, "now", "Getting a fresh quote");
       const fresh = await post<Quote>({ op: "quote", side: "buy", pay: coin.key, amount: raw.toString(), token: token.address, evm: s.address, dry: false });
@@ -257,7 +257,7 @@ export function WalletTrade({ token, ticker }: { token: TokenInfo; ticker: strin
     const s = evmSession();
     if (!s || !coin || !st || raw <= 0n) return;
     reset(); setBusy(true);
-    const p = stepper(["Gas for your NEAR account", `Sell $${ticker} on NEAR`, `Bridge back as ${coin.symbol} on ${coin.chain}`]);
+    const p = stepper(["Starter NEAR deposit, paid back from this trade", `Sell $${ticker} on NEAR`, `Bridge back as ${coin.symbol} on ${coin.chain}`]);
     try {
       p.set(0, "now");
       await gas();
