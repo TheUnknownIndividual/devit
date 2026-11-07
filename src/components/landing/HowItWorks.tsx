@@ -10,7 +10,7 @@ const STEPS = [
 ] as const;
 
 const INTEGRATIONS: Array<{ name: string; what: string; mark: React.ReactNode }> = [
-  { name: "EVM wallets", what: "MetaMask, Rabby, Coinbase Wallet, WalletConnect", mark: <LogoStack srcs={[LOGOS.metamask, LOGOS.rabby, LOGOS.walletconnect]} /> },
+  { name: "EVM wallets", what: "MetaMask, Rabby, WalletConnect", mark: <LogoStack srcs={[LOGOS.metamask, LOGOS.rabby, LOGOS.walletconnect]} /> },
   { name: "Solana wallets", what: "Phantom, Solflare, Backpack", mark: <LogoStack srcs={[LOGOS.phantom, LOGOS.solflare, LOGOS.backpack]} /> },
   { name: "NEAR wallets", what: "HOT, Meteor, Intear", mark: <LogoStack srcs={[LOGOS.hot, LOGOS.meteor, LOGOS.intear]} /> },
   { name: "Cross-chain buys", what: "NEAR Intents, HEX Exchange", mark: <LogoStack srcs={[LOGOS.nearIntents, LOGOS.hex]} /> },
@@ -93,11 +93,11 @@ export function HowItWorks() {
         <p data-reveal style={{ "--d": 1 } as React.CSSProperties} className="mt-2 max-w-[560px] text-[15px] text-zinc-400">Wallets, buys and live data work out of the box. For WalletConnect, the builder walks you through getting a project ID and checks it before it goes live.</p>
         <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {INTEGRATIONS.map((i, n) => (
-            <div key={i.name} data-reveal style={{ "--d": n % 3 } as React.CSSProperties} className="spot panel group flex min-h-[76px] items-center gap-3 px-4 py-3 transition-colors hover:border-white/15">
+            <div key={i.name} data-reveal style={{ "--d": n % 3 } as React.CSSProperties} className="spot panel group flex h-[72px] items-center gap-3 px-4 transition-colors hover:border-white/15">
               <span className="transition-transform duration-300 [transition-timing-function:var(--ease-spring)] group-hover:-rotate-6 group-hover:scale-110">{i.mark}</span>
               <div className="min-w-0">
                 <div className="truncate text-[14px] font-medium text-white">{i.name}</div>
-                <div className="text-[12px] leading-snug text-zinc-500">{i.what}</div>
+                <div className="truncate text-[12px] text-zinc-500">{i.what}</div>
               </div>
             </div>
           ))}
