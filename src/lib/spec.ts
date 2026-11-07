@@ -15,7 +15,7 @@ export const CHAINS: Record<Chain, { name: string; short: string; native: string
   robinhood: { name: "Robinhood Chain", short: "Robinhood", native: "ETH", explorer: "https://robinhoodchain.blockscout.com/token/" },
 };
 
-export const THEME_IDS = ["degen", "clean", "retro", "cozy", "terminal", "app", "brutal", "glass"] as const;
+export const THEME_IDS = ["degen", "clean", "retro", "cozy", "terminal", "app", "brutal", "glass", "launchpad", "platform", "exchange", "storybook", "forest"] as const;
 export type ThemeId = (typeof THEME_IDS)[number];
 
 /**
@@ -25,7 +25,7 @@ export type ThemeId = (typeof THEME_IDS)[number];
  */
 export interface ThemeFx {
   /** Behind the hero: nothing, a line grid, a dot grid, an accent glow, soft floating orbs, or diagonal stripes. */
-  bg: "none" | "grid" | "dots" | "glow" | "orbs" | "stripes";
+  bg: "none" | "grid" | "dots" | "glow" | "orbs" | "stripes" | "wash";
   /** Cards and buttons: hairline outline, soft shadow, frosted glass, or a hard offset shadow. */
   surface: "outline" | "soft" | "glass" | "offset";
   motion: "snappy" | "calm" | "bouncy";
@@ -54,7 +54,17 @@ export interface ThemeFx {
   count?: boolean;
   /** A back-to-top button on long pages (missing: on). */
   toTop?: boolean;
+  /** The navigation: a full-width bar, or a rounded capsule floating inside the page (missing: bar). */
+  frame?: "bar" | "float";
+  /** The stats row: separate cards, big numbers in a divided strip, pill counters, or one bordered panel with small caps labels (missing: cards). */
+  stats?: "cards" | "strip" | "chips" | "panel";
+  /** Section titles: plain, a small accent label over each, a numbered label (01, 02…), or the second half muted (missing: plain). */
+  titles?: "plain" | "eyebrow" | "number" | "split";
 }
+
+/** The hero's composition. Each style gets its own so two styles never share one page skeleton. */
+export const HERO_LAYOUTS = ["split", "center", "banner", "poster", "product", "collage", "mascot", "window", "stack", "dash"] as const;
+export type HeroLayout = (typeof HERO_LAYOUTS)[number];
 
 export interface Theme {
   id: ThemeId;

@@ -136,3 +136,62 @@ Gaps, most useful first:
 11. **Pricing details** (lovable): monthly/yearly toggle with "2 months free", a credits picker per plan, credit rollover and top-ups.
 12. **View-only shares with a clear banner** (bolt: "You have view-only access to this project"): we have view-only access for team viewers; a public share link of the builder itself is missing.
 13. **Site analytics and SEO settings** for published sites (lovable): visits, title, description, social image.
+
+## Style references, second round (2026-11-07)
+
+Captured with `node scripts/ui-study.mjs` (desk, full-page and phone screenshots plus computed styles in `data/ui-study/<host>/`). The problem being solved: all eight starter styles opened on the same skeleton (bar nav, headline left with a logo box right, four stat cards) and only changed colour and font. Each reference below is studied for its **composition**, not its paint, and each became either a new style or the shape of an existing one. Nothing is copied but measured traits: no text, art, logos or exact headlines.
+
+alpharhc.xyz could not be studied: the deployment answers 402 "temporarily paused" and has no archive snapshot.
+
+### Agora (agoradex.app): professional with FOMO. Style `launchpad`
+- Near-black page, Inter 500/600 at 11–15 px for almost everything, JetBrains Mono for small numbers. Radii 10/12/16 px, pill chips (999 px). Muted text #9A9BA1, green #34C77B for gains, a blue primary button.
+- Top bar: icon links, a search box with a `/` key hint, launch and currency buttons. Under it a row of filter chips with counts.
+- The hero is a **featured-token banner**: a large rounded card with a purple/blue gradient, the token logo and big name, a verified badge, and a stats panel with small caps labels (MARKET CAP, 24H VOLUME, 24H CHANGE, TRADES 24H). Thumbnails and dots to page through featured tokens.
+- A right rail with a ranked list (rank, logo, name, market cap, change). Then trending cards with sparklines, new-launch tiles where the picture fills the card and an "x minutes ago" pill sits on top, and a status bar at the bottom (block, price).
+- Easing `cubic-bezier(.4,0,.2,1)` and `(.2,.8,.3,1)`. Card shadow `rgba(255,255,255,.12) 0 1px 0 inset, rgba(0,0,0,.35) 0 10px 30px`.
+- **What makes it feel professional and FOMO at once:** calm type and tight spacing, but every number on screen is live and small caps labels make it read like a terminal.
+
+### Alchemy (alchemy.com): corporate DeFi. Style `platform`
+- White page, Neue Montreal (licensed; Inter Tight is the free match) with headlines at **weight 400**, 16 px body. Text #020617, slate #64748B, hairlines #E2E8F0, blue #363FF9. Radii 8/12/16 px.
+- An announcement bar above the nav. A pale lavender wash behind the hero.
+- Headline left; on the right a **product screen** (a dashboard with floating stat cards). Small blue button plus a "Talk to sales >" text link.
+- A logo wall in a thin-bordered 5-column grid. A **stats strip**: big light blue numbers ($1T+, 500M+, 99.99%) separated by vertical hairlines, no boxes.
+- Section titles centred with a subtitle and two buttons; **two-tone titles** (the second half in grey). Bento grid of feature cards each with a small UI drawing and a "→" title link. Testimonials in an offset wall, case-study image cards.
+
+### Infinex (infinex.xyz): DeFi as a consumer app. Style `exchange`
+- Pure black. InterVariable 600, h1 48 px in **two short sentences on two lines**. Orange #FE6F39 pill buttons. Surfaces #101114 / #1C1E21 / #23252A, text #ECEEF1, muted #B0B4BA. Radii 20/24/40 px.
+- A **floating capsule nav**: links inside a rounded pill in the middle, logo left, "Log in" (dark pill) and the orange pill right.
+- The hero's right side is the **app itself**, a phone and a desktop window bleeding off the right edge. Under the buttons: platform row (Web, Extension, App soon) and a "secured by" trust line. A roadmap teaser card with a chevron; a bouncing scroll cue.
+
+### Oak (oakagentkit.org): meme-ish, illustrated. Style `forest`
+- Deep forest #0A392F / #062F27, cream text #F0F7EA, muted #C5D6C7. Amber #E2AA5B for eyebrows, each with a short rule ("—— What Oak does"). Lime #C3F56B pill buttons.
+- Manrope 450 for body, Charter-like serif for section titles (~40 px). Source Serif 4 is the free match.
+- **Full-bleed illustrated hero** (a 3D diorama) with a **giant chunky orange title** carrying a stacked text-shadow, set over the bottom-left of the picture.
+- Small "Get Oak ↗" outline pill, an install code block, a numbered three-column row (01/02/03) with hairlines, long editorial sections, translucent cream panels (rgba(240,247,234,.035–.1)), radii 6/12/16, a blurred floating nav bar.
+
+### Musebook (musebook.me) and hmmmm (hmmmm.fun): warm meme. Style `storybook`
+- Musebook: cream paper #FFFDF8 with peach and sand tints (#FAE7DD, #F3E4CD), text #2B2B2B / #4D463B, terracotta #A55630. A custom serif at ~58 px 600 with **the last word of the headline in terracotta**; Source Sans 3 body. Small tracked uppercase terracotta eyebrow. Floating pill nav with a soft shadow. Live counter chips ("74 muses in town"), a progress bar while things load. A peach-tinted contract card with Copy and "Check it on the explorer ↗". The hero picture sits in a rounded frame with a **tilted, taped paper caption** and live activity cards laid over it. Warm shadows rgba(60,40,20,.1). Radii 14/18/999.
+- hmmmm: cream #FBF3E4, navy text #1E2433, green #3BB54A. Fraunces 900 display (96 px, tracking −2.4 px), Inter body, JetBrains Mono labels. A pill eyebrow badge. Pill buttons, 24 px radius everywhere. The hero picture in an **organic blob mask** (`border-radius: 42% 58% 46% 54% / 48% 44% 56% 52%`) with tilted sticker labels. A big round "should I?" button section, a dark navy band with a two-row picture marquee, a live activity ticker in mono, a dashed "buy it the easy way" card, the chart in a white rounded card. Keyframes float-up, bob, ticker, spin-slow.
+
+### What changed in the renderer
+- **Hero compositions** (`HERO_LAYOUTS` in `src/lib/spec.ts`, built in `src/blocks/Site.tsx`): `split`, `center`, `banner` (Agora), `poster` (Oak), `product` with a window or phone mock (Alchemy, Infinex), `collage` (Musebook, hmmmm), `mascot`, `window`, `stack`, `dash`. Each style's default is `HERO_OF` in `src/lib/themes.ts`; restyling a site moves its hero to the new style's composition, and edit words ("poster", "mockup", "stickers", "banner") pick one directly.
+- **Navigation frame** (`fx.frame`): `bar` or a floating `float` capsule.
+- **Stats row** (`fx.stats`): `cards`, `strip` (Alchemy's divided big numbers), `chips` (Musebook's counters), `panel` (one bordered row with small caps labels).
+- **Section titles** (`fx.titles`): `plain`, `eyebrow` (accent label with a rule), `number` (01, 02…), `split` (second half muted).
+- **Background** `wash` (a pale accent gradient, Alchemy).
+
+| Style | Hero | Nav | Stats | Titles |
+|---|---|---|---|---|
+| degen | mascot | bar + ticker | strip | plain |
+| clean | split | bar | cards | eyebrow |
+| retro | window | bar + ticker | chips (square) | plain |
+| cozy | collage | bar | chips | plain |
+| terminal | dash | bar + ticker | panel | plain |
+| app | center xl | float | chips | plain |
+| brutal | stack | bar + ticker | panel | number |
+| glass | center | bar | panel (glass) | plain |
+| launchpad | banner | bar + ticker | cards | plain |
+| platform | product (window) | bar | strip | split |
+| exchange | product (phone) | float | cards | plain |
+| storybook | collage | float | chips | eyebrow |
+| forest | poster | float | strip | number |

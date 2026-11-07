@@ -62,30 +62,183 @@ function Nav({ b, spec, mode, walletconnect, privy }: { b: Block; spec: SiteSpec
   );
 }
 
+const fmtPct = (n: number | null | undefined) => (n == null ? "—" : `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`);
+
+/** The headline with its last word wrapped, so a style can colour it (Musebook's terracotta last word). */
+function Headline({ text }: { text: string }) {
+  const t = text.trim();
+  const i = t.lastIndexOf(" ");
+  return <h1 className="ss-h1 ss-i2" data-el="headline">{i > 0 ? <>{t.slice(0, i)} <span className="ss-last">{t.slice(i + 1)}</span></> : t}</h1>;
+}
+
+/** A price line that always looks the same for the same ticker and leans the way the day went. */
+function sparkPath(seed: string, up: boolean, w = 240, h = 64): string {
+  let x = 0;
+  for (const c of seed) x = (x * 31 + c.charCodeAt(0)) >>> 0;
+  const rnd = () => (x = (Math.imul(x, 1103515245) + 12345) >>> 0) / 2 ** 32;
+  const n = 28;
+  const pts: string[] = [];
+  let y = up ? h * 0.72 : h * 0.3;
+  for (let i = 0; i < n; i++) {
+    y += (rnd() - 0.5) * h * 0.22 + (up ? -h * 0.018 : h * 0.018);
+    y = Math.max(4, Math.min(h - 4, y));
+    pts.push(`${((i / (n - 1)) * w).toFixed(1)},${y.toFixed(1)}`);
+  }
+  return `M${pts.join("L")}`;
+}
+
+function metrics(t: TokenInfo | null): Array<[string, string]> {
+  return [
+    ["Market cap", usd(t?.marketCap)],
+    ["24h volume", usd(t?.volume24h)],
+    ["24h change", fmtPct(t?.change24h)],
+    [t?.holders != null ? "Holders" : "Liquidity", t?.holders != null ? num(t.holders) : usd(t?.liquidityUsd)],
+  ];
+}
+
+/** The product itself beside the headline (Alchemy's dashboard, Infinex's phone): price, a line, a buy button. */
+function Mock({ spec, kind }: { spec: SiteSpec; kind: string }) {
+  const t = spec.token;
+  const up = (t?.change24h ?? 1) >= 0;
+  const d = sparkPath(spec.ticker, up);
+  const m = metrics(t);
+  return (
+    <div className="ss-mock-wrap ss-i5" data-mock={kind} data-el="art">
+      <div className="ss-mock">
+        <div className="ss-mock-bar"><span>{kind === "phone" ? spec.name : `${spec.name.toLowerCase().replace(/[^a-z0-9]+/g, "") || "app"}.app`}</span></div>
+        <div className="ss-mock-body">
+          <div className="ss-mock-tok"><Logo spec={spec} size={34} /><div><b>{spec.name}</b><span>${spec.ticker} · {CHAINS[spec.chain].short}</span></div></div>
+          <div className="ss-mock-price">{usd(t?.priceUsd)} <span className={up ? "ss-up" : "ss-down"}>{fmtPct(t?.change24h)}</span></div>
+          <svg viewBox="0 0 240 64" preserveAspectRatio="none" className="ss-mock-line" aria-hidden="true">
+            <path d={`${d}L240,64L0,64Z`} fill="currentColor" opacity=".12" />
+            <path d={d} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+          </svg>
+          <div className="ss-mock-grid">
+            {m.slice(0, 2).map(([k, v]) => <div key={k}><span>{k}</span><b>{v}</b></div>)}
+          </div>
+          <div className="ss-mock-buy">Buy ${spec.ticker}</div>
+        </div>
+      </div>
+      <div className="ss-mock-float"><span>{m[3][0]}</span><b>{m[3][1]}</b></div>
+    </div>
+  );
+}
+
 function Hero({ b, spec }: { b: Block; spec: SiteSpec }) {
   const p = b.props as P;
-  return (
-    <Section b={b} className="ss-hero" attrs={{ "data-layout": s(p.layout, "split"), "data-size": s(p.size, "lg") }}>
-        <div className="ss-wrap ss-hero-in">
-          <div className="ss-rise">
-            <div className="ss-kicker ss-i1" data-el="kicker"><ChainIcon chain={spec.chain} size={14} mono="currentColor" /> ${spec.ticker} on {CHAINS[spec.chain].name}</div>
-            <h1 className="ss-h1 ss-i2" data-el="headline">{s(p.headline, spec.name)}</h1>
-            <p className="ss-sub ss-i3" data-el="subhead">{s(p.subhead, spec.tagline)}</p>
-            <div className="ss-hero-ctas ss-i4">
-              <a href="#buy" className={`ss-btn${s(p.ctaSize) === "xl" ? " ss-btn-xl" : s(p.ctaSize) === "md" ? " ss-btn-sm" : ""}`} data-el="cta">{s(p.cta, `Buy $${spec.ticker}`)} <ArrowDown size={16} /></a>
-              {spec.token && <CopyCA address={spec.token.address} />}
+  const layout = s(p.layout, "split");
+  const t = spec.token;
+  const wide = s(p.image) || t?.header || null;
+  const src = s(p.image) || logoOf(spec) || t?.header || null;
+  const art = (
+    <div className="ss-hero-art ss-i5" data-el="art">
+      {src ? <img src={src} alt="" /> : <span className="ss-monogram">${spec.ticker.slice(0, 1)}</span>}
+    </div>
+  );
+  const kicker = <div className="ss-kicker ss-i1" data-el="kicker"><ChainIcon chain={spec.chain} size={14} mono="currentColor" /> ${spec.ticker} on {CHAINS[spec.chain].name}</div>;
+  const sub = <p className="ss-sub ss-i3" data-el="subhead">{s(p.subhead, spec.tagline)}</p>;
+  const ctas = (
+    <div className="ss-hero-ctas ss-i4">
+      <a href="#buy" className={`ss-btn${s(p.ctaSize) === "xl" ? " ss-btn-xl" : s(p.ctaSize) === "md" ? " ss-btn-sm" : ""}`} data-el="cta">{s(p.cta, `Buy $${spec.ticker}`)} <ArrowDown size={16} /></a>
+      {t && <CopyCA address={t.address} />}
+    </div>
+  );
+  const head = <Headline text={s(p.headline, spec.name)} />;
+  const copy = <div className="ss-rise ss-hero-copy">{kicker}{head}{sub}{ctas}</div>;
+  const changeCls = (k: string) => (k === "24h change" ? ((t?.change24h ?? 0) >= 0 ? "ss-up" : "ss-down") : undefined);
+  let inner: ReactNode;
+  switch (layout) {
+    case "banner":
+      inner = (
+        <div className="ss-banner">
+          <div className="ss-rise ss-hero-copy">
+            <div className="ss-banner-tok ss-i1" data-el="kicker">
+              <Logo spec={spec} size={56} />
+              <div><b>{spec.name}</b><span>${spec.ticker} · {CHAINS[spec.chain].name}</span></div>
             </div>
+            {head}{sub}{ctas}
           </div>
-          <div className="ss-hero-art ss-i5" data-el="art">
-            {s(p.image) ? <img src={s(p.image)} alt="" /> : logoOf(spec) ? <img src={logoOf(spec)!} alt="" /> : spec.token?.header ? <img src={spec.token.header} alt="" /> : <span className="ss-monogram">${spec.ticker.slice(0, 1)}</span>}
-          </div>
+          <dl className="ss-banner-stats ss-i5">
+            {metrics(t).map(([k, v]) => <div key={k}><dt>{k}</dt><dd className={changeCls(k)}>{v}</dd></div>)}
+          </dl>
         </div>
+      );
+      break;
+    case "product":
+      inner = <>{copy}<Mock spec={spec} kind={s(p.mock, "window")} /></>;
+      break;
+    case "collage":
+      inner = (
+        <>
+          {copy}
+          <div className="ss-collage">
+            {art}
+            <span className="ss-sticker">{spec.tagline}</span>
+            <div className="ss-collage-card"><b>{t?.holders != null ? num(t.holders) : usd(t?.marketCap)}</b> {t?.holders != null ? "holders so far" : "market cap"}</div>
+          </div>
+        </>
+      );
+      break;
+    case "window":
+      inner = (
+        <div className="ss-win">
+          <div className="ss-win-bar" aria-hidden="true"><span>{spec.ticker}.EXE</span><span>_ □ ×</span></div>
+          <div className="ss-win-body">{copy}{art}</div>
+        </div>
+      );
+      break;
+    case "stack":
+      inner = (
+        <>
+          <div className="ss-rise ss-stack-top">{kicker}{head}</div>
+          <div className="ss-stack-row"><div>{sub}{ctas}</div>{art}</div>
+        </>
+      );
+      break;
+    case "dash":
+      inner = (
+        <>
+          <div className="ss-rise ss-dash-top">
+            <div>{kicker}{head}{sub}</div>
+            {ctas}
+          </div>
+          <div className="ss-dash-bar ss-i5">
+            <div className="ss-dash-tok"><Logo spec={spec} size={32} /><div><b>{spec.name}</b><span>${spec.ticker}</span></div></div>
+            <div><span>Price</span><b>{usd(t?.priceUsd)}</b></div>
+            {metrics(t).map(([k, v]) => <div key={k}><span>{k}</span><b className={changeCls(k)}>{v}</b></div>)}
+          </div>
+        </>
+      );
+      break;
+    default:
+      // split, center, mascot (art above), poster (art behind)
+      inner = <>{art}{copy}</>;
+      if (layout === "split") inner = <>{copy}{art}</>;
+  }
+  return (
+    <Section b={b} className="ss-hero" attrs={{ "data-layout": layout, "data-size": s(p.size, "lg"), "data-art": wide ? "wide" : "mark" }}>
+      <div className="ss-wrap ss-hero-in">{inner}</div>
     </Section>
   );
 }
 
-function Title({ text }: { text: string }) {
-  return <h2 className="ss-h2" data-el="title">{text}</h2>;
+/** A short label over a section title, for styles that use one (Oak's amber labels, Musebook's tracked caps). */
+const EYEBROW: Partial<Record<Block["type"], string>> = {
+  buy: "Get in", chart: "Live chart", trades: "On chain", how: "Three steps", tokenomics: "Supply", story: "The story",
+  faq: "Questions", roadmap: "What's next", socials: "Community", holders: "Holders", treasury: "Treasury", signup: "Early access",
+  leaderboard: "Top buyers", pnl: "Calculator", raid: "Raids", milestones: "Milestones", posts: "From X",
+};
+
+/** The title, with its second half wrapped so a style can mute it (Alchemy's two-tone headings). */
+function Title({ b, text }: { b: Block; text: string }) {
+  const w = text.trim().split(/\s+/);
+  const cut = w.length >= 3 ? Math.ceil(w.length * 0.55) : w.length;
+  return (
+    <>
+      <div className="ss-eyebrow" aria-hidden="true">{EYEBROW[b.type] ?? BLOCK_LABELS[b.type]}</div>
+      <h2 className="ss-h2" data-el="title">{cut < w.length ? <>{w.slice(0, cut).join(" ")} <span className="ss-h2-2">{w.slice(cut).join(" ")}</span></> : text}</h2>
+    </>
+  );
 }
 
 function Tokenomics({ b, spec }: { b: Block; spec: SiteSpec }) {
@@ -96,7 +249,7 @@ function Tokenomics({ b, spec }: { b: Block; spec: SiteSpec }) {
   return (
     <Section b={b}>
       <div className="ss-wrap">
-        <Title text={s(p.title, "Tokenomics")} />
+        <Title b={b} text={s(p.title, "Tokenomics")} />
         <div className="ss-grid ss-g2" style={{ alignItems: "center" }}>
           <div className="ss-card" data-el="chart">
             {s(p.style) === "donut" ? (
@@ -132,7 +285,7 @@ function TreasuryBlock({ b, mode }: { b: Block; mode: Mode }) {
   return (
     <Section b={b}>
       <div className="ss-wrap">
-        <Title text={s(p.title, "Treasury")} />
+        <Title b={b} text={s(p.title, "Treasury")} />
         {s(p.body) && <p className="ss-muted ss-tr-body" data-el="body">{s(p.body)}</p>}
         {accounts.length
           ? <Treasury accounts={accounts} snapshot={(p.snapshot as TreasuryData | undefined) ?? null} mode={mode} />
@@ -150,7 +303,7 @@ function Story({ b, spec }: { b: Block; spec: SiteSpec }) {
     <Section b={b}>
       <div className={`ss-wrap ss-grid${art ? " ss-g2" : ""}`} style={{ alignItems: "center", gap: 40 }}>
         <div>
-          <Title text={s(p.title, "The lore")} />
+          <Title b={b} text={s(p.title, "The lore")} />
           {s(p.body) && <p className="ss-story" data-el="body">{s(p.body)}</p>}
           {points.length > 0 && (
             <ul className="ss-points" data-el="points">
@@ -200,7 +353,7 @@ function Socials({ b, spec }: { b: Block; spec: SiteSpec }) {
   return (
     <Section b={b}>
       <div className="ss-wrap">
-        <Title text={s((b.props as P).title, "Join us")} />
+        <Title b={b} text={s((b.props as P).title, "Join us")} />
         <div className="ss-socials" data-el="links">
           {links.length ? links.map((l) => (
             <a key={l.url} className="ss-social" href={l.url} target="_blank" rel="noreferrer">
@@ -226,20 +379,20 @@ function BlockView({ b, spec, mode, walletconnect, privy, credit }: { b: Block; 
         <Section b={b}>
           <div className="ss-wrap ss-grid ss-g2" style={{ alignItems: "start" }}>
             <div>
-              <Title text={s(p.title, `Buy $${spec.ticker}`)} />
+              <Title b={b} text={s(p.title, `Buy $${spec.ticker}`)} />
               <p className="ss-muted" data-el="body" style={{ maxWidth: 420, margin: 0 }}>{s(p.body, `Buy with ${CHAINS[spec.chain].native}, or pay with SOL, ETH, BTC or USDC from other chains through NEAR Intents.`)}</p>
             </div>
             <BuyBox chain={spec.chain} token={spec.token} ticker={spec.ticker} presets={arr<unknown>(p.presets).filter((n): n is number => typeof n === "number" && n > 0 && Number.isFinite(n)).slice(0, 5)} />
           </div>
         </Section>
       );
-    case "chart": return <Section b={b}><div className="ss-wrap"><Title text={s(p.title, "Chart")} /><Chart token={spec.token} mode={mode} dark={spec.theme.dark} /></div></Section>;
-    case "trades": return <Section b={b}><div className="ss-wrap"><Title text={s(p.title, "Live trades")} /><LiveTrades token={spec.token} mode={mode} /></div></Section>;
+    case "chart": return <Section b={b}><div className="ss-wrap"><Title b={b} text={s(p.title, "Chart")} /><Chart token={spec.token} mode={mode} dark={spec.theme.dark} /></div></Section>;
+    case "trades": return <Section b={b}><div className="ss-wrap"><Title b={b} text={s(p.title, "Live trades")} /><LiveTrades token={spec.token} mode={mode} /></div></Section>;
     case "how":
       return (
         <Section b={b}>
           <div className="ss-wrap">
-            <Title text={s(p.title, "How to buy")} />
+            <Title b={b} text={s(p.title, "How to buy")} />
             <div className="ss-grid ss-g3">
               {arr<{ title: string; body: string }>(p.steps).map((st, i) => (
                 <div key={i} className="ss-card ss-step" data-el={`step:${i + 1}`}><div className="ss-step-n">{i + 1}</div><h3>{st.title}</h3><p>{st.body}</p></div>
@@ -253,7 +406,7 @@ function BlockView({ b, spec, mode, walletconnect, privy, credit }: { b: Block; 
       return (
         <Section b={b}>
           <div className="ss-wrap">
-            <Title text={s(p.title, "Holders")} />
+            <Title b={b} text={s(p.title, "Holders")} />
             <div className="ss-grid ss-g3">
               <div className="ss-card ss-stat"><div className="k">Holders</div><div className="v">{spec.token?.holders != null ? <Count text={num(spec.token.holders)} on={count} /> : <span className="ss-muted" style={{ fontSize: 16 }}>Shown on the explorer</span>}</div></div>
               <div className="ss-card ss-stat"><div className="k">Liquidity</div><div className="v"><Count text={usd(spec.token?.liquidityUsd)} on={count} /></div></div>
@@ -269,7 +422,7 @@ function BlockView({ b, spec, mode, walletconnect, privy, credit }: { b: Block; 
       return (
         <Section b={b}>
           <div className="ss-wrap">
-            <Title text={s(p.title, "Roadmap")} />
+            <Title b={b} text={s(p.title, "Roadmap")} />
             <div className="ss-grid ss-g3">
               {arr<{ when: string; title: string; body: string }>(p.items).map((it, i) => (
                 <div key={i} className="ss-card ss-road" data-el={`item:${i + 1}`}><span className="ss-road-when">{it.when}</span><h3>{it.title}</h3><p>{it.body}</p></div>
@@ -282,7 +435,7 @@ function BlockView({ b, spec, mode, walletconnect, privy, credit }: { b: Block; 
       return (
         <Section b={b}>
           <div className="ss-wrap" style={{ maxWidth: 820 }}>
-            <Title text={s(p.title, "FAQ")} />
+            <Title b={b} text={s(p.title, "FAQ")} />
             <div className="ss-faq">
               {arr<{ q: string; a: string }>(p.items).map((f, i) => <details key={i} open={i === 0} data-el={`q:${i + 1}`}><summary>{f.q}</summary><p>{f.a}</p></details>)}
             </div>
@@ -299,7 +452,7 @@ function BlockView({ b, spec, mode, walletconnect, privy, credit }: { b: Block; 
           <div className="ss-wrap">
             <div className="ss-card ss-signup">
               <div>
-                <Title text={s(p.title, "Join the waitlist")} />
+                <Title b={b} text={s(p.title, "Join the waitlist")} />
                 {s(p.body) && <p className="ss-signup-body" data-el="body">{s(p.body)}</p>}
               </div>
               <SignupForm fields={fields} button={s(p.button, "Join")} success={s(p.success, "You're on the list.")} mode={mode} slug={s(p.slug) || undefined} />
@@ -314,13 +467,13 @@ function BlockView({ b, spec, mode, walletconnect, privy, credit }: { b: Block; 
     }
     case "leaderboard": {
       const n = typeof p.count === "number" ? Math.max(3, Math.min(20, Math.round(p.count))) : 10;
-      return <Section b={b}><div className="ss-wrap"><Title text={s(p.title, "Top buyers")} /><Leaderboard token={spec.token} mode={mode} count={n} /></div></Section>;
+      return <Section b={b}><div className="ss-wrap"><Title b={b} text={s(p.title, "Top buyers")} /><Leaderboard token={spec.token} mode={mode} count={n} /></div></Section>;
     }
     case "pnl":
       return (
         <Section b={b}>
           <div className="ss-wrap" style={{ maxWidth: 820 }}>
-            <Title text={s(p.title, "What if you'd bought")} />
+            <Title b={b} text={s(p.title, "What if you'd bought")} />
             <WhatIf token={spec.token} ticker={spec.ticker} mode={mode} amount={typeof p.amount === "number" && p.amount > 0 ? p.amount : 100} />
           </div>
         </Section>
@@ -330,14 +483,14 @@ function BlockView({ b, spec, mode, walletconnect, privy, credit }: { b: Block; 
       return (
         <Section b={b}>
           <div className="ss-wrap" style={{ maxWidth: 820 }}>
-            <Title text={s(p.title, "Spread the word")} />
+            <Title b={b} text={s(p.title, "Spread the word")} />
             {s(p.body) && <p className="ss-muted" data-el="body" style={{ margin: "0 0 20px" }}>{s(p.body)}</p>}
             <Raid ticker={spec.ticker} chain={spec.chain} token={spec.token} posts={posts.length ? posts : RAID_POSTS} />
           </div>
         </Section>
       );
     }
-    case "milestones": return <Section b={b}><div className="ss-wrap"><Title text={s(p.title, "Next milestone")} /><Milestones token={spec.token} mode={mode} /></div></Section>;
+    case "milestones": return <Section b={b}><div className="ss-wrap"><Title b={b} text={s(p.title, "Next milestone")} /><Milestones token={spec.token} mode={mode} /></div></Section>;
     case "footer":
       return (
         <footer data-block-id={b.id} data-block-type="footer" data-block-label="Footer" className="ss-foot">
@@ -370,6 +523,7 @@ export function Site({ spec, mode, walletconnect = null, privy = null, credit = 
         data-bg={fx.bg} data-surface={fx.surface} data-motion={fx.motion} data-density={fx.density} data-pill={fx.pill ? "" : undefined} data-dark={t.dark ? "" : undefined}
         data-reveal={fx.reveal ?? "rise"} data-hover={fx.hover} data-parallax={fx.parallax ? "" : undefined}
         data-transition={fx.transition ?? "none"} data-stagger={fx.stagger === false ? undefined : ""} data-intro={fx.intro === false ? undefined : ""} data-nav={fx.nav ?? "compact"}
+        data-frame={fx.frame ?? "bar"} data-stats={fx.stats ?? "cards"} data-titles={fx.titles ?? "plain"}
       >
         {mode === "live" && fx.progress && <div className="ss-progress" aria-hidden="true" />}
         {spec.blocks.map((b) => <BlockView key={b.id} b={b} spec={spec} mode={mode} walletconnect={walletconnect} privy={privy} credit={credit} />)}

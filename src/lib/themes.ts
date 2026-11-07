@@ -1,4 +1,4 @@
-import type { Theme, ThemeFx, ThemeId } from "./spec";
+import type { HeroLayout, Theme, ThemeFx, ThemeId } from "./spec";
 
 const gf = (q: string) => `https://fonts.googleapis.com/css2?${q}&display=swap`;
 
@@ -16,7 +16,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     fontsHref: gf("family=Anton&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500"),
     uppercase: true,
     // Meme sites: a slogan marquee (Mog, Blackdragon, Bonk), a glow behind the mascot, a floating hero.
-    fx: { bg: "glow", surface: "outline", motion: "bouncy", density: "regular", ticker: true, pill: false, transition: "angle", reveal: "scale", progress: true },
+    fx: { bg: "glow", surface: "outline", motion: "bouncy", density: "regular", ticker: true, pill: false, transition: "angle", reveal: "scale", progress: true, stats: "strip" },
   },
   clean: {
     id: "clean", dark: false,
@@ -25,7 +25,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     fontDisplay: "'Manrope', system-ui, sans-serif", fontBody: "'Manrope', system-ui, sans-serif", fontMono: "'IBM Plex Mono', monospace",
     fontsHref: gf("family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500"),
     uppercase: false,
-    fx: { bg: "none", surface: "soft", motion: "calm", density: "airy", ticker: false, pill: false, transition: "fade", reveal: "fade" },
+    fx: { bg: "none", surface: "soft", motion: "calm", density: "airy", ticker: false, pill: false, transition: "fade", reveal: "fade", titles: "eyebrow" },
   },
   retro: {
     id: "retro", dark: true,
@@ -34,7 +34,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     fontDisplay: "'Press Start 2P', monospace", fontBody: "'VT323', monospace", fontMono: "'VT323', monospace",
     fontsHref: gf("family=Press+Start+2P&family=VT323"),
     uppercase: true,
-    fx: { bg: "grid", surface: "offset", motion: "snappy", density: "regular", ticker: true, pill: false, transition: "angle", reveal: "slide", progress: true },
+    fx: { bg: "grid", surface: "offset", motion: "snappy", density: "regular", ticker: true, pill: false, transition: "angle", reveal: "slide", progress: true, stats: "chips" },
   },
   cozy: {
     id: "cozy", dark: false,
@@ -43,7 +43,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     fontDisplay: "'Fredoka', system-ui, sans-serif", fontBody: "'Fredoka', system-ui, sans-serif", fontMono: "'IBM Plex Mono', monospace",
     fontsHref: gf("family=Fredoka:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500"),
     uppercase: false,
-    fx: { bg: "dots", surface: "offset", motion: "bouncy", density: "regular", ticker: false, pill: false, transition: "wave", reveal: "rise" },
+    fx: { bg: "dots", surface: "offset", motion: "bouncy", density: "regular", ticker: false, pill: false, transition: "wave", reveal: "rise", stats: "chips" },
   },
   // Axiom #06070B, GMGN #121212, pump.fun #0B0B0E: near-black, Geist, 12-14px text, 4-6px radii, no shadows.
   terminal: {
@@ -53,7 +53,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     fontDisplay: "'Geist', system-ui, sans-serif", fontBody: "'Geist', system-ui, sans-serif", fontMono: "'Geist Mono', monospace",
     fontsHref: gf("family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500"),
     uppercase: false,
-    fx: { bg: "glow", surface: "outline", motion: "snappy", density: "compact", ticker: true, pill: false, transition: "none", reveal: "fade", intro: false },
+    fx: { bg: "glow", surface: "outline", motion: "snappy", density: "compact", ticker: true, pill: false, transition: "none", reveal: "fade", intro: false, stats: "panel" },
   },
   // MetaMask 180px condensed headline, Phantom lavender #F5F2FF, 24-32px cards, 100px pill buttons, soft shadows.
   app: {
@@ -63,7 +63,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     fontDisplay: "'Bricolage Grotesque', system-ui, sans-serif", fontBody: "'Inter', system-ui, sans-serif", fontMono: "'Geist Mono', monospace",
     fontsHref: gf("family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500"),
     uppercase: false,
-    fx: { bg: "orbs", surface: "soft", motion: "bouncy", density: "airy", ticker: false, pill: true, transition: "stack", reveal: "rise" },
+    fx: { bg: "orbs", surface: "soft", motion: "bouncy", density: "airy", ticker: false, pill: true, transition: "stack", reveal: "rise", frame: "float", stats: "chips" },
   },
   // SPX6900: Space Mono, 0 radius, 5.6px hard offset shadows in #0A0A0A, a dot grid, highlighter yellow.
   brutal: {
@@ -73,7 +73,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     fontDisplay: "'Barlow Condensed', sans-serif", fontBody: "'Space Mono', monospace", fontMono: "'Space Mono', monospace",
     fontsHref: gf("family=Barlow+Condensed:wght@700;800;900&family=Space+Mono:wght@400;700"),
     uppercase: true,
-    fx: { bg: "dots", surface: "offset", motion: "snappy", density: "regular", ticker: true, pill: false, transition: "stack", reveal: "slide", progress: true },
+    fx: { bg: "dots", surface: "offset", motion: "snappy", density: "regular", ticker: true, pill: false, transition: "stack", reveal: "slide", progress: true, stats: "panel", titles: "number" },
   },
   // Uniswap's floating orbs, Raydium/Shib frosted panels (backdrop blur 12-25px, white at 3-8%), 20px radii.
   glass: {
@@ -83,13 +83,89 @@ export const THEMES: Record<ThemeId, Theme> = {
     fontDisplay: "'Sora', system-ui, sans-serif", fontBody: "'Inter', system-ui, sans-serif", fontMono: "'Geist Mono', monospace",
     fontsHref: gf("family=Sora:wght@500;600;700&family=Inter:wght@400;500;600&family=Geist+Mono:wght@400;500"),
     uppercase: false,
-    fx: { bg: "orbs", surface: "glass", motion: "calm", density: "regular", ticker: false, pill: true, transition: "fade", reveal: "blur", progress: true },
+    fx: { bg: "orbs", surface: "glass", motion: "calm", density: "regular", ticker: false, pill: true, transition: "fade", reveal: "blur", progress: true, stats: "panel" },
   },
+  // The five below come from a second study (2026-11-07, docs/ui-study.md): Agora, Alchemy, Infinex, Oak and
+  // Musebook with hmmmm. Measured from the live pages; fonts are the nearest free match where theirs is licensed.
+  // Agora: near-black, Inter 500/600 at 11-15px, 12-16px radii, a gradient banner card for the featured token,
+  // small caps stat labels, pill filter chips, ranked lists. Professional, but every number is moving.
+  launchpad: {
+    id: "launchpad", dark: true,
+    bg: "#09090B", surface: "#131418", text: "#F4F4F5", muted: "#9A9BA1", border: "#24252B",
+    accent: "#3D7BFF", accentText: "#FFFFFF", radius: 14,
+    fontDisplay: "'Inter', system-ui, sans-serif", fontBody: "'Inter', system-ui, sans-serif", fontMono: "'JetBrains Mono', monospace",
+    fontsHref: gf("family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500"),
+    uppercase: false,
+    fx: { bg: "none", surface: "soft", motion: "snappy", density: "compact", ticker: true, pill: true, transition: "none", reveal: "fade", stats: "cards", hover: "lift" },
+  },
+  // Alchemy: white, Neue Montreal at weight 400 for headlines (Inter Tight here), #020617 text, slate #64748B,
+  // #E2E8F0 hairlines, #363FF9 blue, 8-16px radii, a lavender wash, a product screen beside the headline,
+  // big light numbers in a divided strip, two-tone section titles.
+  platform: {
+    id: "platform", dark: false,
+    bg: "#FFFFFF", surface: "#FFFFFF", text: "#020617", muted: "#64748B", border: "#E2E8F0",
+    accent: "#363FF9", accentText: "#FFFFFF", radius: 12,
+    fontDisplay: "'Inter Tight', system-ui, sans-serif", fontBody: "'Inter', system-ui, sans-serif", fontMono: "'IBM Plex Mono', monospace",
+    fontsHref: gf("family=Inter+Tight:wght@400;500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500"),
+    uppercase: false,
+    fx: { bg: "wash", surface: "soft", motion: "calm", density: "airy", ticker: false, pill: false, transition: "none", reveal: "fade", stats: "strip", titles: "split" },
+  },
+  // Infinex: pure black, Inter 600, a two-line headline, #FE6F39 orange pill buttons, #101114/#1C1E21 surfaces,
+  // 20-40px radii, a floating capsule nav, the app itself (phone and desktop) bleeding off the right edge.
+  exchange: {
+    id: "exchange", dark: true,
+    bg: "#000000", surface: "#101114", text: "#ECEEF1", muted: "#B0B4BA", border: "#23252A",
+    accent: "#FE6F39", accentText: "#0B0B0B", radius: 24,
+    fontDisplay: "'Inter', system-ui, sans-serif", fontBody: "'Inter', system-ui, sans-serif", fontMono: "'Geist Mono', monospace",
+    fontsHref: gf("family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500"),
+    uppercase: false,
+    fx: { bg: "glow", surface: "soft", motion: "calm", density: "regular", ticker: false, pill: true, transition: "stack", reveal: "rise", frame: "float", stats: "cards" },
+  },
+  // Musebook and hmmmm: warm cream paper (#FFFDF8, #FBF3E4), a heavy serif display with the last word in
+  // terracotta, small tracked eyebrows, pill counters, the art in a soft blob with a taped, tilted caption.
+  storybook: {
+    id: "storybook", dark: false,
+    bg: "#FFFBF2", surface: "#FFFFFF", text: "#2B2B2B", muted: "#6B6256", border: "#EADFCB",
+    accent: "#A55630", accentText: "#FFFFFF", radius: 18,
+    fontDisplay: "'Fraunces', Georgia, serif", fontBody: "'Source Sans 3', system-ui, sans-serif", fontMono: "'JetBrains Mono', monospace",
+    fontsHref: gf("family=Fraunces:opsz,wght@9..144,600;9..144,800;9..144,900&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500"),
+    uppercase: false,
+    fx: { bg: "none", surface: "soft", motion: "bouncy", density: "airy", ticker: false, pill: true, transition: "wave", reveal: "rise", frame: "float", stats: "chips", titles: "eyebrow", hover: "lift" },
+  },
+  // Oak: deep forest #062F27, cream text, amber eyebrows with a rule, lime pill buttons, a serif for section
+  // titles, a full-bleed illustrated hero with a chunky 3D title laid over its bottom-left corner.
+  forest: {
+    id: "forest", dark: true,
+    bg: "#062F27", surface: "rgba(240,247,234,0.05)", text: "#F0F7EA", muted: "#C5D6C7", border: "rgba(240,247,234,0.14)",
+    accent: "#C3F56B", accentText: "#062F27", radius: 14,
+    fontDisplay: "'Source Serif 4', Georgia, serif", fontBody: "'Manrope', system-ui, sans-serif", fontMono: "'JetBrains Mono', monospace",
+    fontsHref: gf("family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&family=Manrope:wght@400;500;600;700&family=Rubik:wght@800;900&family=JetBrains+Mono:wght@400;500"),
+    uppercase: false,
+    fx: { bg: "none", surface: "outline", motion: "calm", density: "regular", ticker: false, pill: true, transition: "fade", reveal: "fade", frame: "float", stats: "strip", titles: "number" },
+  },
+};
+
+/** Each style's own hero, so no two styles open on the same skeleton. */
+export const HERO_OF: Record<ThemeId, { layout: HeroLayout; size: "md" | "lg" | "xl"; mock?: "phone" | "window" }> = {
+  degen: { layout: "mascot", size: "xl" },
+  clean: { layout: "split", size: "lg" },
+  retro: { layout: "window", size: "lg" },
+  cozy: { layout: "collage", size: "lg" },
+  terminal: { layout: "dash", size: "md" },
+  app: { layout: "center", size: "xl" },
+  brutal: { layout: "stack", size: "xl" },
+  glass: { layout: "center", size: "lg" },
+  launchpad: { layout: "banner", size: "md" },
+  platform: { layout: "product", size: "lg", mock: "window" },
+  exchange: { layout: "product", size: "lg", mock: "phone" },
+  storybook: { layout: "collage", size: "lg" },
+  forest: { layout: "poster", size: "xl" },
 };
 
 export const THEME_LABELS: Record<ThemeId, string> = {
   degen: "Degen", clean: "Clean", retro: "Retro arcade", cozy: "Cozy",
   terminal: "Terminal", app: "Wallet app", brutal: "Brutalist", glass: "Glass DeFi",
+  launchpad: "Launchpad", platform: "Platform", exchange: "Exchange", storybook: "Storybook", forest: "Forest",
 };
 
 /** One line on what each style is, for menus and the copywriter. */
@@ -102,6 +178,11 @@ export const THEME_NOTES: Record<ThemeId, string> = {
   app: "friendly wallet-app marketing like MetaMask or Phantom: huge headline, pill buttons, soft cards",
   brutal: "internet-native brutalism like SPX6900: mono type, hard offset shadows, dot grid",
   glass: "glassy DeFi like Uniswap or Raydium: frosted panels, floating colour orbs",
+  launchpad: "professional launchpad like Agora: dark, a featured-token banner, small caps stats, every number live",
+  platform: "corporate DeFi infrastructure like Alchemy: white, light headlines, a product screen, big numbers in a strip",
+  exchange: "sleek exchange app like Infinex: pure black, orange pill buttons, a floating nav, the app on a phone",
+  storybook: "warm storybook meme like Musebook or hmmmm: cream paper, a serif headline, tilted stickers, pill counters",
+  forest: "illustrated meme-ish like Oak: deep forest green, serif titles, a big poster hero with a chunky 3D title",
 };
 
 /** The style's effects, for specs saved before effects existed. */
@@ -112,13 +193,18 @@ export function fxOf(t: Theme): ThemeFx {
 
 // Words that name a look win over words that only say what the project is ("a loud site for a trading bot" is degen).
 const LOOKS: Array<[ThemeId, RegExp]> = [
+  ["launchpad", /\b(launchpad|launch ?pad|fomo(ish)?|discovery|trending)\b/i],
+  ["platform", /\b(corporate|enterprise|infrastructure|b2b|saas|institutional)\b/i],
+  ["exchange", /\b(exchange|neobank|sleek dark|all black|pure black)\b/i],
+  ["storybook", /\b(storybook|scrapbook|paper|cream|serif|editorial|whimsical|overthink(ing|ers)?)\b/i],
+  ["forest", /\b(forest|woods?|nature|illustrated|diorama|oak|trees?)\b/i],
   ["terminal", /\b(terminal|bloomberg|dense)\b/i],
   ["app", /\b(wallet[- ]app|app[- ]like|friendly|consumer)\b/i],
   ["brutal", /\b(brutal(ist|ism)?|raw|zine|newspaper|monospace|internet[- ]native|anti[- ]design)\b/i],
   ["glass", /\b(glass(y|morphism)?|frosted|gradients?|futuristic|sleek|premium|luxury)\b/i],
   ["retro", /\b(retro|pixel|arcade|8.?bit|16.?bit|crt|vaporwave)\b/i],
   ["cozy", /\b(cozy|cosy|cute|soft|wholesome|kawaii|pastel|chill)\b/i],
-  ["clean", /\b(clean|minimal|professional|serious|corporate|elegant)\b/i],
+  ["clean", /\b(clean|minimal|professional|serious|elegant)\b/i],
   ["degen", /\b(degen|loud|chaos|chaotic|bold)\b/i],
 ];
 const TOPICS: Array<[ThemeId, RegExp]> = [
@@ -146,6 +232,12 @@ export const REFERENCES: Array<{ name: string; re: RegExp; theme: ThemeId; accen
   { name: "Raydium", re: /\braydium\b/i, theme: "glass", accent: "#22D1F8" },
   { name: "Jupiter", re: /\bjup(iter)?\b/i, theme: "glass", accent: "#C7F284" },
   { name: "SPX6900", re: /\bspx(6900)?\b/i, theme: "brutal", accent: "#E5FF1A" },
+  { name: "Agora", re: /\bagora(dex)?\b/i, theme: "launchpad", accent: "#3D7BFF" },
+  { name: "Alchemy", re: /\balchemy\b/i, theme: "platform", accent: "#363FF9" },
+  { name: "Infinex", re: /\binfinex\b/i, theme: "exchange", accent: "#FE6F39" },
+  { name: "Musebook", re: /\bmusebook\b/i, theme: "storybook", accent: "#A55630" },
+  { name: "hmmmm", re: /\bhm{3,}(\.fun)?\b/i, theme: "storybook", accent: "#3BB54A" },
+  { name: "Oak", re: /\boak ?(agent ?kit)?\b/i, theme: "forest", accent: "#C3F56B" },
 ];
 
 /** A product the words point to as a look ("like Axiom", "Uniswap style"), or null. */
@@ -210,4 +302,10 @@ export function restyle(cur: Theme, id: ThemeId, words = "", color: string | nul
   const own = cur.accent !== THEMES[cur.id]?.accent;
   const accent = color ?? (own ? fitAccent(cur.accent, base.dark) : ref?.theme === id && ref.accent ? ref.accent : base.accent);
   return { ...base, accent, accentText: accent === base.accent ? base.accentText : readableOn(accent) };
+}
+
+/** On a change of style the hero takes the new style's composition, so a restyle changes the page's shape too. */
+export function withHeroOf<T extends { type: string; props: Record<string, unknown> }>(blocks: T[], id: ThemeId): T[] {
+  const h = HERO_OF[id];
+  return blocks.map((b) => (b.type === "hero" ? { ...b, props: { ...b.props, layout: h.layout, size: h.size, ...(h.mock ? { mock: h.mock } : {}) } } : b));
 }

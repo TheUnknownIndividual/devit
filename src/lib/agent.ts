@@ -8,7 +8,7 @@ import { readReference } from "./reference";
 import { withoutRefs as withoutRefsText } from "./reference-urls";
 import { orderLike, refBlockOrder, refLine, themeFromRef, themeForRef } from "./ref-style";
 import { nudgeTheme, pickStyleRefs, themeOfPicks, type StyleRef } from "./style-library";
-import { THEMES, THEME_LABELS, THEME_NOTES, colorFromText, fitAccent, fxOf, readableOn, referenceIn, restyle, themeNamed } from "./themes";
+import { HERO_OF, THEMES, THEME_LABELS, THEME_NOTES, colorFromText, withHeroOf, fitAccent, fxOf, readableOn, referenceIn, restyle, themeNamed } from "./themes";
 import { updateProject } from "./store";
 import { readTreasury, treasuryAccountsIn, validAccount, type TreasuryData } from "./treasury";
 import { BLOCK_LABELS, CHAINS, THEME_IDS, newId, type Asset, type Block, type BlockType, type Chain, type PendingComment, type Project, type RefRead, type Research, type SiteSpec, type ThemeFx, type Theme, type ThemeId, type TokenInfo, type TokenLink } from "./spec";
@@ -176,6 +176,11 @@ function offlineCopy(intent: Intent, token: TokenInfo | null, chain: Chain, r: R
     app: { headline: `Meet ${name}`, subhead: `${name} lives on ${chainName}. Connect a wallet, pick an amount, done. No exchange account needed.`, cta: `Get $${ticker}`, tagline: `${name} on ${chainName}.` },
     brutal: { headline: `${ticker}. No noise.`, subhead: `A coin on ${chainName}. The chart is the chart. The contract is the contract. Both are below.`, cta: `Buy $${ticker}`, tagline: `${ticker} on ${chainName}. That's it.` },
     glass: { headline: `${name} on ${chainName}`, subhead: `Swap into $${ticker} from other chains, with price and liquidity read live from ${chainName}.`, cta: `Swap to ${ticker}`, tagline: `${name}, on ${chainName}.` },
+    launchpad: { headline: `${name} is live`, subhead: `$${ticker} trades on ${chainName} right now. Market cap, volume and every buy are on this page, read from the chain.`, cta: `Buy $${ticker}`, tagline: `${name}, trending on ${chainName}.` },
+    platform: { headline: `The ${chainName} token for ${name}`, subhead: `$${ticker} is ${name}'s token on ${chainName}. Live supply, price and liquidity below, and a buy box that takes coins from 13 chains.`, cta: `Get $${ticker}`, tagline: `${name} on ${chainName}.` },
+    exchange: { headline: `Hold ${ticker}. Trade anywhere.`, subhead: `Buy $${ticker} on ${chainName} from the wallet you already have, or pay from another chain through NEAR Intents.`, cta: `Get $${ticker}`, tagline: `${name}, on ${chainName}.` },
+    storybook: { headline: `A small coin with a big story`, subhead: `$${ticker} lives on ${chainName}. Read how it started, see who's holding, and pick some up if it makes you smile.`, cta: `Join $${ticker}`, tagline: `a little ${chainName} story.` },
+    forest: { headline: `${name} grows here`, subhead: `$${ticker} is rooted on ${chainName}. The price, the holders and the buy box are all below.`, cta: `Get $${ticker}`, tagline: `${name}, rooted on ${chainName}.` },
   };
   const l = { ...lines[intent.theme] };
   // Their own words beat ours: the bio or site line for the tagline, the story for the subhead.
@@ -266,6 +271,18 @@ async function writeCopy(prompt: string, intent: Intent, token: TokenInfo | null
 
 // ---------- layout ----------
 
+/** Words that ask for one of the hero compositions (HERO_LAYOUTS). */
+const HERO_WORDS: Array<[string, RegExp]> = [
+  ["poster", /\b(full[- ]?bleed|poster|image behind|background image|cover image)\b/i],
+  ["banner", /\b(banner|featured card|launchpad hero)\b/i],
+  ["product", /\b(mock-?up|product shot|app screen(shot)?|show the app)\b/i],
+  ["collage", /\b(collage|stickers?|blob|scrapbook)\b/i],
+  ["mascot", /\b(mascot (on top|above|first)|logo (on top|above))\b/i],
+  ["window", /\b(os window|desktop window|window frame|\.exe)\b/i],
+  ["stack", /\b(newspaper|stacked|headline full width)\b/i],
+  ["dash", /\b(token bar|stats bar|dashboard hero)\b/i],
+];
+
 function block(type: BlockType, props: Record<string, unknown>): Block {
   return { id: `${type}-${newId(5)}`, type, props };
 }
@@ -274,16 +291,12 @@ function layout(copy: Copy, token: TokenInfo | null, wants: Set<BlockType>, them
   const hasPair = !!token?.pairAddress;
   // Each style leads with what its kind of site leads with: a terminal puts the chart and tape first,
   // wallet apps and glass DeFi a big centred headline, brutalist sites a huge one.
-  const hero = {
-    terminal: { layout: "split", size: "md" },
-    app: { layout: "center", size: "xl" },
-    brutal: { layout: "split", size: "xl" },
-    glass: { layout: "center", size: "lg" },
-  }[themeId as string] ?? { layout: "split", size: "lg" };
+  const hero = HERO_OF[themeId] ?? HERO_OF.clean;
   const blocks: Block[] = [
     block("nav", {}),
     block("hero", { headline: copy.headline, subhead: copy.subhead, cta: copy.cta, ...hero }),
-    block("stats", { items: ["price", "marketCap", token?.venue?.stage === "curve" && token.venue.progress != null ? "curve" : token?.holders != null ? "holders" : "liquidity", "volume24h"] }),
+    // A banner or token-bar hero already carries the numbers; a stats row under it would repeat them.
+    ...(hero.layout === "banner" || hero.layout === "dash" ? [] : [block("stats", { items: ["price", "marketCap", token?.venue?.stage === "curve" && token.venue.progress != null ? "curve" : token?.holders != null ? "holders" : "liquidity", "volume24h"] })]),
   ];
   const chart = hasPair || wants.has("chart") ? block("chart", { title: "Chart" }) : null;
   const trades = hasPair || wants.has("trades") ? block("trades", { title: themeId === "retro" ? "Live buys" : "Live trades" }) : null;
@@ -666,7 +679,7 @@ function offlineEdit(spec: SiteSpec, comments: PendingComment[]): { spec: SiteSp
     let hit = false;
     // Whole-site look first: "like Axiom", "glass cards", "no ticker". A "remove" aimed at an effect isn't a block removal.
     const look = lookNamed(t);
-    if (look && look !== next.theme.id) { next.theme = restyle(next.theme, look, t, color); hit = true; }
+    if (look && look !== next.theme.id) { next.theme = restyle(next.theme, look, t, color); next.blocks = withHeroOf(next.blocks, look); hit = true; }
     const fx = fxEdit(t, fxOf(next.theme));
     if (fx) { next.theme = { ...next.theme, fx }; hit = true; }
     // Corners: "make these rounded", "rounder", "sharp corners". Buttons alone are fx.pill (above).
@@ -691,6 +704,10 @@ function offlineEdit(spec: SiteSpec, comments: PendingComment[]): { spec: SiteSp
       if (/\bdonut|pie\b/i.test(t) && b.type === "tokenomics") { b.props.style = "donut"; hit = true; }
       if (/\bcent(er|re)\b/i.test(t) && b.type === "hero") { b.props.layout = "center"; hit = true; }
       if (/\b(left|side by side|split)\b/i.test(t) && b.type === "hero") { b.props.layout = "split"; hit = true; }
+      if (b.type === "hero") {
+        const shape = HERO_WORDS.find(([, re]) => re.test(t));
+        if (shape) { b.props.layout = shape[0]; if (shape[0] === "product") b.props.mock = /\bphone\b/i.test(t) ? "phone" : "window"; hit = true; }
+      }
       if (color && !look) { next.theme = { ...next.theme, accent: color, accentText: readableOn(color) }; hit = true; }
     }
     (hit ? done : skipped).push(t);
@@ -753,7 +770,7 @@ async function applyCommentsRaw(project: Project, comments: PendingComment[]): P
         if (e.remove) next.blocks.splice(i, 1);
         else if (e.props) next.blocks[i] = { ...next.blocks[i], props: e.props };
       }
-      if (res.value.theme?.id && res.value.theme.id !== next.theme.id) next.theme = restyle(next.theme, res.value.theme.id, "", null);
+      if (res.value.theme?.id && res.value.theme.id !== next.theme.id) { next.theme = restyle(next.theme, res.value.theme.id, "", null); next.blocks = withHeroOf(next.blocks, res.value.theme.id); }
       if (res.value.theme?.fx) next.theme = { ...next.theme, fx: { ...fxOf(next.theme), ...res.value.theme.fx } };
       if (res.value.theme?.radius !== undefined) next.theme = { ...next.theme, radius: Math.round(res.value.theme.radius) };
       if (res.value.theme?.accent) next.theme = { ...next.theme, accent: res.value.theme.accent, accentText: readableOn(res.value.theme.accent) };

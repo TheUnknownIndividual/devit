@@ -7,7 +7,7 @@ import { dropLocal } from "@/lib/database";
 import { canRead } from "@/lib/site-access";
 import { cfRemove } from "@/lib/domains";
 import { dropRouting } from "@/lib/routing";
-import { readableOn, restyle } from "@/lib/themes";
+import { readableOn, restyle, withHeroOf } from "@/lib/themes";
 import { publicProject } from "@/lib/public";
 import { snapshot } from "@/lib/history";
 import { isPublicHttps } from "@/lib/net";
@@ -82,7 +82,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
     if (p.spec && (b.themeId || b.accent)) {
       snapshot(p, b.themeId ? `Style changed to ${b.themeId}` : `Accent changed to ${b.accent}`);
-      if (b.themeId) p.spec.theme = restyle(p.spec.theme, b.themeId);
+      if (b.themeId) { p.spec.theme = restyle(p.spec.theme, b.themeId); p.spec.blocks = withHeroOf(p.spec.blocks, b.themeId); }
       if (b.accent) p.spec.theme = { ...p.spec.theme, accent: b.accent, accentText: readableOn(b.accent) };
       p.version += 1;
     }
