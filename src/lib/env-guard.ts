@@ -22,23 +22,22 @@ function secretEnv(): Array<[string, string]> {
     .map(([k, v]) => [k, v.trim()]);
 }
 
-let guarded: Array<[string, string]> = [];
+// Kept on globalThis: Next bundles instrumentation and the routes separately, so module state isn't shared.
+const G = globalThis as unknown as { __ssGuard?: { guarded: Array<[string, string]> } };
 
 export function redact(s: string): string {
   let out = s;
-  for (const [k, v] of guarded) if (out.includes(v)) out = out.split(v).join(`[${k}]`);
+  for (const [k, v] of G.__ssGuard?.guarded ?? []) if (out.includes(v)) out = out.split(v).join(`[${k}]`);
   const leaks = findLeaks(out);
   for (const l of [...leaks].reverse()) out = `${out.slice(0, l.start)}[redacted]${out.slice(l.end)}`;
   return out;
 }
 
-let installed = false;
 /** Wraps console so every line is scrubbed before it's written. Idempotent. */
 export function installRedactor(): void {
-  if (installed) return;
-  installed = true;
+  if (G.__ssGuard) return;
   // Longest first so a value that contains another is replaced whole.
-  guarded = secretEnv().sort((a, b) => b[1].length - a[1].length);
+  G.__ssGuard = { guarded: secretEnv().sort((a, b) => b[1].length - a[1].length) };
   for (const m of ["log", "info", "warn", "error", "debug", "trace"] as const) {
     const orig = console[m].bind(console);
     console[m] = (...args: unknown[]) => orig(redact(format(...args)));
@@ -53,12 +52,13 @@ export function posture(): { checks: Check[]; at: number } {
   const secrets = secretEnv();
   const pub = Object.entries(process.env).filter(([n]) => n.startsWith("NEXT_PUBLIC_")).map(([n, v]) => [n, v ?? ""] as const);
   const badPub = pub.filter(([, v]) => findLeaks(v).length || secrets.some(([, s]) => s === v.trim())).map(([n]) => n);
+  const installed = !!G.__ssGuard;
   const envInImage = [".env", ".env.local", ".env.production"].some((f) => existsSync(path.join(process.cwd(), f)));
   return {
     at: Date.now(),
     checks: [
       { id: "sealed", ok: k.set && k.strong, title: "Secrets sealed with AES-256-GCM", detail: k.set && k.strong ? "Model keys, connector keys, database logins and paid RPC URLs are encrypted before they touch disk, with a random 256-bit key that lives only in the server's environment. Edited ciphertext fails to open instead of opening wrong." : "The sealing key is missing or isn't a random 256-bit key." },
-      { id: "browser", ok: badPub.length === 0, title: "No secret ships to the browser", detail: badPub.length ? `${badPub.join(", ")} looks secret and is built into browser code.` : `Only ${pub.length} public setting${pub.length === 1 ? "" : "s"} reach browser code, and none is secret-shaped or equal to a server secret.` },
+      { id: "browser", ok: badPub.length === 0, title: "No secret ships to the browser", detail: badPub.length ? `${badPub.join(", ")} looks secret and is built into browser code.` : `Only ${pub.length} public setting${pub.length === 1 ? " reaches" : "s reach"} browser code, and none is secret-shaped or equal to a server secret.` },
       { id: "logs", ok: installed, title: "Logs can't leak keys", detail: installed ? `Every log line is scrubbed of the server's ${secrets.length} secret values and anything secret-shaped before it's written.` : "Log redaction isn't running." },
       { id: "image", ok: !envInImage, title: "No secrets baked into the build", detail: envInImage ? "An .env file is inside the app folder." : "There's no .env in the app image: secrets are handed to the process at start and nowhere else." },
       { id: "user", ok: process.getuid?.() !== 0, title: "Runs without root", detail: process.getuid?.() !== 0 ? "The server process runs as an unprivileged user inside its container, so a bug can't take over the machine." : "The server process runs as root." },
