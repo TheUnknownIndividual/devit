@@ -79,7 +79,7 @@ async function onboarded(account: string, hex: string | null): Promise<boolean> 
 
 async function evmCall(rpc: string, method: string, params: unknown[]): Promise<string | null> {
   try {
-    const r = await fetch(rpc, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }), cache: "no-store", signal: AbortSignal.timeout(8000) });
+    const r = await fetch(rpc, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }), cache: "no-store", signal: AbortSignal.timeout(5000) });
     return ((await r.json()) as { result?: string }).result ?? null;
   } catch {
     return null;
@@ -88,6 +88,7 @@ async function evmCall(rpc: string, method: string, params: unknown[]): Promise<
 function rpcOf(chainId: string, fallback: string): string {
   if (chainId === "0x1") return rpcFor("ethereum");
   if (chainId === "0x2105") return rpcFor("base");
+  if (chainId === "0x1237") return rpcFor("robinhood");
   return fallback;
 }
 

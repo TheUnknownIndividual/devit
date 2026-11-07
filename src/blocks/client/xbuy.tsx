@@ -5,7 +5,7 @@ import { ArrowDownUp, ArrowRightLeft, Check, ChevronDown, Copy, Loader2 } from "
 import type { TokenInfo } from "@/lib/spec";
 import type { NearTx } from "@/lib/swap";
 import { NEAR_EVM, onboardTx, toEthTxs } from "@/lib/ethnear";
-import { XCOINS, xcoin, fromUnits, toUnits, unitsToInput, type XCoin } from "@/lib/xpay";
+import { XCOINS, addChainParams, chainOfCoin, xcoin, fromUnits, toUnits, unitsToInput, type XCoin } from "@/lib/xpay";
 import { evmSession, familyOf, short, switchEvm, useWallets } from "./wallet";
 import { WalletButton } from "./connect";
 import { num } from "../format";
@@ -26,6 +26,19 @@ interface Quote { route: "direct" | "swap"; depositAddress: string | null; out: 
 type StepState = "todo" | "now" | "done" | "fail";
 interface Step { text: string; state: StepState; sub?: string }
 
+// Each coin's own brand colour behind its ticker sign or letters.
+const MARKS: Record<string, [string, string, number]> = {
+  USDC: ["#2775CA", "$", 16],
+  USDT: ["#26A17B", "₮", 16],
+  USDT0: ["#26A17B", "₮", 16],
+  POL: ["#8247E5", "POL", 10],
+  AVAX: ["#E84142", "AVAX", 8.5],
+  BERA: ["#814625", "BERA", 8.5],
+  MON: ["#836EF9", "MON", 10],
+  OKB: ["#111111", "OKB", 10],
+  XPL: ["#162F29", "XPL", 10],
+};
+
 export function CoinMark({ symbol, size = 28 }: { symbol: string; size?: number }) {
   if (symbol === "ETH") {
     return (
@@ -35,10 +48,11 @@ export function CoinMark({ symbol, size = 28 }: { symbol: string; size?: number 
       </svg>
     );
   }
+  const [fill, glyph, fs] = MARKS[symbol] ?? ["#555", symbol.slice(0, 3), 10];
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden style={{ flex: "none" }}>
-      <circle cx="16" cy="16" r="16" fill={symbol === "USDT" ? "#26A17B" : "#2775CA"} />
-      <text x="16" y="21.5" textAnchor="middle" fontSize="16" fontWeight="700" fill="#fff" fontFamily="system-ui, sans-serif">{symbol === "USDT" ? "₮" : "$"}</text>
+      <circle cx="16" cy="16" r="16" fill={fill} />
+      <text x="16" y={fs > 12 ? 21.5 : 19.5} textAnchor="middle" fontSize={fs} fontWeight="700" fill="#fff" fontFamily="system-ui, sans-serif">{glyph}</text>
     </svg>
   );
 }
@@ -92,7 +106,12 @@ async function signOnNear(txs: NearTx[], st: State, onStep: (s: string) => void)
   if (!s) throw new Error("Connect an Ethereum wallet first.");
   if (!st.near.relayerKey) throw new Error("NEAR's relayer isn't answering right now. Try again in a minute.");
   onStep("Switch your wallet to NEAR");
-  await switchEvm(NEAR_EVM);
+  await switchEvm(NEAR_EVM).catch((e) => {
+    if (cancelled(e)) throw e;
+    // Phantom's and some phone wallets' EVM side only know a fixed chain list. A listed token's buy needs no NEAR
+    // signing at all, so only these steps are blocked.
+    throw new Error(`This wallet can't sign on NEAR's chain. Use MetaMask, Rabby, OKX, Coinbase Wallet or Trust Wallet for this step.`);
+  });
   const list = [...(st.near.onboarded ? [] : [onboardTx(st.account, st.near.relayerKey)]), ...toEthTxs(txs, (_r, m) => (m ? METHOD[m] ?? m : "Send NEAR"))];
   let last: string | null = null;
   for (const [i, tx] of list.entries()) {
@@ -126,6 +145,7 @@ export function WalletTrade({ token, ticker }: { token: TokenInfo; ticker: strin
   const [st, setSt] = useState<State | null>(null);
   const [coinKey, setCoinKey] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
+  const [allCoins, setAllCoins] = useState(false);
   const [amount, setAmount] = useState("");
   const [inUsd, setInUsd] = useState(false);
   const [q, setQ] = useState<Quote | null>(null);
@@ -149,13 +169,13 @@ export function WalletTrade({ token, ticker }: { token: TokenInfo; ticker: strin
     if (!st) { setCoinKey("eth:ETH"); return; }
     const best = [...st.coins].sort((a, b) => fromUnits(b.balance, xcoin(b.key)!.decimals) * b.price - fromUnits(a.balance, xcoin(a.key)!.decimals) * a.price)[0];
     const has = best && BigInt(best.balance) > 0n;
-    const here = XCOINS.find((c) => c.symbol === "ETH" && c.chainId === connected?.chainId);
+    const here = XCOINS.find((c) => c.symbol === c.native && c.chainId === connected?.chainId);
     setCoinKey(has ? best.key : here?.key ?? "eth:ETH");
   }, [st, coinKey, connected?.chainId, token.demo]);
 
   const coin = coinKey ? xcoin(coinKey) : null;
   const coinRow = st?.coins.find((c) => c.key === coinKey);
-  const coinPrice = coinRow?.price || (coin?.symbol === "ETH" ? 3400 : 1);
+  const coinPrice = coinRow?.price || (coin?.symbol === "ETH" ? 3400 : /^USD/.test(coin?.symbol ?? "") ? 1 : 0);
   const tokenPrice = token.priceUsd ?? st?.token.price ?? null;
   const tokDec = st?.token.decimals ?? token.decimals ?? 18;
   // What the amount box is denominated in: the coin (buy) or the token (sell), or USD.
@@ -223,7 +243,7 @@ export function WalletTrade({ token, ticker }: { token: TokenInfo; ticker: strin
       const fresh = await post<Quote>({ op: "quote", side: "buy", pay: coin.key, amount: raw.toString(), token: token.address, evm: s.address, dry: false });
       if (!fresh.depositAddress) throw new Error("No deposit address came back. Try again.");
       p.set(0, "now", `Switch to ${coin.chain}, then confirm`);
-      await switchEvm({ chainId: coin.chainId, chainName: coin.chain, rpcUrls: [coin.rpc], blockExplorerUrls: [coin.explorer], nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 } });
+      await switchEvm(addChainParams(chainOfCoin(coin)));
       const tx = coin.contract
         ? { from: s.address, to: coin.contract, value: "0x0", data: "0xa9059cbb" + fresh.depositAddress.slice(2).toLowerCase().padStart(64, "0") + raw.toString(16).padStart(64, "0") }
         : { from: s.address, to: fresh.depositAddress, value: "0x" + raw.toString(16) };
@@ -285,13 +305,17 @@ export function WalletTrade({ token, ticker }: { token: TokenInfo; ticker: strin
   if (!evm && !token.demo) {
     return (
       <>
-        <p className="ss-muted" style={{ margin: "0 0 12px", fontSize: 14 }}>Buy ${ticker} with ETH or USDC you already have on Ethereum, Base or Arbitrum. No NEAR wallet needed: it lands in the same address on NEAR.</p>
+        <p className="ss-muted" style={{ margin: "0 0 12px", fontSize: 14 }}>Buy ${ticker} with ETH, USDC or USDT you already have on Ethereum, Base, Arbitrum, Optimism, Polygon, Avalanche and more. No NEAR wallet needed: it lands in the same address on NEAR.</p>
         <WalletButton chain="ethereum" token={token} block />
       </>
     );
   }
 
   const coinBal = (c: XCoin) => fromUnits(st?.coins.find((x) => x.key === c.key)?.balance ?? "0", c.decimals);
+  const coinUsd = (c: XCoin) => coinBal(c) * (st?.coins.find((x) => x.key === c.key)?.price ?? 0);
+  // Coins the wallet holds first (by dollar value), then the rest in list order; six until "More coins".
+  const sorted = XCOINS.map((c, i) => ({ c, i, usd: coinUsd(c) })).sort((a, b) => b.usd - a.usd || a.i - b.i).map((x) => x.c);
+  const shown = allCoins ? sorted : sorted.slice(0, 6);
   const outSym = side === "buy" ? `$${ticker}` : coin?.symbol ?? "ETH";
 
   return (
@@ -315,13 +339,16 @@ export function WalletTrade({ token, ticker }: { token: TokenInfo; ticker: strin
       )}
       {picking && (
         <div className="ss-coins" role="listbox" aria-label="Coins in your wallet">
-          {XCOINS.map((c) => (
-            <button key={c.key} type="button" role="option" aria-selected={c.key === coinKey} className="ss-coin" onClick={() => { setCoinKey(c.key); setPicking(false); }}>
+          {shown.map((c) => (
+            <button key={c.key} type="button" role="option" aria-selected={c.key === coinKey} className="ss-coin" onClick={() => { setCoinKey(c.key); setPicking(false); setAllCoins(false); }}>
               <CoinMark symbol={c.symbol} size={24} />
               <span className="ss-coin-name"><b>{c.symbol}</b><span>on {c.chain}</span></span>
               {st && <span className="ss-coin-bal">{num(coinBal(c))}</span>}
             </button>
           ))}
+          {!allCoins && sorted.length > shown.length && (
+            <button type="button" className="ss-link-btn" onClick={() => setAllCoins(true)}>More coins ({sorted.length - shown.length})</button>
+          )}
         </div>
       )}
 

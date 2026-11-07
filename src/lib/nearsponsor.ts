@@ -103,7 +103,9 @@ export async function sponsorGas(account: string, token: string, minUsdOk: boole
   if (!isEthAccount(account)) return { error: "Only 0x accounts get starter NEAR." };
   if (await nativeBalance(account) >= LOW) return { ok: true, tx: null, note: "already has enough NEAR" };
   if (!sponsorArmed()) return { error: "This site can't front the tiny NEAR deposit yet. Send 0.005 NEAR to your 0x address on NEAR and try again." };
-  const [tok, wn] = await Promise.all([ftBalance(token, account), ftBalance("wrap.near", account)]);
+  const [tok, wn, float] = await Promise.all([ftBalance(token, account), ftBalance("wrap.near", account), nativeBalance(sponsorAccount()!)]);
+  // Keep 0.01 NEAR on the sponsor for its own gas and storage; below that it acts as if unarmed.
+  if (float < GRANT() + 10n ** 22n) return { error: "This site's starter NEAR is empty right now. Send 0.005 NEAR to your 0x address on NEAR and try again." };
   if (!((tok > 0n && minUsdOk) || wn >= WNEAR_MIN)) return { error: "Starter NEAR is only fronted to accounts holding this token." };
   try {
     return await locked(async () => {

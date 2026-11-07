@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import type { Chain } from "@/lib/spec";
+import { NEAR_EVM_CHAIN, XCHAINS } from "@/lib/xpay";
 
 // Wallets on a generated site. EVM wallets announce themselves through EIP-6963, so MetaMask, Rabby,
 // Coinbase and the rest show up with their own name and logo. Solana wallets register through the
@@ -353,13 +354,26 @@ export async function switchEvm(c: { chainId: string; chainName: string; rpcUrls
     try {
       await p.request({ method: "wallet_switchEthereumChain", params: [{ chainId: c.chainId }] });
     } catch (e) {
-      const code = (e as { code?: number; data?: { originalError?: { code?: number } } }).code ?? (e as { data?: { originalError?: { code?: number } } }).data?.originalError?.code;
-      if (code !== 4902) throw e;
-      await p.request({ method: "wallet_addEthereumChain", params: [c] });
+      // 4902 is the standard "unknown chain", but wallets also answer -32603, -32000 or a bare message, so anything
+      // short of the visitor saying no gets one try at adding the chain (which switches to it in most wallets).
+      if (rejected(e)) throw e;
+      try {
+        await p.request({ method: "wallet_addEthereumChain", params: [c] });
+      } catch (e2) {
+        if (rejected(e2)) throw e2;
+        throw new Error(`${w?.name ?? "This wallet"} can't switch to ${c.chainName}. Try MetaMask, Rabby, OKX, Coinbase Wallet or Trust Wallet.`);
+      }
+      const after = hexChain(await p.request({ method: "eth_chainId" }).catch(() => ""));
+      if (after !== c.chainId) await p.request({ method: "wallet_switchEthereumChain", params: [{ chainId: c.chainId }] });
     }
   }
   if (connected?.wallet === w) { connected = { ...connected, chainId: c.chainId }; emit(); }
 }
+
+const rejected = (e: unknown) => {
+  const x = e as { code?: number; data?: { originalError?: { code?: number } } };
+  return x?.code === 4001 || x?.data?.originalError?.code === 4001;
+};
 
 /** Opens the wallet's own account chooser. Returns false when the wallet has none (the picker opens instead). */
 export async function switchAccount(): Promise<boolean> {
@@ -464,9 +478,11 @@ function wcProvider(projectId: string): Promise<Universal> {
   return wc;
 }
 
+// On a NEAR site the wallet pays from any chain the With ETH tab takes, then signs on NEAR's own chain (397).
+const NEAR_SITE_CHAINS = [...Object.values(XCHAINS), NEAR_EVM_CHAIN];
 function wcChains(chain: Chain): string[] {
   const id = parseInt(EVM_CHAIN[chain]?.id ?? "0x1", 16);
-  return [...new Set([`eip155:${id}`, "eip155:1"])];
+  return [...new Set([`eip155:${id}`, "eip155:1", ...(chain === "near" ? NEAR_SITE_CHAINS.map((c) => `eip155:${parseInt(c.id, 16)}`) : [])])];
 }
 
 function wcWallet(p: Universal): EvmWallet {
@@ -511,7 +527,7 @@ export async function connectWalletConnect(projectId: string, chain: Chain, onUr
   p.on("display_uri", onDisplay);
   try {
     const c = EVM_CHAIN[chain];
-    const rpcMap = Object.fromEntries(Object.values(EVM_CHAIN).map((x) => [String(parseInt(x!.id, 16)), x!.rpc[0]]));
+    const rpcMap = Object.fromEntries([...NEAR_SITE_CHAINS.map((x) => [String(parseInt(x.id, 16)), x.rpc]), ...Object.values(EVM_CHAIN).map((x) => [String(parseInt(x!.id, 16)), x!.rpc[0]])]);
     await p.connect({
       optionalNamespaces: {
         eip155: {
