@@ -6,4 +6,4 @@ KID="$1"; F="$HOME/Downloads/AuthKey_$KID.p8"
 echo "$KID" | grep -qE '^[A-Z0-9]{10}$' || { echo "usage: $0 KEY_ID (10 letters/digits)"; exit 1; }
 [ -f "$F" ] || { echo "Not found: $F"; exit 1; }
 KEY=$(awk 'NF{printf "%s\\n", $0}' "$F")
-printf 'APPLE_KEY_ID=%s\nAPPLE_PRIVATE_KEY=%s\n' "$KID" "$KEY" | ssh root@your-server 'f=/root/sitesmith/.env; cp $f $f.bak; grep -vE "^APPLE_(KEY_ID|PRIVATE_KEY)=" $f.bak > $f || true; cat >> $f; chmod 600 $f; echo "Apple key saved: $(grep -cE "^APPLE_(KEY_ID|PRIVATE_KEY)=" $f) lines"'
+printf 'APPLE_KEY_ID=%s\nAPPLE_PRIVATE_KEY=%s\n' "$KID" "$KEY" | ssh "${SITESMITH_SSH:?set SITESMITH_SSH=user@host first}" 'f=/root/sitesmith/.env; cp $f $f.bak; grep -vE "^APPLE_(KEY_ID|PRIVATE_KEY)=" $f.bak > $f || true; cat >> $f; chmod 600 $f; echo "Apple key saved: $(grep -cE "^APPLE_(KEY_ID|PRIVATE_KEY)=" $f) lines"'

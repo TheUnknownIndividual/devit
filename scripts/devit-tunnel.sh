@@ -5,7 +5,7 @@
 set -e
 TOKEN=$(pbpaste | grep -oE 'eyJ[A-Za-z0-9_=+/-]{40,}' | head -1)
 [ -n "$TOKEN" ] || { echo "No tunnel token on the clipboard. Click the copy button in the dashboard first."; exit 1; }
-printf 'TUNNEL_TOKEN=%s\n' "$TOKEN" | ssh root@your-server 'umask 077; cat > /root/sitesmith/devit-tunnel.env
+printf 'TUNNEL_TOKEN=%s\n' "$TOKEN" | ssh "${SITESMITH_SSH:?set SITESMITH_SSH=user@host first}" 'umask 077; cat > /root/sitesmith/devit-tunnel.env
 docker rm -f devit-tunnel >/dev/null 2>&1 || true
 docker run -d --name devit-tunnel --network sitesmith_default --restart unless-stopped \
   --log-opt max-size=10m --log-opt max-file=3 --env-file /root/sitesmith/devit-tunnel.env \

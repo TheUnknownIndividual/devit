@@ -6,4 +6,4 @@ NAME="$1"
 echo "$NAME" | grep -qE '^[A-Z][A-Z0-9_]+$' || { echo "usage: $0 NAME"; exit 1; }
 VAL=$(pbpaste | tr -d '\r\n' | sed 's/^ *//;s/ *$//')
 [ -n "$VAL" ] || { echo "Clipboard is empty."; exit 1; }
-printf '%s=%s\n' "$NAME" "$VAL" | ssh root@your-server "f=/root/sitesmith/.env; cp \$f \$f.bak; grep -v '^$NAME=' \$f.bak > \$f || true; cat >> \$f; chmod 600 \$f; echo \"$NAME saved (\$(grep -c '^$NAME=' \$f) line)\""
+printf '%s=%s\n' "$NAME" "$VAL" | ssh "${SITESMITH_SSH:?set SITESMITH_SSH=user@host first}" "f=/root/sitesmith/.env; cp \$f \$f.bak; grep -v '^$NAME=' \$f.bak > \$f || true; cat >> \$f; chmod 600 \$f; echo \"$NAME saved (\$(grep -c '^$NAME=' \$f) line)\""
