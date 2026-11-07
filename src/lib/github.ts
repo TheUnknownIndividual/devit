@@ -56,6 +56,22 @@ export async function githubUser(token: string): Promise<GithubUser> {
   return { id: u.id, login: u.login, name: u.name?.slice(0, 80) ?? null, avatar, email: email?.toLowerCase() ?? null };
 }
 
+export interface RepoItem { full: string; private: boolean; description: string | null; pushedAt: number }
+
+/** Repos the token can see (own, collaborator, org member), newest push first; up to 200. */
+export async function githubRepos(token: string): Promise<RepoItem[]> {
+  const out: RepoItem[] = [];
+  for (let page = 1; page <= 2; page++) {
+    const list = await gh<Array<{ full_name: string; private: boolean; description: string | null; pushed_at: string | null; archived?: boolean }>>(token, `/user/repos?per_page=100&page=${page}&sort=pushed&affiliation=owner,collaborator,organization_member`);
+    for (const r of list) out.push({ full: r.full_name, private: r.private, description: r.description?.slice(0, 160) ?? null, pushedAt: Date.parse(r.pushed_at ?? "") || 0 });
+    if (list.length < 100) break;
+  }
+  return out;
+}
+
+/** GET with a token, for reading a repo the person can see (private ones too, with the repo scope). */
+export const ghRead = <T>(token: string, path: string) => gh<T>(token, path);
+
 const REPO_RE = /^[A-Za-z0-9._-]{1,100}$/;
 export const validRepoName = (s: string) => REPO_RE.test(s) && !/^\.+$/.test(s);
 

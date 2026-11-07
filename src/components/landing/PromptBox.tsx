@@ -18,10 +18,10 @@ import { THEME_LABELS } from "@/lib/themes";
 import { usd } from "@/blocks/format";
 import { BLOCK_LABELS, CHAINS, type BlockType, type Chain, type Finding, type ThemeId, type TokenInfo } from "@/lib/spec";
 import { Upsell, refusalOf, type PlanRefusal } from "@/components/ui/Upsell";
+import { StartFrom, type Imported } from "@/components/landing/StartFrom";
 
 type Kind = "memecoin" | "dapp" | "nft";
 type SitePlan = { name: string | null; style: ThemeId; sections: Array<{ type: BlockType; label: string; why: string; on: boolean }>; notes: string[]; via: string };
-type Imported = { source: "github" | "figma"; title: string; text: string; accent: string | null; image: string | null };
 // Plan sections that change the build, as words the request reader (lib/intent.ts) picks up.
 const SECTION_WORDS: Partial<Record<BlockType, string>> = { chart: "chart", trades: "live trades", tokenomics: "tokenomics", holders: "holders", roadmap: "roadmap", signup: "waitlist", treasury: "treasury" };
 const OPTIONAL = new Set<BlockType>(["chart", "trades", "story", "tokenomics", "holders", "roadmap", "signup", "treasury", "posts"]);
@@ -94,10 +94,6 @@ export function PromptBox() {
   const [sitePlan, setSitePlan] = useState<SitePlan | null>(null);
   const [planFor, setPlanFor] = useState("");
   const [planning, setPlanning] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
-  const [importUrl, setImportUrl] = useState("");
-  const [importing, setImporting] = useState(false);
-  const [importErr, setImportErr] = useState<string | null>(null);
   const [imported, setImported] = useState<Imported | null>(null);
   const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -239,18 +235,6 @@ export function PromptBox() {
     const j = r?.ok ? ((await r.json()) as SitePlan) : null;
     setPlanning(false);
     if (j) { setSitePlan(j); setPlanFor(text); }
-  }
-
-  async function runImport() {
-    const url = importUrl.trim();
-    if (!url || importing) return;
-    setImporting(true); setImportErr(null);
-    const r = await fetch("/api/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: /^https?:\/\//.test(url) ? url : `https://${url}` }) }).catch(() => null);
-    const j = await r?.json().catch(() => null);
-    setImporting(false);
-    if (!r?.ok || !j?.text) { setImportErr(j?.error ?? "Couldn't read that link."); return; }
-    setImported(j as Imported);
-    setImportOpen(false); setImportUrl("");
   }
 
   async function submit() {
@@ -497,28 +481,15 @@ export function PromptBox() {
           </div>
         </div>
 
-        {(importOpen || imported) && (
-          <div className="mx-4 mt-3 rounded-[12px] border border-white/[0.07] bg-white/[0.02] p-3">
-            {imported ? (
-              <div className="flex items-center gap-2.5">
-                {imported.image ? <img src={imported.image} alt="" className="h-9 w-12 rounded-md border border-white/10 object-cover" /> : <span className="grid h-9 w-9 place-items-center rounded-md border border-white/10 bg-ink-850"><BrandIcon icon={BRANDS[imported.source]} size={15} color="#e4e4e7" /></span>}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[12.5px] text-zinc-100">Starting from {imported.source === "github" ? "GitHub" : "Figma"}: {imported.title}</p>
-                  <p className="truncate text-[11.5px] text-zinc-500">{imported.text}</p>
-                </div>
-                {imported.accent && <span className="h-4 w-4 shrink-0 rounded" style={{ background: imported.accent }} title={`Accent ${imported.accent}`} />}
-                <button type="button" className="btn btn-ghost btn-icon h-7 w-7" aria-label="Remove import" onClick={() => setImported(null)}><X size={13} /></button>
-              </div>
-            ) : (
-              <>
-                <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); void runImport(); }}>
-                  <input autoFocus className="field h-9 min-w-0 flex-1 font-mono text-[12.5px]" placeholder="github.com/you/project or figma.com/design/…" value={importUrl} onChange={(e) => setImportUrl(e.target.value)} aria-label="GitHub repo or Figma file link" spellCheck={false} />
-                  <button type="submit" className="btn btn-outline h-9" disabled={importing || !importUrl.trim()}>{importing ? <Loader2 size={14} className="animate-spin" /> : null} Read it</button>
-                  <button type="button" className="btn btn-ghost h-9" onClick={() => { setImportOpen(false); setImportErr(null); }}>Cancel</button>
-                </form>
-                <p className="mt-1.5 text-[11.5px] text-zinc-500">{importErr ?? "A public GitHub repo (its description, site and README) or a Figma file shared by link (its title and main colour)."}</p>
-              </>
-            )}
+        {imported && (
+          <div className="mx-4 mt-3 flex min-w-0 items-center gap-2.5 rounded-[12px] border border-white/[0.07] bg-white/[0.02] p-3">
+            {imported.image ? <img src={imported.image} alt="" className="h-9 w-12 shrink-0 rounded-md border border-white/10 object-cover" /> : <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-white/10 bg-ink-850"><BrandIcon icon={BRANDS[imported.source]} size={15} color="#e4e4e7" /></span>}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[12.5px] text-zinc-100">Starting from {imported.source === "github" ? "GitHub" : "Figma"}: {imported.title}</p>
+              <p className="truncate text-[11.5px] text-zinc-500">{imported.text}</p>
+            </div>
+            {imported.accent && <span className="h-4 w-4 shrink-0 rounded" style={{ background: imported.accent }} title={`Accent ${imported.accent}`} />}
+            <button type="button" className="btn btn-ghost btn-icon h-7 w-7 shrink-0" aria-label="Remove import" onClick={() => setImported(null)}><X size={13} /></button>
           </div>
         )}
 
@@ -605,9 +576,6 @@ export function PromptBox() {
           >
             <Sparkles size={15} className="pop" />
           </button>
-          <button type="button" data-tour="import" className={`btn btn-icon ${importOpen || imported ? "bg-white/[0.08] text-white" : "btn-ghost"}`} title="Start from a GitHub repo or Figma file" aria-label="Start from a GitHub repo or Figma file" onClick={() => setImportOpen((o) => !o)}>
-            <BrandIcon icon={BRANDS.github} size={15} color="currentColor" />
-          </button>
 
           <div className="ml-auto flex items-center gap-1.5">
             <button
@@ -632,6 +600,8 @@ export function PromptBox() {
           </div>
         </div>
       </div>
+
+      <StartFrom onImported={setImported} />
 
       {error && (refusal ? <Upsell body={refusal} className="mt-3 animate-rise" /> : <p role="alert" className="mt-3 animate-rise text-[13px] text-red-300">{error}</p>)}
 

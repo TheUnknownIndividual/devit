@@ -2,12 +2,16 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { overLimit } from "@/lib/net";
 import { logoAccent } from "@/lib/palette";
+import { viewer } from "@/lib/accounts";
+import { unseal } from "@/lib/secrets";
 
 // "Start from": a GitHub repo or a Figma file, read into a few lines the build prompt can carry.
 //  - GitHub: the repo's description, homepage, topics and the start of its README (public repos, no sign-in).
 //  - Figma: the file's title and thumbnail via Figma's public oEmbed; the thumbnail's main colour becomes the accent.
 
-const Body = z.object({ url: z.string().trim().url().max(400) });
+// url: a pasted link; repo: "owner/name" picked from the person's own GitHub list (read with their token, so private
+// repos work when GitHub was connected with repo access).
+const Body = z.union([z.object({ url: z.string().trim().url().max(400) }), z.object({ repo: z.string().trim().regex(/^[\w.-]{1,100}\/[\w.-]{1,100}$/) })]);
 
 const clip = (s: string, n: number) => { const t = s.replace(/\s+/g, " ").trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 
@@ -16,10 +20,10 @@ const plain = (md: string) => md
   .replace(/<[^>]+>/g, " ").replace(/!\[[^\]]*\]\([^)]*\)/g, " ").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
   .replace(/^#+\s*/gm, "").replace(/[`*_>|]/g, " ");
 
-async function github(owner: string, repo: string) {
-  const h = { accept: "application/vnd.github+json", "user-agent": "sitesmith" };
+async function github(owner: string, repo: string, token?: string) {
+  const h: Record<string, string> = { accept: "application/vnd.github+json", "user-agent": "sitesmith", ...(token ? { authorization: `Bearer ${token}` } : {}) };
   const r = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers: h, signal: AbortSignal.timeout(8000) }).catch(() => null);
-  if (!r?.ok) return { error: r?.status === 404 ? "That repo isn't public, or doesn't exist." : "GitHub didn't answer. Try again in a minute." };
+  if (!r?.ok) return { error: r?.status === 404 ? token ? "That repo isn't there, or this GitHub connection can't see it." : "That repo isn't public, or doesn't exist." : "GitHub didn't answer. Try again in a minute." };
   const j = (await r.json()) as { full_name: string; description: string | null; homepage: string | null; topics?: string[]; language: string | null };
   const rd = await fetch(`https://api.github.com/repos/${owner}/${repo}/readme`, { headers: { ...h, accept: "application/vnd.github.raw" }, signal: AbortSignal.timeout(8000) }).catch(() => null);
   const readme = rd?.ok ? clip(plain(await rd.text()), 420) : "";
@@ -46,6 +50,13 @@ export async function POST(req: Request) {
   if (limited) return limited;
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Paste a GitHub repo or Figma file link." }, { status: 400 });
+  if ("repo" in parsed.data) {
+    const { user } = await viewer();
+    const token = (user?.github ? unseal(user.github.enc) : null) ?? undefined;
+    const [owner, name] = parsed.data.repo.split("/");
+    const picked = await github(owner, name, token);
+    return "error" in picked ? NextResponse.json(picked, { status: 422 }) : NextResponse.json(picked);
+  }
   const u = new URL(parsed.data.url);
   const host = u.hostname.replace(/^www\./, "");
   let out;
