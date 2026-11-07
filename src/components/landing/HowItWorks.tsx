@@ -13,7 +13,7 @@ const INTEGRATIONS: Array<{ name: string; what: string; mark: React.ReactNode }>
   { name: "EVM wallets", what: "MetaMask, Rabby, WalletConnect", mark: <LogoStack srcs={[LOGOS.metamask, LOGOS.rabby, LOGOS.walletconnect]} /> },
   { name: "Solana wallets", what: "Phantom, Solflare, Backpack", mark: <LogoStack srcs={[LOGOS.phantom, LOGOS.solflare, LOGOS.backpack]} /> },
   { name: "NEAR wallets", what: "HOT, Meteor, Intear", mark: <LogoStack srcs={[LOGOS.hot, LOGOS.meteor, LOGOS.intear]} /> },
-  { name: "Cross-chain buys", what: "NEAR Intents, HEX Exchange", mark: <LogoStack srcs={[LOGOS.nearIntents, LOGOS.hex]} /> },
+  { name: "Cross-chain buys", what: "NEAR Intents, buy with ETH", mark: <LogoStack srcs={[LOGOS.nearIntents, LOGOS.metamask]} /> },
   { name: "Swaps on the site", what: "Jupiter, KyberSwap", mark: <LogoStack srcs={[LOGOS.jupiter, LOGOS.kyberswap]} /> },
   { name: "Live chain data", what: "Helius, Alchemy, NEAR RPC", mark: <LogoStack srcs={[LOGOS.helius, LOGOS.alchemy]} /> },
 ];

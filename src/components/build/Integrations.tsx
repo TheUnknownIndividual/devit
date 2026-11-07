@@ -169,7 +169,7 @@ export function IntegrationsDialog({ open, onClose, project, onSaved, heliusOnSe
     { id: "evm", name: "MetaMask and EVM wallets", mark: <BrandLogo src={LOGOS.metamask} />, on: true, status: "Built in" },
     { id: "solana", name: "Phantom and Solana wallets", mark: <BrandLogo src={LOGOS.phantom} />, on: true, status: "Built in" },
     { id: "near", name: "NEAR wallets", mark: <BrandLogo src={LOGOS.hot} />, on: true, status: "Built in, via neartrade" },
-    { id: "intents", name: "NEAR Intents · HEX", mark: <LogoStack srcs={[LOGOS.nearIntents, LOGOS.hex]} />, on: true, status: "Cross-chain buys" },
+    { id: "intents", name: "NEAR Intents", mark: <LogoStack srcs={[LOGOS.nearIntents]} />, on: true, status: "Cross-chain buys" },
     { id: "walletconnect", name: "WalletConnect", mark: <BrandLogo src={LOGOS.walletconnect} />, on: !!ints.walletconnectProjectId, status: ints.walletconnectProjectId ? "Connected" : "Needs a Project ID" },
     { id: "privy", name: "Privy", mark: <BrandLogo src={LOGOS.privy} />, on: !!ints.privyAppId, status: ints.privyAppId ? "Connected" : project.kind === "dapp" ? "Recommended for dApps" : "Email and social sign-in" },
     { id: "helius", name: "Helius", mark: <BrandLogo src={LOGOS.helius} />, on: heliusOnServer, status: heliusOnServer ? "On for Solana data" : "Public Solana RPC" },
@@ -205,7 +205,7 @@ export function IntegrationsDialog({ open, onClose, project, onSaved, heliusOnSe
 /** The wallets and services each built-in pane stands for, by their own marks. */
 const PANE_LOGOS: Record<"evm" | "solana" | "near" | "intents" | "helius" | "alchemy", string[]> = {
   evm: [LOGOS.metamask, LOGOS.rabby], solana: [LOGOS.phantom, LOGOS.solflare, LOGOS.backpack],
-  near: [LOGOS.hot, LOGOS.meteor, LOGOS.intear], intents: [LOGOS.nearIntents, LOGOS.hex], helius: [LOGOS.helius], alchemy: [LOGOS.alchemy],
+  near: [LOGOS.hot, LOGOS.meteor, LOGOS.intear], intents: [LOGOS.nearIntents], helius: [LOGOS.helius], alchemy: [LOGOS.alchemy],
 };
 
 function BuiltIn({ which, heliusOnServer, alchemyOnServer }: { which: Exclude<Id, "walletconnect" | "privy" | "connectors" | "ga" | "gsc" | "xdata">; heliusOnServer: boolean; alchemyOnServer: boolean }) {
@@ -213,7 +213,7 @@ function BuiltIn({ which, heliusOnServer, alchemyOnServer }: { which: Exclude<Id
     evm: { title: "MetaMask, Rabby, Coinbase Wallet and more", points: ["Every installed EVM wallet announces itself (EIP-6963), so visitors see their own wallet with its real logo.", "On Robinhood Chain the site asks the wallet to switch networks, or adds the network if it's new.", "Buys swap right on the site through KyberSwap; the visitor confirms in their wallet.", "No setup needed."] },
     solana: { title: "Phantom, Solflare and Backpack", points: ["Found through the Wallet Standard, with each wallet's own logo. If none is installed, the menu links to Phantom and Solflare.", "Buys swap right on the site through Jupiter; the visitor confirms in their wallet.", "No setup needed."] },
     near: { title: "HOT, Meteor, Intear, Ledger and more", points: ["NEAR Connect shows every NEAR wallet, browser and mobile.", "Buys swap on the site through neartrade, which routes every launchpad curve and Rhea pool.", "No setup needed."] },
-    intents: { title: "Buy from other chains", points: ["The buy box has an Other chains tab: pay with ETH, SOL, BTC, USDC, NEAR, SUI, ZEC and more, 18 coins on 13 chains.", "NEAR Intents gives a one-time deposit address; the token, or the chain's native coin, lands in the buyer's wallet.", "Refunds go back to the buyer's own address if a swap can't fill.", "Under the quote, a link opens HEX Exchange (HOT Labs) with the buyer's coin and this token already picked, for anyone who'd rather bridge in an exchange app."] },
+    intents: { title: "Buy from other chains", points: ["The buy box has an Other chains tab: pay with ETH, SOL, BTC, USDC, NEAR, SUI, ZEC and more, 18 coins on 13 chains.", "NEAR Intents gives a one-time deposit address; the token, or the chain's native coin, lands in the buyer's wallet.", "Refunds go back to the buyer's own address if a swap can't fill.", "On NEAR tokens, a With ETH tab buys straight from an Ethereum wallet: ETH or USDC on Ethereum, Base or Arbitrum, landing in the buyer's own 0x account on NEAR. Selling works the same way back."] },
     helius: { title: heliusOnServer ? "Helius is on" : "Helius for Solana data", points: heliusOnServer ? ["Solana token names, logos and holder counts come from Helius DAS.", "The key stays on the server; published pages never see it."] : ["Add HELIUS_API_KEY to the server's environment to read Solana names, logos and holder counts from Helius DAS.", "Until then, Solana reads use the public RPC and DexScreener."] },
     alchemy: { title: alchemyOnServer ? "Alchemy is on" : "Alchemy for EVM data", points: alchemyOnServer ? ["Ethereum, Base and BNB Chain reads (name, symbol, supply, balances) go through Alchemy.", "Token logos come from Alchemy's token metadata when DexScreener has none.", "The key stays on the server; published pages never see it."] : ["Add ALCHEMY_API_KEY to the server's environment, or your own key in Settings, to read Ethereum, Base and BNB Chain through Alchemy.", "Until then, EVM reads use public RPCs and DexScreener."] },
   };
