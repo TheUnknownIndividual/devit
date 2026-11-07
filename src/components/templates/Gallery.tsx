@@ -2,14 +2,48 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, ArrowUpRight } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Loader2 } from "lucide-react";
 import { TEMPLATES, TEMPLATE_KINDS, templateHref, type Template, type TemplateKind } from "@/lib/templates";
-import { THEME_LABELS } from "@/lib/themes";
+import { THEMES, THEME_LABELS } from "@/lib/themes";
 import { CHAINS, type ThemeId } from "@/lib/spec";
 import { ThemeSwatch } from "@/components/ThemeSwatch";
 
 const DESK_W = 1280;
 const FRAME_H = 800;
+
+/** A wireframe of the sample site in the style's own colours, with a light sweep, shown until the real one loads. */
+function Loading({ t, slow }: { t: Template; slow: boolean }) {
+  const th = THEMES[t.style];
+  const ink = th.dark ? "rgba(255,255,255," : "rgba(0,0,0,";
+  const bar = (a: number) => `${ink}${a})`;
+  return (
+    <div className="absolute inset-0 overflow-hidden" aria-hidden>
+      <div className="absolute inset-0 flex flex-col p-[6%]">
+        <div className="flex items-center gap-[3%]">
+          <span className="h-[9px] w-[9px] rounded-[3px]" style={{ background: th.accent }} />
+          <span className="h-[6px] w-[18%] rounded-full" style={{ background: bar(0.16) }} />
+          <span className="ml-auto h-[6px] w-[10%] rounded-full" style={{ background: bar(0.1) }} />
+          <span className="h-[6px] w-[10%] rounded-full" style={{ background: bar(0.1) }} />
+          <span className="h-[12px] w-[14%] rounded-[4px]" style={{ background: th.accent, opacity: 0.85 }} />
+        </div>
+        <div className="mt-[9%] h-[11px] w-[62%] rounded-full" style={{ background: bar(0.2) }} />
+        <div className="mt-[3%] h-[11px] w-[44%] rounded-full" style={{ background: bar(0.2) }} />
+        <div className="mt-[4%] h-[6px] w-[52%] rounded-full" style={{ background: bar(0.1) }} />
+        <div className="mt-[5%] flex gap-[3%]">
+          <span className="h-[16px] w-[20%] rounded-[5px]" style={{ background: th.accent }} />
+          <span className="h-[16px] w-[16%] rounded-[5px] border" style={{ borderColor: bar(0.2) }} />
+        </div>
+        <div className="mt-auto grid grid-cols-3 gap-[3%]">
+          {[0, 1, 2].map((i) => <span key={i} className="h-[34px] rounded-[6px] border" style={{ background: bar(0.04), borderColor: bar(0.08) }} />)}
+        </div>
+      </div>
+      <div className="sheen absolute inset-0" style={{ background: `linear-gradient(100deg, transparent 20%, ${bar(th.dark ? 0.07 : 0.06)} 50%, transparent 80%)` }} />
+      <span className="absolute bottom-2.5 left-2.5 inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-black/60 px-2 py-1 text-[11px] text-zinc-200 backdrop-blur-sm">
+        <Loader2 size={11} className="animate-spin" /> {slow ? "Still loading the preview" : "Loading preview"}
+      </span>
+    </div>
+  );
+}
 
 /** The sample site for a style, scaled into the card. It loads only when the card is near the screen. */
 function Preview({ t }: { t: Template }) {
@@ -17,6 +51,12 @@ function Preview({ t }: { t: Template }) {
   const [w, setW] = useState(0);
   const [near, setNear] = useState(false);
   const [ready, setReady] = useState(false);
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!near || ready) return;
+    const id = setTimeout(() => setSlow(true), 6000);
+    return () => clearTimeout(id);
+  }, [near, ready]);
   useEffect(() => {
     const el = box.current;
     if (!el) return;
@@ -28,7 +68,8 @@ function Preview({ t }: { t: Template }) {
   }, []);
   const scale = w ? w / DESK_W : 0.25;
   return (
-    <div ref={box} className="relative aspect-[16/10] overflow-hidden border-b border-white/[0.06]" style={{ background: t.bg }}>
+    <div ref={box} className="relative aspect-[16/10] overflow-hidden border-b border-white/[0.06]" style={{ background: t.bg }} aria-busy={!ready}>
+      {!ready && <Loading t={t} slow={slow} />}
       {near && (
         <iframe
           src={`/styles/${t.style}`}
