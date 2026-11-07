@@ -68,6 +68,6 @@ export async function GET(req: Request) {
     if (cache.size > 5000) for (const [k, v] of cache) if (Date.now() - v.at > 60_000) cache.delete(k);
     return NextResponse.json(body);
   } catch {
-    return NextResponse.json({ error: "No balance right now" }, { status: 502 });
+    return NextResponse.json({ error: "No balance right now" }, { status: 422 });
   }
 }

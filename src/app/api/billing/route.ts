@@ -33,12 +33,12 @@ export async function POST(req: Request) {
   const usd = priceUsd(p, b.cycle);
   const [bc, sym] = b.pay.split(":");
   const origin = (await oneClickTokens()).find((x) => x.blockchain === bc && x.symbol === sym);
-  if (!origin?.price) return NextResponse.json({ error: "No price for that coin right now." }, { status: 502 });
+  if (!origin?.price) return NextResponse.json({ error: "No price for that coin right now." }, { status: 422 });
   // A little over the price so swap fees and slippage don't leave the payment short.
   const amount = Number(((usd * 1.02) / origin.price).toPrecision(6));
   const q = await intentQuote({ pay: b.pay, amount, chain: "near", token: USDC_NEAR, recipient: to, refundTo: b.refundTo, dry: false });
-  if ("error" in q) return NextResponse.json({ error: q.error }, { status: 502 });
-  if (!q.depositAddress) return NextResponse.json({ error: "NEAR Intents didn't give a deposit address. Try again." }, { status: 502 });
+  if ("error" in q) return NextResponse.json({ error: q.error }, { status: 422 });
+  if (!q.depositAddress) return NextResponse.json({ error: "NEAR Intents didn't give a deposit address. Try again." }, { status: 422 });
   await updateUser(user.id, (u) => {
     u.payments = [...(u.payments ?? []).filter((x) => x.depositAddress !== q.depositAddress).slice(-19), { depositAddress: q.depositAddress!, plan: b.plan, cycle: b.cycle, usd, pay: b.pay, at: Date.now() }];
   });

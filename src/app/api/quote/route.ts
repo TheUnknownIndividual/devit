@@ -21,6 +21,6 @@ export async function GET(req: Request) {
     const q = await quote(chain, token, amount, decimals, account);
     return NextResponse.json({ venue: q.venue, out: q.out, impactPct: q.impactPct, swap: true });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof SwapError ? e.message : "No route right now" }, { status: 502 });
+    return NextResponse.json({ error: e instanceof SwapError ? e.message : "No route right now" }, { status: 422 });
   }
 }

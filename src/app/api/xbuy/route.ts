@@ -33,7 +33,7 @@ export async function POST(req: Request) {
   const b = parsed.data;
   if (b.op === "quote") {
     const q = await xQuote(b);
-    return NextResponse.json(q, { status: "error" in q ? 502 : 200 });
+    return NextResponse.json(q, { status: "error" in q ? 422 : 200 });
   }
   if (b.op === "leg") {
     const r = await xSwapLeg(b.evm, b.token);

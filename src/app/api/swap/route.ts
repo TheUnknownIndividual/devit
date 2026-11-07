@@ -32,6 +32,6 @@ export async function POST(req: Request) {
   try {
     return NextResponse.json(await build(b.chain, b.token, b.amount, b.decimals, b.user));
   } catch (e) {
-    return NextResponse.json({ error: e instanceof SwapError ? e.message : "Couldn't build the swap." }, { status: 502 });
+    return NextResponse.json({ error: e instanceof SwapError ? e.message : "Couldn't build the swap." }, { status: 422 });
   }
 }
