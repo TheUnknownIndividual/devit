@@ -20,7 +20,7 @@ import { KeyRow } from "./KeyRow";
 
 const SECTIONS = [["account", "Account"], ["methods", "Sign-in methods"], ["keys", "API keys"], ["plan", "Plan"], ["team", "Team"]] as const;
 const MODEL_KEYS: KeyId[] = ["nearai", "anthropic", "openai", "openrouter"];
-const CHAIN_KEYS: KeyId[] = ["helius", "twitterapi", "rpc:near", "rpc:solana", "rpc:ethereum", "rpc:robinhood"];
+const CHAIN_KEYS: KeyId[] = ["helius", "alchemy", "twitterapi", "rpc:near", "rpc:solana", "rpc:ethereum", "rpc:robinhood"];
 
 const day = (t: number) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 

@@ -50,7 +50,7 @@ export function PlanCards({ current, paymentsOn }: { current: PlanId | null; pay
                   <button type="button" className="btn btn-outline w-full" disabled>Coming soon</button>
                 ) : (
                   <button type="button" className={`btn w-full ${p.id === "pro" ? "btn-primary" : "btn-outline"}`} onClick={() => (user ? setPaying(p) : openSignIn())}>
-                    <Wallet size={15} /> Pay with any token
+                    <Wallet size={15} /> Pay with crypto
                   </button>
                 )}
               </div>

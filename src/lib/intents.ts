@@ -22,15 +22,27 @@ export async function oneClickTokens(): Promise<OneClickToken[]> {
 const CHAIN_KEY: Record<Chain, string> = { near: "near", solana: "sol", ethereum: "eth", base: "base", bsc: "bsc", robinhood: "hood" };
 const NATIVE: Record<Chain, string> = { near: "wNEAR", solana: "SOL", ethereum: "ETH", base: "ETH", bsc: "BNB", robinhood: "ETH" };
 
-/** Coins a buyer can pay with, shown in the "Any chain" picker. */
+/** Coins a buyer can pay with, shown in the "Any chain" picker: the main coins on chains NEAR Intents carries, each
+ *  checked with a dry 1-Click quote. (BNB Chain and Tron are left out while 1-Click has $100+ minimums on them.) */
 export const PAY_WITH = [
-  { key: "sol:SOL", label: "SOL", chain: "Solana" },
   { key: "eth:ETH", label: "ETH", chain: "Ethereum" },
+  { key: "sol:SOL", label: "SOL", chain: "Solana" },
   { key: "btc:BTC", label: "BTC", chain: "Bitcoin" },
-  { key: "base:USDC", label: "USDC", chain: "Base" },
-  { key: "sol:USDC", label: "USDC", chain: "Solana" },
-  { key: "eth:USDT", label: "USDT", chain: "Ethereum" },
   { key: "near:wNEAR", label: "NEAR", chain: "NEAR" },
+  { key: "eth:USDC", label: "USDC", chain: "Ethereum" },
+  { key: "eth:USDT", label: "USDT", chain: "Ethereum" },
+  { key: "base:ETH", label: "ETH", chain: "Base" },
+  { key: "base:USDC", label: "USDC", chain: "Base" },
+  { key: "arb:ETH", label: "ETH", chain: "Arbitrum" },
+  { key: "arb:USDC", label: "USDC", chain: "Arbitrum" },
+  { key: "op:ETH", label: "ETH", chain: "Optimism" },
+  { key: "sol:USDC", label: "USDC", chain: "Solana" },
+  { key: "avax:AVAX", label: "AVAX", chain: "Avalanche" },
+  { key: "pol:POL", label: "POL", chain: "Polygon" },
+  { key: "sui:SUI", label: "SUI", chain: "Sui" },
+  { key: "aptos:APT", label: "APT", chain: "Aptos" },
+  { key: "doge:DOGE", label: "DOGE", chain: "Dogecoin" },
+  { key: "zec:ZEC", label: "ZEC", chain: "Zcash" },
 ] as const;
 
 /**
@@ -97,7 +109,7 @@ export async function intentQuote(opts: { pay: string; amount: number; chain: Ch
   try {
     const r = await fetch(`${ONECLICK}/v0/quote`, { method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(12_000) });
     const j = (await r.json()) as { message?: string; quote?: { depositAddress?: string; amountInFormatted?: string; amountOutFormatted?: string; amountOutUsd?: string; timeEstimate?: number } };
-    if (!r.ok || !j.quote) return { error: /too low/i.test(j.message ?? "") ? "That amount is too small for this route. Try a bit more." : j.message || "No quote right now" };
+    if (!r.ok || !j.quote) return { error: /too low|minimum swap amount/i.test(j.message ?? "") ? "That amount is too small for this route. Try a bit more." : j.message || "No quote right now" };
     return {
       depositAddress: j.quote.depositAddress ?? null,
       amountIn: j.quote.amountInFormatted ?? String(opts.amount),

@@ -10,6 +10,7 @@ export const KEY_LABELS: Record<KeyId, { name: string; hint: string; get: string
   openai: { name: "OpenAI", hint: "GPT models.", get: "https://platform.openai.com/api-keys" },
   openrouter: { name: "OpenRouter", hint: "Optional. Any model, one key.", get: "https://openrouter.ai/keys" },
   helius: { name: "Helius", hint: "Solana names, logos and reads.", get: "https://dashboard.helius.dev" },
+  alchemy: { name: "Alchemy", hint: "Ethereum, Base and BNB Chain reads and token logos.", get: "https://dashboard.alchemy.com" },
   twitterapi: { name: "twitterapi.io", hint: "Your X posts in builds, and kept fresh on your live site.", get: "https://twitterapi.io/dashboard" },
   "rpc:near": { name: "NEAR RPC", hint: "Used for NEAR reads in your builds.", get: "https://fastnear.com" },
   "rpc:solana": { name: "Solana RPC", hint: "Wins over Helius for Solana reads.", get: "https://drpc.org" },
@@ -41,6 +42,11 @@ export async function verifyKey(id: KeyId, key: string): Promise<{ ok: true } | 
     else if (id === "openrouter") r = await fetch("https://openrouter.ai/api/v1/key", { headers: { authorization: `Bearer ${key}` }, signal: t });
     else if (id === "twitterapi") r = await fetch("https://api.twitterapi.io/oapi/my/info", { headers: { "X-API-Key": key }, signal: t });
     else if (id === "helius") r = await fetch(`https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(key)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getHealth" }), signal: t });
+    else if (id === "alchemy") {
+      r = await fetch(`https://eth-mainnet.g.alchemy.com/v2/${encodeURIComponent(key)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] }), signal: t });
+      const j = (await r.json().catch(() => null)) as { result?: unknown } | null;
+      return j && "result" in j ? { ok: true } : { ok: false, reason: "Alchemy rejected that key." };
+    }
     else {
       r = await fetch(key, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: PROBE[id.slice(4)], params: [] }), signal: t, redirect: "error" });
       const j = (await r.json().catch(() => null)) as { result?: unknown } | null;

@@ -6,7 +6,7 @@ import type { Chain } from "./spec";
 // llm.ts / chain.ts / research.ts read it from here, so their signatures stay as they were. The same scope carries
 // whether the owner's plan has priority models (entitlements "priorityModels"), for llm.ts to pick the model size.
 
-export const KEY_IDS = ["nearai", "anthropic", "openai", "openrouter", "helius", "twitterapi", "rpc:near", "rpc:solana", "rpc:ethereum", "rpc:robinhood"] as const;
+export const KEY_IDS = ["nearai", "anthropic", "openai", "openrouter", "helius", "alchemy", "twitterapi", "rpc:near", "rpc:solana", "rpc:ethereum", "rpc:robinhood"] as const;
 export type KeyId = (typeof KEY_IDS)[number];
 export const LLM_KEYS = ["nearai", "anthropic", "openai", "openrouter"] as const satisfies readonly KeyId[];
 
@@ -16,6 +16,8 @@ export interface OwnerKeys {
   openai?: string;
   openrouter?: string;
   helius?: string;
+  /** Alchemy: EVM reads (Ethereum, Base, BNB Chain) and token logos. */
+  alchemy?: string;
   /** twitterapi.io: X posts and profiles for research and live posts on the published site. */
   twitterapi?: string;
   rpc?: Partial<Record<Chain, string>>;

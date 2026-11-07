@@ -90,7 +90,7 @@ export function PublishDialog({ open, onClose, project, onSaved }: { open: boole
           </div>
           <div className="rounded-[12px] border border-white/[0.08] bg-ink-850 p-3.5 opacity-80">
             <div className="flex items-center gap-2 text-[13.5px] font-medium text-white"><Crown size={15} className="text-amber-300" /> Pro <span className="ml-auto rounded-md bg-white/[0.08] px-1.5 py-0.5 text-[10.5px] text-zinc-400">Soon</span></div>
-            <ul className="mt-2 space-y-1 text-[12.5px] text-zinc-400"><li>Custom domain</li><li>No footer badge</li><li className="flex items-center gap-1.5">Pay with any coin <BrandIcon icon={BRANDS.near} size={11} color="#a1a1aa" /> Intents</li></ul>
+            <ul className="mt-2 space-y-1 text-[12.5px] text-zinc-400"><li>Custom domain</li><li>No footer badge</li><li className="flex items-center gap-1.5">Pay in crypto <BrandIcon icon={BRANDS.near} size={11} color="#a1a1aa" /> Intents</li></ul>
           </div>
         </div>
 

@@ -1,4 +1,4 @@
-import { siNeon, siSupabase, siSpaceship, siApple, siClaude, siOpenrouter, siGoogle, siGoogleanalytics, siGooglesearchconsole, siBitcoin, siBnbchain, siCloudflare, siCoinbase, siDiscord, siEthereum, siFigma, siGithub, siNear, siRobinhood, siSolana, siTelegram, siWalletconnect, siX } from "simple-icons";
+import { siAlchemy, siFarcaster, siNeon, siSupabase, siSpaceship, siApple, siClaude, siOpenrouter, siGoogle, siGoogleanalytics, siGooglesearchconsole, siBitcoin, siBnbchain, siCloudflare, siCoinbase, siDiscord, siEthereum, siFigma, siGithub, siNear, siRobinhood, siSolana, siTelegram, siWalletconnect, siX } from "simple-icons";
 import type { Chain } from "@/lib/spec";
 
 // Brand marks from simple-icons (CC0). Wallets that simple-icons doesn't carry (MetaMask, Phantom) show the
@@ -19,6 +19,7 @@ export const BRANDS = {
   apple: siApple, google: siGoogle, claude: siClaude, openrouter: siOpenrouter,
   robinhood: siRobinhood, x: siX, telegram: siTelegram, discord: siDiscord, coinbase: siCoinbase, bitcoin: siBitcoin, cloudflare: siCloudflare,
   neon: siNeon, supabase: siSupabase, spaceship: siSpaceship, googleAnalytics: siGoogleanalytics, searchConsole: siGooglesearchconsole,
+  alchemy: siAlchemy, farcaster: siFarcaster,
 };
 
 export const CHAIN_BRAND: Record<Chain, { icon: Si; tint: string }> = {
@@ -49,7 +50,7 @@ export function LetterMark({ letter, bg, fg = "#fff", size = 20 }: { letter: str
 export const LOGOS = {
   metamask: "/brands/metamask.svg", phantom: "/brands/phantom.svg", solflare: "/brands/solflare.svg", backpack: "/brands/backpack.png",
   rabby: "/brands/rabby.png", hot: "/brands/hot.svg", meteor: "/brands/meteor.png", intear: "/brands/intear.svg",
-  walletconnect: "/brands/walletconnect.png", privy: "/brands/privy.png", helius: "/brands/helius.svg", jupiter: "/brands/jupiter.svg",
+  walletconnect: "/brands/walletconnect.png", privy: "/brands/privy.png", helius: "/brands/helius.svg", alchemy: "/brands/alchemy.svg", jupiter: "/brands/jupiter.svg",
   kyberswap: "/brands/kyberswap.png", nearIntents: "/brands/near-intents.png",
 } as const;
 

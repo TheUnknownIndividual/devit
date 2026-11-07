@@ -10,7 +10,7 @@ import type { KeyId } from "@/lib/keyscope";
 // checks it before saving, and the next message uses it. Same keys as Settings → API keys.
 
 const MODEL_KEYS: KeyId[] = ["nearai", "anthropic", "openai", "openrouter"];
-const CHAIN_KEYS: KeyId[] = ["helius", "twitterapi", "rpc:near", "rpc:solana", "rpc:ethereum", "rpc:robinhood"];
+const CHAIN_KEYS: KeyId[] = ["helius", "alchemy", "twitterapi", "rpc:near", "rpc:solana", "rpc:ethereum", "rpc:robinhood"];
 
 export function KeysDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user } = useSession();

@@ -43,7 +43,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
         <div style={{ fontSize: 40, lineHeight: 1.3, color: text, maxWidth: 1000 }}>{spec.tagline.slice(0, 140)}</div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 24, color: muted }}>
           <div style={{ display: "flex", padding: "10px 18px", borderRadius: 14, background: accent, color: accentText, fontWeight: 700 }}>Buy ${spec.ticker.slice(0, 14)} on {CHAINS[spec.chain].name}</div>
-          <div style={{ display: "flex" }}>Live price · chart · buy from any chain</div>
+          <div style={{ display: "flex" }}>Live price · chart · cross-chain buys</div>
         </div>
       </div>
     ),

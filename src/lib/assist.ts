@@ -82,7 +82,7 @@ export async function planSite(prompt: string, kind: string, chain: Chain, style
   const intent = readIntent(prompt, chain);
   const pick = style ?? intent.theme;
   const base = (on: Set<BlockType>): SitePlan["sections"] => [
-    ...CORE.map((t) => ({ type: t, label: BLOCK_LABELS[t], why: t === "buy" ? "Buy with any coin from any chain" : t === "hero" ? "Headline, tagline and the main button" : t === "stats" ? "Price, market cap, volume" : "", on: true })),
+    ...CORE.map((t) => ({ type: t, label: BLOCK_LABELS[t], why: t === "buy" ? "Buy here or from other chains" : t === "hero" ? "Headline, tagline and the main button" : t === "stats" ? "Price, market cap, volume" : "", on: true })),
     ...OPTIONAL.map((t) => ({ type: t, label: BLOCK_LABELS[t], why: OPTIONAL_WHY[t] ?? "", on: on.has(t) })),
   ];
   const wanted = new Set<BlockType>([...intent.wants, ...(intent.address ? (["chart", "trades"] as BlockType[]) : [])]);

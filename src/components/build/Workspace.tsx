@@ -40,7 +40,7 @@ const MODES: Array<{ id: Mode; label: string; hint: string }> = [
   { id: "ask", label: "Ask", hint: "Answers questions, changes nothing" },
 ];
 
-export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, share }: { initial: PublicProject; heliusOnServer: boolean; canEdit?: boolean; viewNote?: string; share?: string }) {
+export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, canEdit = true, viewNote, share }: { initial: PublicProject; heliusOnServer: boolean; alchemyOnServer?: boolean; canEdit?: boolean; viewNote?: string; share?: string }) {
   const [p, setP] = useState(initial);
   const q = share ? `?share=${encodeURIComponent(share)}` : "";
   const [mode, setMode] = useState<Mode>("edit");
@@ -570,7 +570,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
         </section>
       </div>
 
-      <IntegrationsDialog open={dialog === "integrations"} onClose={() => setDialog(null)} project={p} onSaved={setP} heliusOnServer={heliusOnServer} />
+      <IntegrationsDialog open={dialog === "integrations"} onClose={() => setDialog(null)} project={p} onSaved={setP} heliusOnServer={heliusOnServer} alchemyOnServer={alchemyOnServer} />
       <RpcDialog key={`rpc-${dialog === "rpc"}`} open={dialog === "rpc"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
       <PublishDialog open={dialog === "publish"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
       <ExportDialog open={dialog === "export"} onClose={() => setDialog(null)} project={p} onSaved={setP} />

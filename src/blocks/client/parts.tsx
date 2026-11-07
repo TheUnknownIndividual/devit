@@ -321,7 +321,7 @@ export function BuyBox({ chain, token, ticker, presets }: { chain: Chain; token:
     <div className="ss-card ss-buy" data-el="buybox">
       <div className="ss-tabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === "same"} onClick={() => setTab("same")}>With {native}</button>
-        <button type="button" role="tab" aria-selected={tab === "any"} onClick={() => setTab("any")}><Globe2 size={14} style={{ display: "inline", marginRight: 6, verticalAlign: -2 }} />Any chain</button>
+        <button type="button" role="tab" aria-selected={tab === "any"} onClick={() => setTab("any")}><Globe2 size={14} style={{ display: "inline", marginRight: 6, verticalAlign: -2 }} />Other chains</button>
       </div>
       {tab === "same" ? <SameChain chain={chain} token={token} ticker={ticker} presets={presets} /> : <AnyChain chain={chain} token={token} ticker={ticker} />}
     </div>
@@ -449,7 +449,7 @@ function AnyChain({ chain, token, ticker }: { chain: Chain; token: TokenInfo | n
     <>
       {relayOk && (
         <div className="ss-route" role="radiogroup" aria-label="Route">
-          {([["intents", "NEAR Intents", "Any wallet, any chain"], ["relay", "Relay", "Sign in your wallet"]] as const).map(([k, name, sub]) => (
+          {([["intents", "NEAR Intents", "Send from any wallet"], ["relay", "Relay", "Sign in your wallet"]] as const).map(([k, name, sub]) => (
             <button key={k} type="button" role="radio" aria-checked={route === k} onClick={() => setRoute(k)}>
               <b>{name}</b><span>{sub}</span>
             </button>

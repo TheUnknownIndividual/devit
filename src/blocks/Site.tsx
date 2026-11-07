@@ -124,7 +124,7 @@ function Tokenomics({ b, spec }: { b: Block; spec: SiteSpec }) {
   );
 }
 
-const SOCIAL_ICON: Record<string, typeof BRANDS.x> = { twitter: BRANDS.x, x: BRANDS.x, "x-community": BRANDS.x, telegram: BRANDS.telegram, discord: BRANDS.discord, github: BRANDS.github };
+const SOCIAL_ICON: Record<string, typeof BRANDS.x> = { twitter: BRANDS.x, x: BRANDS.x, "x-community": BRANDS.x, telegram: BRANDS.telegram, discord: BRANDS.discord, github: BRANDS.github, farcaster: BRANDS.farcaster };
 
 function TreasuryBlock({ b, mode }: { b: Block; mode: Mode }) {
   const p = b.props as P;
@@ -227,7 +227,7 @@ function BlockView({ b, spec, mode, walletconnect, privy, credit }: { b: Block; 
           <div className="ss-wrap ss-grid ss-g2" style={{ alignItems: "start" }}>
             <div>
               <Title text={s(p.title, `Buy $${spec.ticker}`)} />
-              <p className="ss-muted" data-el="body" style={{ maxWidth: 420, margin: 0 }}>{s(p.body, `Buy with ${CHAINS[spec.chain].native}, or pay with SOL, ETH, BTC or USDC from any chain through NEAR Intents.`)}</p>
+              <p className="ss-muted" data-el="body" style={{ maxWidth: 420, margin: 0 }}>{s(p.body, `Buy with ${CHAINS[spec.chain].native}, or pay with SOL, ETH, BTC or USDC from other chains through NEAR Intents.`)}</p>
             </div>
             <BuyBox chain={spec.chain} token={spec.token} ticker={spec.ticker} presets={arr<unknown>(p.presets).filter((n): n is number => typeof n === "number" && n > 0 && Number.isFinite(n)).slice(0, 5)} />
           </div>

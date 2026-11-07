@@ -34,8 +34,8 @@ function Account({ a }: { a: TreasuryAccount }) {
       <div className="ss-grid ss-g4">
         <a className="ss-card ss-stat" href={a.url} target="_blank" rel="noreferrer"><div className="k">Total value</div><div className="v">{usd(a.totalUsd)}</div></a>
         <a className="ss-card ss-stat" href={`${a.url}#tokens`} target="_blank" rel="noreferrer"><div className="k">Assets held</div><div className="v">{a.holdings.length}</div></a>
-        {d && <a className="ss-card ss-stat" href={a.url} target="_blank" rel="noreferrer"><div className="k">Council</div><div className="v">{d.members}</div></a>}
-        {d && <a className="ss-card ss-stat" href={a.url} target="_blank" rel="noreferrer"><div className="k">To approve a payment</div><div className="v">{d.need ? `${d.need} of ${d.members}` : "Per policy"}</div></a>}
+        {d && <a className="ss-card ss-stat" href={d.membersUrl} target="_blank" rel="noreferrer"><div className="k">Council</div><div className="v">{d.members}</div></a>}
+        {d && <a className="ss-card ss-stat" href={d.membersUrl} target="_blank" rel="noreferrer"><div className="k">To approve a payment</div><div className="v">{d.need ? `${d.need} of ${d.members}` : "Per policy"}</div></a>}
       </div>
       <div className="ss-grid ss-g2 ss-tr-cols">
         <div className="ss-card">
@@ -67,6 +67,7 @@ function Account({ a }: { a: TreasuryAccount }) {
               mid={<><b>{p.title}</b><span className="ss-muted">{p.kind}{p.amount ? ` · ${p.amount}` : ""} · {day(p.at)}</span></>}
               right={<span className="ss-tr-status" data-s={p.status.toLowerCase()}>{p.status}</span>} />
           )) : <p className="ss-muted ss-tr-empty">No proposals yet.</p>}
+          <p className="ss-muted ss-tr-note"><a className="ss-tr-link" href={d.app} target="_blank" rel="noreferrer">Open this treasury in NEAR Business</a></p>
         </div>
       )}
     </div>

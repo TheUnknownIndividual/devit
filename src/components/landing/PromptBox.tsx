@@ -2,7 +2,7 @@
 
 import { modelHeader } from "@/components/build/ModelPicker";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useTransitionRouter } from "glimm/next";
 import {
   Link2,
   AppWindow, ArrowUp, Check, ChevronDown, ClipboardPaste, Coins, FileCode2, Globe, Image as ImageIcon, Lightbulb, Loader2, LogOut, Mic, MicOff,
@@ -84,7 +84,7 @@ const SOCIAL_FIELDS: Array<{ key: SocialKey; label: string; placeholder: string;
 ];
 
 export function PromptBox() {
-  const router = useRouter();
+  const router = useTransitionRouter();
   const [prompt, setPrompt] = useState("");
   const [address, setAddress] = useState("");
   const [chain, setChain] = useState<Chain>("solana");

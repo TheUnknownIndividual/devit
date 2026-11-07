@@ -207,6 +207,7 @@ export function WhatIf({ token: initial, ticker, mode, amount: start }: { token:
       </div>
       <div className="ss-raid-acts">
         <a className="ss-btn ss-btn-sm" href={`https://x.com/intent/post?text=${encodeURIComponent(`${shareText} ${url}`.trim())}`} target="_blank" rel="noreferrer">Share on X</a>
+        <a className="ss-btn ss-btn-sm" href={`https://farcaster.xyz/~/compose?text=${encodeURIComponent(`${shareText} ${url}`.trim())}`} target="_blank" rel="noreferrer">Share on Farcaster</a>
         <button type="button" className="ss-btn ss-btn-ghost ss-btn-sm" onClick={() => { void navigator.clipboard?.writeText(`${shareText} ${url}`.trim()); setCopied(true); setTimeout(() => setCopied(false), 1400); }}>{copied ? <Check size={14} /> : <Copy size={14} />}{copied ? "Copied" : "Copy"}</button>
       </div>
       <div className="ss-note" style={{ margin: 0 }}>Past moves only, from public market data. Not a prediction or advice.</div>
@@ -238,6 +239,7 @@ export function Raid({ ticker, chain, token, posts }: { ticker: string; chain: C
             <p>{text}</p>
             <div className="ss-raid-acts">
               <a className="ss-btn ss-btn-sm" href={`https://x.com/intent/post?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer">Post on X</a>
+              <a className="ss-btn ss-btn-sm" href={`https://farcaster.xyz/~/compose?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer">Cast on Farcaster</a>
               <button type="button" className="ss-btn ss-btn-ghost ss-btn-sm" onClick={() => copy(i, text)}>{done === i ? <Check size={14} /> : <Copy size={14} />}{done === i ? "Copied" : "Copy"}</button>
             </div>
           </div>

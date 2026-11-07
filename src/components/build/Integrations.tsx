@@ -11,7 +11,7 @@ import type { PublicProject } from "@/lib/public";
 // Guided setup for services that need an ID from their own dashboard. Each guide is a short run of
 // illustrated steps, a button that opens the right page, a paste box, and a live check before saving.
 
-type Id = "evm" | "solana" | "near" | "intents" | "walletconnect" | "privy" | "helius" | "ga" | "gsc" | "xdata" | "connectors";
+type Id = "evm" | "solana" | "near" | "intents" | "walletconnect" | "privy" | "helius" | "alchemy" | "ga" | "gsc" | "xdata" | "connectors";
 
 interface GuideStep { title: string; body: string; art: ReactNode }
 
@@ -158,8 +158,8 @@ function Row({ on, active, mark, name, status, onClick }: { on: boolean; active:
 }
 
 
-export function IntegrationsDialog({ open, onClose, project, onSaved, heliusOnServer, startAt }: {
-  open: boolean; onClose: () => void; project: PublicProject; onSaved: (p: PublicProject) => void; heliusOnServer: boolean; startAt?: Id;
+export function IntegrationsDialog({ open, onClose, project, onSaved, heliusOnServer, alchemyOnServer = false, startAt }: {
+  open: boolean; onClose: () => void; project: PublicProject; onSaved: (p: PublicProject) => void; heliusOnServer: boolean; alchemyOnServer?: boolean; startAt?: Id;
 }) {
   const [active, setActive] = useState<Id>(startAt ?? (project.kind === "dapp" ? "privy" : "evm"));
   useEffect(() => { if (open && startAt) setActive(startAt); }, [open, startAt]);
@@ -169,10 +169,11 @@ export function IntegrationsDialog({ open, onClose, project, onSaved, heliusOnSe
     { id: "evm", name: "MetaMask and EVM wallets", mark: <BrandLogo src={LOGOS.metamask} />, on: true, status: "Built in" },
     { id: "solana", name: "Phantom and Solana wallets", mark: <BrandLogo src={LOGOS.phantom} />, on: true, status: "Built in" },
     { id: "near", name: "NEAR wallets", mark: <BrandLogo src={LOGOS.hot} />, on: true, status: "Built in, via neartrade" },
-    { id: "intents", name: "NEAR Intents", mark: <BrandLogo src={LOGOS.nearIntents} />, on: true, status: "Buy with any coin" },
+    { id: "intents", name: "NEAR Intents", mark: <BrandLogo src={LOGOS.nearIntents} />, on: true, status: "Cross-chain buys" },
     { id: "walletconnect", name: "WalletConnect", mark: <BrandLogo src={LOGOS.walletconnect} />, on: !!ints.walletconnectProjectId, status: ints.walletconnectProjectId ? "Connected" : "Needs a Project ID" },
     { id: "privy", name: "Privy", mark: <BrandLogo src={LOGOS.privy} />, on: !!ints.privyAppId, status: ints.privyAppId ? "Connected" : project.kind === "dapp" ? "Recommended for dApps" : "Email and social sign-in" },
     { id: "helius", name: "Helius", mark: <BrandLogo src={LOGOS.helius} />, on: heliusOnServer, status: heliusOnServer ? "On for Solana data" : "Public Solana RPC" },
+    { id: "alchemy", name: "Alchemy", mark: <BrandLogo src={LOGOS.alchemy} />, on: alchemyOnServer, status: alchemyOnServer ? "On for EVM data" : "Public EVM RPC" },
     { id: "ga", name: "Google Analytics", mark: <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-white/[0.07]"><BrandIcon icon={BRANDS.googleAnalytics} size={15} /></span>, on: !!ints.gaId, status: ints.gaId ? ints.gaId : "Visitors, sources, buys" },
     { id: "gsc", name: "Google Search Console", mark: <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-white/[0.07]"><BrandIcon icon={BRANDS.searchConsole} size={15} /></span>, on: !!ints.gscToken, status: ints.gscToken ? "Verified tag on the site" : "Show up on Google" },
     { id: "xdata", name: "X data (twitterapi.io)", mark: <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-white/[0.07]"><BrandIcon icon={BRANDS.x} size={13} color="#fff" /></span>, on: false, status: "Live posts from your X" },
@@ -194,7 +195,7 @@ export function IntegrationsDialog({ open, onClose, project, onSaved, heliusOnSe
             ? <XDataPane project={project} />
             : active === "walletconnect" || active === "privy"
             ? <Guide key={active} which={active} project={project} onSaved={onSaved} />
-            : <BuiltIn which={active} heliusOnServer={heliusOnServer} />}
+            : <BuiltIn which={active} heliusOnServer={heliusOnServer} alchemyOnServer={alchemyOnServer} />}
         </div>
       </div>
     </Dialog>
@@ -202,18 +203,19 @@ export function IntegrationsDialog({ open, onClose, project, onSaved, heliusOnSe
 }
 
 /** The wallets and services each built-in pane stands for, by their own marks. */
-const PANE_LOGOS: Record<"evm" | "solana" | "near" | "intents" | "helius", string[]> = {
+const PANE_LOGOS: Record<"evm" | "solana" | "near" | "intents" | "helius" | "alchemy", string[]> = {
   evm: [LOGOS.metamask, LOGOS.rabby], solana: [LOGOS.phantom, LOGOS.solflare, LOGOS.backpack],
-  near: [LOGOS.hot, LOGOS.meteor, LOGOS.intear], intents: [LOGOS.nearIntents], helius: [LOGOS.helius],
+  near: [LOGOS.hot, LOGOS.meteor, LOGOS.intear], intents: [LOGOS.nearIntents], helius: [LOGOS.helius], alchemy: [LOGOS.alchemy],
 };
 
-function BuiltIn({ which, heliusOnServer }: { which: Exclude<Id, "walletconnect" | "privy" | "connectors" | "ga" | "gsc" | "xdata">; heliusOnServer: boolean }) {
+function BuiltIn({ which, heliusOnServer, alchemyOnServer }: { which: Exclude<Id, "walletconnect" | "privy" | "connectors" | "ga" | "gsc" | "xdata">; heliusOnServer: boolean; alchemyOnServer: boolean }) {
   const copy: Record<typeof which, { title: string; points: string[] }> = {
     evm: { title: "MetaMask, Rabby, Coinbase Wallet and more", points: ["Every installed EVM wallet announces itself (EIP-6963), so visitors see their own wallet with its real logo.", "On Robinhood Chain the site asks the wallet to switch networks, or adds the network if it's new.", "Buys swap right on the site through KyberSwap; the visitor confirms in their wallet.", "No setup needed."] },
     solana: { title: "Phantom, Solflare and Backpack", points: ["Found through the Wallet Standard, with each wallet's own logo. If none is installed, the menu links to Phantom and Solflare.", "Buys swap right on the site through Jupiter; the visitor confirms in their wallet.", "No setup needed."] },
     near: { title: "HOT, Meteor, Intear, Ledger and more", points: ["NEAR Connect shows every NEAR wallet, browser and mobile.", "Buys swap on the site through neartrade, which routes every launchpad curve and Rhea pool.", "No setup needed."] },
-    intents: { title: "Buy with any coin, from any chain", points: ["The buy box has an Any chain tab: pay with SOL, ETH, BTC, USDC or NEAR.", "NEAR Intents gives a one-time deposit address; the token, or the chain's native coin, lands in the buyer's wallet.", "Refunds go back to the buyer's own address if a swap can't fill."] },
+    intents: { title: "Buy from other chains", points: ["The buy box has an Other chains tab: pay with ETH, SOL, BTC, USDC, NEAR, SUI, ZEC and more, 18 coins on 13 chains.", "NEAR Intents gives a one-time deposit address; the token, or the chain's native coin, lands in the buyer's wallet.", "Refunds go back to the buyer's own address if a swap can't fill."] },
     helius: { title: heliusOnServer ? "Helius is on" : "Helius for Solana data", points: heliusOnServer ? ["Solana token names, logos and holder counts come from Helius DAS.", "The key stays on the server; published pages never see it."] : ["Add HELIUS_API_KEY to the server's environment to read Solana names, logos and holder counts from Helius DAS.", "Until then, Solana reads use the public RPC and DexScreener."] },
+    alchemy: { title: alchemyOnServer ? "Alchemy is on" : "Alchemy for EVM data", points: alchemyOnServer ? ["Ethereum, Base and BNB Chain reads (name, symbol, supply, balances) go through Alchemy.", "Token logos come from Alchemy's token metadata when DexScreener has none.", "The key stays on the server; published pages never see it."] : ["Add ALCHEMY_API_KEY to the server's environment, or your own key in Settings, to read Ethereum, Base and BNB Chain through Alchemy.", "Until then, EVM reads use public RPCs and DexScreener."] },
   };
   const c = copy[which];
   return (
@@ -222,6 +224,9 @@ function BuiltIn({ which, heliusOnServer }: { which: Exclude<Id, "walletconnect"
       <ul className="mt-4 space-y-2.5">
         {c.points.map((p) => <li key={p} className="flex gap-2.5 text-[13.5px] leading-relaxed text-zinc-300"><Check size={15} className="mt-0.5 shrink-0 text-lime" />{p}</li>)}
       </ul>
+      {which === "alchemy" && !alchemyOnServer && (
+        <a className="btn btn-outline mt-5" href="https://dashboard.alchemy.com" target="_blank" rel="noreferrer">Get an Alchemy key <ArrowUpRight size={14} /></a>
+      )}
       {which === "helius" && !heliusOnServer && (
         <a className="btn btn-outline mt-5" href="https://dashboard.helius.dev" target="_blank" rel="noreferrer">Get a Helius key <ArrowUpRight size={14} /></a>
       )}

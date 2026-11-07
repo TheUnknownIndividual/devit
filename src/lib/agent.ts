@@ -175,7 +175,7 @@ function offlineCopy(intent: Intent, token: TokenInfo | null, chain: Chain, r: R
     terminal: { headline: `$${ticker}, live on ${chainName}`, subhead: `Price, liquidity and every trade, read from the chain as it happens. Buy from this page in two clicks.`, cta: `Trade $${ticker}`, tagline: `${name} on ${chainName}, live.` },
     app: { headline: `Meet ${name}`, subhead: `${name} lives on ${chainName}. Connect a wallet, pick an amount, done. No exchange account needed.`, cta: `Get $${ticker}`, tagline: `${name} on ${chainName}.` },
     brutal: { headline: `${ticker}. No noise.`, subhead: `A coin on ${chainName}. The chart is the chart. The contract is the contract. Both are below.`, cta: `Buy $${ticker}`, tagline: `${ticker} on ${chainName}. That's it.` },
-    glass: { headline: `${name} on ${chainName}`, subhead: `Swap into $${ticker} from any chain, with price and liquidity read live from ${chainName}.`, cta: `Swap to ${ticker}`, tagline: `${name}, on ${chainName}.` },
+    glass: { headline: `${name} on ${chainName}`, subhead: `Swap into $${ticker} from other chains, with price and liquidity read live from ${chainName}.`, cta: `Swap to ${ticker}`, tagline: `${name}, on ${chainName}.` },
   };
   const l = { ...lines[intent.theme] };
   // Their own words beat ours: the bio or site line for the tagline, the story for the subhead.
@@ -197,7 +197,7 @@ function offlineCopy(intent: Intent, token: TokenInfo | null, chain: Chain, r: R
     faq: [
       { q: `Where does $${ticker} trade?`, a: tradesAt(token, chainName) },
       ...curveFaq(token, ticker),
-      { q: `Can I buy without ${native}?`, a: "Yes. Choose \"Any chain\" in the buy box and pay from Solana, Ethereum, Bitcoin or NEAR. It arrives in your wallet as the token." },
+      { q: `Can I buy without ${native}?`, a: "Yes. Choose \"Other chains\" in the buy box and pay from Ethereum, Solana, Bitcoin, NEAR and more. It arrives in your wallet as the token." },
       { q: "Where do the numbers come from?", a: `Price, market cap and holders are read live${token?.sources.length ? ` from ${token.sources.join(", ")}` : " from the chain"} each time the page opens.` },
     ],
     roadmap: [
@@ -235,7 +235,7 @@ async function writeCopy(prompt: string, intent: Intent, token: TokenInfo | null
     "Write in the team's own voice as measured from their posts (capitals or lowercase, emoji habits, sign-off, pet words). Reuse their phrases; never copy a whole post.",
     "story: the lore in 2-4 sentences from their own descriptions (what it is, where the name or mascot comes from). points: real utility only if the research names it, else []. If there's nothing to go on, story is null.",
     "Never invent partnerships, listings, numbers or utility the research doesn't state.",
-    "how: buying happens in the buy box on this site (Buy section, it also takes other coins from any chain). Never send people to another DEX or app, and never put the contract address in the text (the site shows it with a copy button). Exception: when venue.buyOnLaunchpad is set, the buy box links to that launchpad while the token is on its curve, so say that.",
+    "how: buying happens in the buy box on this site (Buy section, it also takes coins from other chains through NEAR Intents). Never send people to another DEX or app, and never put the contract address in the text (the site shows it with a copy button). Exception: when venue.buyOnLaunchpad is set, the buy box links to that launchpad while the token is on its curve, so say that.",
     "venue: where the token launched and trades, with how that launchpad or DEX works. Use it so How to buy and the FAQ are accurate (still on a bonding curve and buys go into the curve, or graduated to a pool), and give it one FAQ. Never contradict it or add figures it doesn't give.",
     "You may get reference sites the team likes: match their mood and how much they say per section (punchy or wordy, jokey or serious), never their words, names or claims.",
     "fx (optional, how the page moves; pick for the vibe of the request and any reference site, send only what you'd change): motion snappy|calm|bouncy, reveal rise|fade|scale|blur|slide|none, transition none|fade|stack|wave|angle (how sections cross into each other), stagger, intro, nav plain|compact, progress (scroll bar), count (stat numbers count up), toTop, parallax. Loud meme/degen/brutal: snappy or bouncy, angle or stack, progress on. Calm glass/DeFi/app/premium: calm, fade or blur, transition fade or wave. Terminal/trading/serious/minimal: snappy, reveal fade, transition none, intro off. Playful/cozy: bouncy, wave. If the request asks for no animation, reveal none and everything else off.",

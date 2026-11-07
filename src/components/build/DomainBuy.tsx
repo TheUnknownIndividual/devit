@@ -70,7 +70,7 @@ export function DomainBuy({ projectId, suggest, onLive }: { projectId: string; s
       )}
       {s?.enabled && (
         <p className="flex items-center gap-1.5 text-[11px] text-zinc-500">
-          <BrandIcon icon={BRANDS.spaceship} size={11} /> Registered through Spaceship with WHOIS privacy.{s.buying ? " Pay with any token; we point it at your site for you." : " Checkout here is coming soon."}
+          <BrandIcon icon={BRANDS.spaceship} size={11} /> Registered through Spaceship with WHOIS privacy.{s.buying ? " Pay in crypto; we point it at your site for you." : " Checkout here is coming soon."}
         </p>
       )}
     </div>

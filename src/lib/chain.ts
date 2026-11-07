@@ -21,14 +21,24 @@ async function getJson<T>(url: string, init?: RequestInit): Promise<T | null> {
   }
 }
 
+// Alchemy's network names for the EVM chains we read. With ALCHEMY_API_KEY set (or a project owner's own Alchemy key)
+// EVM reads go through Alchemy, and token logos fall back to alchemy_getTokenMetadata when DexScreener has none.
+// Robinhood Chain stays on its own RPC.
+const ALCHEMY_NET: Partial<Record<Chain, string>> = { ethereum: "eth-mainnet", base: "base-mainnet", bsc: "bnb-mainnet" };
+export function alchemyUrl(chain: Chain, key: string | undefined): string | null {
+  const net = ALCHEMY_NET[chain];
+  return net && key ? `https://${net}.g.alchemy.com/v2/${encodeURIComponent(key)}` : null;
+}
+const isAlchemy = (url: string) => /\.g\.alchemy\.com\//.test(url);
+
 export const DEFAULT_RPC: Record<Chain, string> = {
   near: process.env.NEAR_RPC_URL || "https://free.rpc.fastnear.com",
   solana: process.env.HELIUS_API_KEY
     ? `https://mainnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}`
     : process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com",
-  ethereum: process.env.ETHEREUM_RPC_URL || "https://ethereum-rpc.publicnode.com",
-  base: process.env.BASE_RPC_URL || "https://base-rpc.publicnode.com",
-  bsc: process.env.BSC_RPC_URL || "https://bsc-rpc.publicnode.com",
+  ethereum: process.env.ETHEREUM_RPC_URL || alchemyUrl("ethereum", process.env.ALCHEMY_API_KEY) || "https://ethereum-rpc.publicnode.com",
+  base: process.env.BASE_RPC_URL || alchemyUrl("base", process.env.ALCHEMY_API_KEY) || "https://base-rpc.publicnode.com",
+  bsc: process.env.BSC_RPC_URL || alchemyUrl("bsc", process.env.ALCHEMY_API_KEY) || "https://bsc-rpc.publicnode.com",
   robinhood: process.env.ROBINHOOD_RPC_URL || "https://rpc.mainnet.chain.robinhood.com",
 };
 
@@ -37,7 +47,7 @@ export function rpcFor(chain: Chain): string {
   const k = ownerKeys();
   if (k.rpc?.[chain]) return k.rpc[chain]!;
   if (chain === "solana" && k.helius) return `https://mainnet.helius-rpc.com/?api-key=${k.helius}`;
-  return DEFAULT_RPC[chain];
+  return alchemyUrl(chain, k.alchemy) ?? DEFAULT_RPC[chain];
 }
 
 const isHelius = (url: string) => /\.helius-rpc\.com\//.test(url);
@@ -113,7 +123,9 @@ async function evmBasics(chain: Chain, address: string, rpcUrl: string) {
   const explorer = BLOCKSCOUT[chain];
   const bs = explorer ? await getJson<{ holders_count?: string; holders?: string; icon_url?: string }>(`${explorer}/api/v2/tokens/${address}`) : null;
   const holders = bs ? Number(bs.holders_count ?? bs.holders ?? NaN) : NaN;
-  return { name: decodeAbiString(name), symbol: decodeAbiString(symbol), decimals: dec, supply: sup, holders: Number.isFinite(holders) ? holders : null, icon: bs?.icon_url ?? null };
+  // Alchemy's token metadata carries a logo for most listed tokens; only asked when Blockscout had none.
+  const meta = !bs?.icon_url && isAlchemy(rpcUrl) ? await rpc<{ logo?: string | null; name?: string | null; symbol?: string | null }>(rpcUrl, "alchemy_getTokenMetadata", [address]) : null;
+  return { name: decodeAbiString(name) ?? meta?.name ?? null, symbol: decodeAbiString(symbol) ?? meta?.symbol ?? null, decimals: dec, supply: sup, holders: Number.isFinite(holders) ? holders : null, icon: bs?.icon_url ?? meta?.logo ?? null };
 }
 
 async function nearBasics(address: string, rpcUrl: string) {
@@ -234,7 +246,11 @@ async function venueOf(chain: Chain, address: string, pairs: DsPair[], gecko: Ge
 function linksFrom(pair: DsPair | undefined): TokenLink[] {
   const out: TokenLink[] = [];
   for (const w of pair?.info?.websites ?? []) out.push({ type: "website", label: w.label || "Website", url: w.url });
-  for (const s of pair?.info?.socials ?? []) out.push({ type: s.type, label: s.type === "twitter" ? "X" : s.type[0].toUpperCase() + s.type.slice(1), url: s.url });
+  for (const s of pair?.info?.socials ?? []) {
+    // DexScreener files Farcaster profiles under whatever type the team picked; the host says what it is.
+    const type = /^https?:\/\/(www\.)?(warpcast\.com|farcaster\.xyz)\//i.test(s.url) ? "farcaster" : s.type;
+    out.push({ type, label: type === "twitter" ? "X" : type[0].toUpperCase() + type.slice(1), url: s.url });
+  }
   return out;
 }
 
@@ -264,7 +280,7 @@ export async function tokenContext(raw: string, preferred?: Chain, rpcOverride?:
     if (chain === "near") basics = await nearBasics(tokenAddr, rpcUrl);
     else if (chain === "solana") basics = await solanaBasics(tokenAddr, rpcUrl);
     else basics = await evmBasics(chain, tokenAddr, rpcUrl);
-    if (basics && (basics.name || basics.symbol || basics.supply != null)) sources.push(chain === "solana" && isHelius(rpcUrl) ? "Helius" : `${chain} RPC`);
+    if (basics && (basics.name || basics.symbol || basics.supply != null)) sources.push(chain === "solana" && isHelius(rpcUrl) ? "Helius" : isAlchemy(rpcUrl) ? "Alchemy" : `${chain} RPC`);
 
     if (!best && !basics?.name && !basics?.symbol) continue;
     // Not on DexScreener yet (a fresh launch, or a curve it doesn't index): GeckoTerminal has the curve's price.

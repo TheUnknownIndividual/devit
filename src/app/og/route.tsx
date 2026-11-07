@@ -19,7 +19,7 @@ export function GET() {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <div style={{ fontSize: 76, fontWeight: 700, letterSpacing: -3, lineHeight: 1.02 }}>A live website for your token, from one sentence.</div>
-          <div style={{ fontSize: 30, color: "#cbd5e1", lineHeight: 1.35 }}>Live charts, wallets, swaps and buys from any chain with NEAR Intents.</div>
+          <div style={{ fontSize: 30, color: "#cbd5e1", lineHeight: 1.35 }}>Live charts, wallets, swaps and cross-chain buys with NEAR Intents.</div>
         </div>
         <div style={{ display: "flex", gap: 12 }}>
           {chains.map((c) => (

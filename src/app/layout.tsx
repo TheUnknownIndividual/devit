@@ -3,6 +3,7 @@ import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
 import { appOrigin, BRAND, DESCRIPTION, KEYWORDS, TAGLINE } from "@/lib/seo";
 import "./globals.css";
+import { Transitions } from "@/components/Transitions";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" });
@@ -10,7 +11,7 @@ const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono"
 export const metadata: Metadata = {
   metadataBase: new URL(appOrigin()),
   title: `${BRAND} · ${TAGLINE}`,
-  description: "Describe your token in one sentence. Get a live website with wallet, swap and buys from any chain.",
+  description: "Describe your token in one sentence. Get a live website with wallet, swap and cross-chain buys through NEAR Intents.",
   applicationName: BRAND,
   keywords: KEYWORDS,
   category: "technology",
@@ -26,7 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" data-scroll-behavior="smooth" className={`${geist.variable} ${geistMono.variable}`}>
       <body className="font-sans">
-        {children}
+        <Transitions>{children}</Transitions>
         <Script src="/ga.js" strategy="afterInteractive" />
       </body>
     </html>

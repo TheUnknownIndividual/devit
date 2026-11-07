@@ -52,7 +52,7 @@ const SAMPLES: Sample[] = [
     story: { title: "Why a garden", body: "Most grants arrive too late. Grant Garden funds the first commit, not the hundredth, and lets the people holding the token decide where it goes.", points: ["Monthly rounds", "On-chain votes", "Public reports"] },
     how: [
       { title: "Connect a NEAR wallet", body: "Meteor, HOT or MyNEARWallet all work." },
-      { title: "Pick up some GRNT", body: "Swap NEAR for GRNT here, or pay from any chain with NEAR Intents." },
+      { title: "Pick up some GRNT", body: "Swap NEAR for GRNT here, or pay from other chains with NEAR Intents." },
       { title: "Vote each round", body: "One token, one vote, counted on chain." },
     ],
     roadmap: [
@@ -111,14 +111,14 @@ const SAMPLES: Sample[] = [
     hero: { headline: "Read the tape", subhead: "A token for people who watch the order flow, not the hype. Live price, live trades, one box to buy.", cta: "Trade $TAPE" },
     how: [
       { title: "Wallet", body: "Phantom, Backpack or Solflare." },
-      { title: "Fund", body: "SOL from any exchange, or pay from any chain." },
+      { title: "Fund", body: "SOL from any exchange, or pay from other chains." },
       { title: "Execute", body: "Quote, sign, done. Routed through Jupiter." },
     ],
     tokenomics: [{ label: "Liquidity", pct: 85 }, { label: "Market makers", pct: 10 }, { label: "Ops", pct: 5 }],
     faq: [
       { q: "Where does the price come from?", a: "Straight from the pool, refreshed every few seconds." },
       { q: "What routes my trade?", a: "Jupiter, for the best price across Solana." },
-      { q: "Can I pay from Ethereum?", a: "Yes, through NEAR Intents in the Any chain tab." },
+      { q: "Can I pay from Ethereum?", a: "Yes, through NEAR Intents in the Other chains tab." },
     ],
     prompt: "A terminal-style site for $TAPE on Solana, like Axiom: live chart, trades and a fast buy box up top",
   },
@@ -164,8 +164,8 @@ const SAMPLES: Sample[] = [
   {
     theme: "glass", chain: "near", name: "Flow", ticker: "FLOW", tagline: "liquidity that moves with you",
     address: "flow.sample.near", price: 1.37, supply: 200_000_000, holders: 15_480, change: 9.6,
-    hero: { headline: "Swap anything, from anywhere", subhead: "Flow routes your trade across chains with NEAR Intents. Pick what you have, pick what you want, sign once.", cta: "Launch Flow" },
-    story: { title: "One signature, any chain", body: "Bring ETH, SOL or USDC from wherever it lives. Flow finds the route and delivers to your NEAR wallet.", points: ["Cross-chain by default", "Best route each time", "Settles in seconds"] },
+    hero: { headline: "Swap in from the chain you hold", subhead: "Flow routes your trade across chains with NEAR Intents. Pick what you have, pick what you want, sign once.", cta: "Launch Flow" },
+    story: { title: "One signature, many chains", body: "Bring ETH, SOL or USDC from wherever it lives. Flow finds the route and delivers to your NEAR wallet.", points: ["Cross-chain by default", "Best route each time", "Settles in seconds"] },
     how: [
       { title: "Connect", body: "Any NEAR wallet, or pay from another chain." },
       { title: "Choose", body: "What you pay with and how much." },

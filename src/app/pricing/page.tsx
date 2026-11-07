@@ -12,7 +12,7 @@ import { Payments } from "@/components/pricing/Payments";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Pricing · devit",
-  description: "devit plans: Free with 15 AI credits a day and a devit.lol subdomain, Pro with 800 credits a month, a custom domain and private projects, Team with shared projects. Pay with any coin through NEAR Intents.",
+  description: "devit plans: Free with 15 AI credits a day and a devit.lol subdomain, Pro with 800 credits a month, a custom domain and private projects, Team with shared projects. Pay in crypto through NEAR Intents: ETH, SOL, BTC, USDC, NEAR and more.",
   alternates: { canonical: "/pricing" },
 };
 
@@ -26,7 +26,7 @@ export default async function Pricing() {
         <div className="max-w-[620px]">
           <h1 className="text-[32px] font-semibold leading-tight tracking-[-0.03em] text-white sm:text-[40px]">Pricing</h1>
           <p className="mt-3 text-[15px] leading-relaxed text-zinc-400">
-            Start free. Upgrade when the site is the real thing. Pay with any token on any chain through NEAR Intents, no card needed.
+            Start free. Upgrade when the site is the real thing. Pay with ETH, SOL, BTC, USDC, NEAR and more through NEAR Intents, no card needed.
           </p>
           <p className="mt-3 flex items-center gap-2 text-[12.5px] text-zinc-500"><BrandIcon icon={BRANDS.near} size={13} color="#a1a1aa" /> Settles in USDC on NEAR. SOL, ETH, BTC, USDC, USDT and NEAR accepted.</p>
         </div>

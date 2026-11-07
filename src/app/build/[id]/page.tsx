@@ -17,5 +17,5 @@ export default async function Build({ params, searchParams }: { params: Promise<
   const v = await viewer();
   if (!p || !(await canRead(p, v, share))) notFound();
   const a = await accessTo(p, v);
-  return <Workspace initial={publicProject(p)} heliusOnServer={!!process.env.HELIUS_API_KEY} canEdit={a === "owner" || a === "editor"} viewNote={a === "viewer" ? "View only: you're a viewer on this project's team." : !a && sharedWith(p, share) ? "View only: someone shared this project with you. Nothing you do here changes it." : undefined} share={!a && sharedWith(p, share) ? share : undefined} />;
+  return <Workspace initial={publicProject(p)} heliusOnServer={!!process.env.HELIUS_API_KEY} alchemyOnServer={!!process.env.ALCHEMY_API_KEY} canEdit={a === "owner" || a === "editor"} viewNote={a === "viewer" ? "View only: you're a viewer on this project's team." : !a && sharedWith(p, share) ? "View only: someone shared this project with you. Nothing you do here changes it." : undefined} share={!a && sharedWith(p, share) ? share : undefined} />;
 }

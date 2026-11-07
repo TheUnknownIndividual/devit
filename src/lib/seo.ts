@@ -17,12 +17,12 @@ export function appOrigin(): string {
 
 export const TAGLINE = "AI website builder for tokens and dApps";
 export const DESCRIPTION =
-  "devit builds a live website for a token or dApp from one sentence. Paste a contract address and the AI agent reads the chain, the token's socials and the team's posts on X, then writes a site with live price and charts, wallet connect, an in-page swap and buys from any chain through NEAR Intents and Relay. Publish to a free subdomain or your own domain, edit by clicking any block, export the code to GitHub.";
+  "devit builds a live website for a token or dApp from one sentence. Paste a contract address and the AI agent reads the chain, the token's socials and the team's posts on X, then writes a site with live price and charts, wallet connect, an in-page swap and cross-chain buys through NEAR Intents and Relay. Publish to a free subdomain or your own domain, edit by clicking any block, export the code to GitHub.";
 
 export const KEYWORDS = [
   "AI website builder", "memecoin website builder", "token website", "crypto website builder", "web3 website builder",
   "dApp landing page", "NEAR Intents", "NEAR AI", "Solana token website", "Base token website", "launch website for token",
-  "buy with any chain", "no-code web3 site", "bolt.new alternative for crypto", "lovable alternative for web3",
+  "cross-chain buy", "no-code web3 site", "bolt.new alternative for crypto", "lovable alternative for web3",
 ];
 
 export const FEATURES = [
@@ -32,7 +32,7 @@ export const FEATURES = [
   "Live chart, stats, holders and trades blocks that update on the published site",
   "Wallet connect for EVM (MetaMask, Rabby, WalletConnect), Solana (Phantom, Solflare, Backpack) and NEAR (HOT, Meteor, Intear)",
   "In-page swap: Jupiter on Solana, KyberSwap on EVM chains, Rhea on NEAR",
-  "Buy from any chain with NEAR Intents 1Click (including private buys) or Relay; the buyer's own wallet signs",
+  "Buy from other chains with NEAR Intents 1Click (18 coins on 13 chains) (including private buys) or Relay; the buyer's own wallet signs",
   "Click any block in the preview, leave comments, and the agent changes only those blocks; every change can be undone",
   "Publish to <name>.devit.lol for free, or a custom domain on Pro; password or link-only sites",
   "Export the code as a Next.js app: push to a GitHub repo or download a zip",
@@ -42,7 +42,7 @@ export const FEATURES = [
 export const CHAINS_SUPPORTED = ["NEAR", "Solana", "Ethereum", "Base", "BNB Chain", "Robinhood Chain"];
 
 export const FAQ: Array<{ q: string; a: string }> = [
-  { q: "What is devit?", a: "devit is an AI website builder for crypto tokens and dApps. You describe the project in one sentence, optionally with a contract address, and it builds a live website with real chain data, wallet connect, a swap and buys from any chain. It runs at devit.lol." },
+  { q: "What is devit?", a: "devit is an AI website builder for crypto tokens and dApps. You describe the project in one sentence, optionally with a contract address, and it builds a live website with real chain data, wallet connect, a swap and cross-chain buys. It runs at devit.lol." },
   { q: "How do I make a website for my memecoin?", a: "Open devit.lol, type a sentence about your token and paste its contract address. devit reads the chain, your socials and your posts on X, writes the site in your voice and shows it in a live preview. Click Publish to put it at yourname.devit.lol." },
   { q: "Which chains does it support?", a: `${CHAINS_SUPPORTED.join(", ")}. A site can show live data for a token on any of these and let visitors buy it from other chains through NEAR Intents or Relay.` },
   { q: "Can visitors buy my token from another chain?", a: "Yes. The buy box takes ETH, USDC, SOL, BNB, BTC and more from other chains. NEAR Intents 1Click and Relay route the swap and the token lands in the buyer's wallet. Buyers sign in their own wallet; devit never holds funds. NEAR Intents also offers private buys." },
@@ -50,7 +50,7 @@ export const FAQ: Array<{ q: string; a: string }> = [
   { q: "Can I edit the site after it's built?", a: "Yes. Click any block or element in the preview, leave comments, and the agent changes only those parts. You can also chat with it, switch styles, upload images, and undo any change." },
   { q: "Can I get the code?", a: "Yes. Export pushes a Next.js app to a new GitHub repo in your account, or downloads it as a zip. Live prices, trades and cross-chain buys keep working in the exported app." },
   { q: "Which AI models does it use?", a: "NEAR AI Cloud by default, which runs models in private hardware enclaves so launch plans stay private. You can switch to Claude, GPT, OpenRouter and others, with your own API keys if you like." },
-  { q: "Does it use NEAR?", a: "Yes. NEAR AI Cloud writes the sites, NEAR Intents powers cross-chain and private buys, and NEAR tokens get live data, NEAR wallets and Rhea swaps. Payments for plans can be made with any token through NEAR Intents." },
+  { q: "Does it use NEAR?", a: "Yes. NEAR AI Cloud writes the sites, NEAR Intents powers cross-chain and private buys, and NEAR tokens get live data, NEAR wallets and Rhea swaps. Payments for plans can be made in crypto through NEAR Intents." },
 ];
 
 // ——— published sites ———

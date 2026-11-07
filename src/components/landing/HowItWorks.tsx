@@ -16,7 +16,8 @@ const INTEGRATIONS: Array<{ name: string; what: string; mark: React.ReactNode }>
   { name: "NEAR wallets", what: "HOT, Meteor, Intear", mark: <LogoStack srcs={[LOGOS.hot, LOGOS.meteor, LOGOS.intear]} /> },
   { name: "Privy", what: "Email and social sign-in", mark: <BrandLogo src={LOGOS.privy} /> },
   { name: "Helius", what: "Solana data and RPC", mark: <BrandLogo src={LOGOS.helius} /> },
-  { name: "NEAR Intents", what: "Buy with any coin", mark: <BrandLogo src={LOGOS.nearIntents} /> },
+  { name: "Alchemy", what: "EVM data and RPC", mark: <BrandLogo src={LOGOS.alchemy} /> },
+  { name: "NEAR Intents", what: "Cross-chain buys", mark: <BrandLogo src={LOGOS.nearIntents} /> },
   { name: "Jupiter · KyberSwap", what: "Swaps on the site", mark: <LogoStack srcs={[LOGOS.jupiter, LOGOS.kyberswap]} /> },
 ];
 
@@ -61,8 +62,8 @@ export function HowItWorks() {
           </article>
 
           <article data-reveal style={{ "--d": 2 } as React.CSSProperties} className="spot panel p-5">
-            <div className="flex items-center gap-2 text-[14px] font-medium text-white"><Wallet size={16} className="text-[#14F195]" /> Buyers pay with any coin</div>
-            <p className="mt-1.5 text-[13px] text-zinc-400">Each site gets a wallet button and a buy box. NEAR Intents lets buyers pay with SOL, ETH, BTC or USDC from any chain.</p>
+            <div className="flex items-center gap-2 text-[14px] font-medium text-white"><Wallet size={16} className="text-[#14F195]" /> Buyers pay from other chains</div>
+            <p className="mt-1.5 text-[13px] text-zinc-400">Each site gets a wallet button and a buy box. NEAR Intents lets buyers pay with ETH, SOL, BTC, USDC and more from 13 chains.</p>
             <div className="mt-5 flex items-center justify-between rounded-[12px] border border-white/[0.06] bg-ink-850 p-4">
               <div className="flex flex-col gap-2">
                 {([["solana", "SOL"], ["ethereum", "ETH"], ["near", "NEAR"]] as const).map(([c, s]) => (
@@ -112,7 +113,7 @@ export function HowItWorks() {
             <Globe size={20} className="text-lime" />
             <div>
               <div className="text-[15px] font-medium text-white">Publish to your own subdomain</div>
-              <div className="text-[13px] text-zinc-400">One click to a live address. Pay for a custom domain with any coin through NEAR Intents.</div>
+              <div className="text-[13px] text-zinc-400">One click to a live address. Pay for a custom domain in crypto through NEAR Intents.</div>
             </div>
           </div>
           <a href="#start" className="btn btn-outline">Build a site <ArrowRight size={15} className="nudge-r" /></a>

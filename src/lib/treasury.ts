@@ -1,10 +1,14 @@
 import { DEFAULT_RPC } from "./chain";
 
+/** NEAR Business, built by NEAR DevHub as Trezu: each Sputnik DAO has its pages at /<dao>/... */
+export const TREZU = "https://trezu.app";
+
 // Reads a project's treasury from public sources, no key needed: the NEAR RPC (balance, Sputnik DAO v2 policy and
 // proposals, validator pools, NEP-141 metadata), FastNEAR's account API (every FT the account holds), intents.near
-// (mt_batch_balance_of), NearBlocks (recent transfers) and DexScreener (prices). NEAR Treasury (Trezu) is a front end
-// on the same Sputnik DAO contracts, so reading the contracts shows exactly what it shows. NEAR Business has no
-// public API; NEARBLOCKS_API_KEY (optional) only lifts NearBlocks' rate limit.
+// (mt_batch_balance_of), NearBlocks (recent transfers) and DexScreener (prices). NEAR Business (trezu.app,
+// business.near.com) runs on these same Sputnik DAO contracts, so reading the contracts shows exactly what it shows,
+// and a DAO's council, proposals and dashboard link to their own pages there. Its backend API needs a member's sign-in,
+// so nothing here calls it. NEARBLOCKS_API_KEY (optional) only lifts NearBlocks' rate limit.
 
 export interface TreasuryHolding {
   id: string;
@@ -19,7 +23,7 @@ export interface TreasuryHolding {
 }
 export interface TreasuryTransfer { dir: "in" | "out"; symbol: string; amount: number; usd: number | null; peer: string; at: number; url: string }
 export interface TreasuryProposal { id: number; kind: string; title: string; status: string; at: number; amount: string | null; url: string }
-export interface TreasuryDao { members: number; need: number | null; groups: string[]; proposals: TreasuryProposal[]; count: number }
+export interface TreasuryDao { members: number; need: number | null; groups: string[]; proposals: TreasuryProposal[]; count: number; /** Its NEAR Business (Trezu) dashboard and members page. */ app: string; membersUrl: string }
 export interface TreasuryAccount {
   account: string;
   url: string;
@@ -140,10 +144,10 @@ async function readDao(account: string): Promise<TreasuryDao | null> {
     }
     return {
       id: p.id, kind: KIND_LABEL[k] ?? k, title: cleanTitle(p.description) || KIND_LABEL[k] || k, status: STATUS_LABEL[p.status] ?? p.status,
-      at: Math.round(Number(BigInt(p.submission_time || "0") / 1_000_000n)), amount, url: `${NB}/address/${account}`,
+      at: Math.round(Number(BigInt(p.submission_time || "0") / 1_000_000n)), amount, url: `${TREZU}/${account}/requests/${p.id}`,
     };
   }));
-  return { members: members.size, need, groups: voters.map((r) => r.name), proposals, count };
+  return { members: members.size, need, groups: voters.map((r) => r.name), proposals, count, app: `${TREZU}/${account}/dashboard`, membersUrl: `${TREZU}/${account}/members` };
 }
 
 const fmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: n >= 100 ? 0 : 2 });
