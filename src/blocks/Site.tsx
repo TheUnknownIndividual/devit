@@ -346,7 +346,7 @@ function BlockView({ b, spec, mode, walletconnect, privy, credit }: { b: Block; 
               <div style={{ fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>{spec.name} · ${spec.ticker}</div>
               {s(p.disclaimer)}
             </div>
-            {credit && <a className="ss-built" href={credit} target="_blank" rel="noopener" data-el="credit">Built with <b>sitesmith</b></a>}
+            {credit && <a className="ss-built" href={credit} target="_blank" rel="noopener" data-el="credit">Built with <b>devit</b></a>}
           </div>
         </footer>
       );
@@ -355,7 +355,7 @@ function BlockView({ b, spec, mode, walletconnect, privy, credit }: { b: Block; 
 
 /**
  * walletconnect / privy: the project's WalletConnect project ID and Privy App ID (public by design: both check the site's domain).
- * credit: where the free plan's "Built with sitesmith" line links (lib/credit.ts), or null for none.
+ * credit: where the free plan's "Built with devit" line links (lib/credit.ts), or null for none.
  */
 export function Site({ spec, mode, walletconnect = null, privy = null, credit = null }: { spec: SiteSpec; mode: Mode; walletconnect?: string | null; privy?: string | null; credit?: string | null }) {
   const t = spec.theme;
@@ -373,7 +373,7 @@ export function Site({ spec, mode, walletconnect = null, privy = null, credit = 
       >
         {mode === "live" && fx.progress && <div className="ss-progress" aria-hidden="true" />}
         {spec.blocks.map((b) => <BlockView key={b.id} b={b} spec={spec} mode={mode} walletconnect={walletconnect} privy={privy} credit={credit} />)}
-        {credit && !spec.blocks.some((b) => b.type === "footer") && <div className="ss-wrap ss-credit"><a className="ss-built" href={credit} target="_blank" rel="noopener">Built with <b>sitesmith</b></a></div>}
+        {credit && !spec.blocks.some((b) => b.type === "footer") && <div className="ss-wrap ss-credit"><a className="ss-built" href={credit} target="_blank" rel="noopener">Built with <b>devit</b></a></div>}
         <MotionFx mode={mode} toTop={fx.toTop !== false} progress={!!fx.progress} nav={(fx.nav ?? "compact") === "compact"} />
       </div>
     </>

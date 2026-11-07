@@ -5,7 +5,7 @@ import type { Project } from "./spec";
 
 // "Export code": the site as a standalone Next.js app the team owns. It carries the same block library the builder
 // renders with (every file Site.tsx reaches, found by following its imports), the spec as site.json, and a rewrite that
-// sends /api/* (live price, trades, quotes, NEAR Intents) to this sitesmith server, so the live parts keep working
+// sends /api/* (live price, trades, quotes, NEAR Intents) to this devit server, so the live parts keep working
 // without any keys. Used by the zip download and the GitHub push.
 
 const ROOT = process.cwd();
@@ -61,7 +61,7 @@ export async function exportFiles(p: Project, origin: string, credit: string | n
   for (const f of files) add(path.relative(ROOT, f), await readFile(f));
   for (const f of await readdir(path.join(ROOT, "public/wallets")).catch(() => [] as string[])) add(`public/wallets/${f}`, await readFile(path.join(ROOT, "public/wallets", f)));
 
-  // Signup forms post to sitesmith through the /api rewrite; the slug tells it which site's list they're for.
+  // Signup forms post to devit through the /api rewrite; the slug tells it which site's list they're for.
   const spec = { ...p.spec, blocks: p.spec.blocks.map((b) => (b.type === "signup" ? { ...b, props: { ...b.props, slug: p.published?.slug ?? p.slug } } : b)) };
   add("src/app/site.json", JSON.stringify(spec, null, 2));
   add("src/app/page.tsx", `import { Site } from "@/blocks/Site";
@@ -82,8 +82,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return <html lang="en"><body style={{ margin: 0 }}>{children}</body></html>;
 }
 `);
-  add("next.config.mjs", `// Live data (price, trades, quotes, NEAR Intents buys) comes from the sitesmith API this site was built on.
-// Point SITESMITH_API at your own deployment of sitesmith to serve it yourself.
+  add("next.config.mjs", `// Live data (price, trades, quotes, NEAR Intents buys) comes from the devit API this site was built on.
+// Point SITESMITH_API at your own deployment of devit to serve it yourself.
 const API = process.env.SITESMITH_API || ${JSON.stringify(origin)};
 
 /** @type {import('next').NextConfig} */
@@ -105,7 +105,7 @@ export default {
 
 ${spec.tagline}
 
-Built with [sitesmith](${origin}). This is the full site as a Next.js app.
+Built with [devit](${origin}). This is the full site as a Next.js app.
 
 ## Run it
 
@@ -119,11 +119,11 @@ Built with [sitesmith](${origin}). This is the full site as a Next.js app.
 
 ## Live data
 
-Requests to \`/api/*\` (price, trades, swap quotes, NEAR Intents cross-chain buys) are forwarded to sitesmith by \`next.config.mjs\`. Set \`SITESMITH_API\` to use another sitesmith server.
+Requests to \`/api/*\` (price, trades, swap quotes, NEAR Intents cross-chain buys) are forwarded to devit by \`next.config.mjs\`. Set \`SITESMITH_API\` to use another devit server.
 
 ## Signup forms
 
-A signup block posts to \`/api/forms\`, which saves entries to the database connected in sitesmith (Database in the builder toolbar). Entries land in a \`sitesmith_signups\` table in your own Neon or Supabase Postgres, so you can also read them with your own \`DATABASE_URL\`. The site must be published on sitesmith for the form to take entries.
+A signup block posts to \`/api/forms\`, which saves entries to the database connected in devit (Database in the builder toolbar). Entries land in a \`sitesmith_signups\` table in your own Neon or Supabase Postgres, so you can also read them with your own \`DATABASE_URL\`. The site must be published on devit for the form to take entries.
 
 ## Deploy
 

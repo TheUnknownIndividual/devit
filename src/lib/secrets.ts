@@ -45,7 +45,7 @@ function secretKey(): Buffer {
   if (!existsSync(file)) {
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, randomBytes(32).toString("hex"), { mode: 0o600 });
-    console.warn("[sitesmith] No SECRETS_KEY set: made a local dev key in data/accounts/.secrets-key. Set SECRETS_KEY in production.");
+    console.warn("[devit] No SECRETS_KEY set: made a local dev key in data/accounts/.secrets-key. Set SECRETS_KEY in production.");
   }
   cached = Buffer.from(readFileSync(file, "utf8").trim(), "hex");
   return cached;

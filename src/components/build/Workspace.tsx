@@ -544,7 +544,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
               <div className="flex h-9 shrink-0 items-center gap-2 border-b border-white/[0.06] px-3">
                 <span className="flex gap-1.5"><span className="h-2 w-2 rounded-full bg-white/15" /><span className="h-2 w-2 rounded-full bg-white/15" /><span className="h-2 w-2 rounded-full bg-white/15" /></span>
                 <span className="mx-auto flex h-6 min-w-0 max-w-[360px] flex-1 items-center justify-center gap-1.5 truncate rounded-md bg-white/[0.04] px-2 font-mono text-[11px] text-zinc-500">
-                  <Globe size={11} />{p.published ? `${p.published.slug}${p.sitesDomain ? `.${p.sitesDomain}` : ".sitesmith"}` : "preview"}
+                  <Globe size={11} />{p.published ? `${p.published.slug}${p.sitesDomain ? `.${p.sitesDomain}` : ".devit"}` : "preview"}
                 </span>
                 <div className="flex items-center gap-0.5 rounded-md bg-white/[0.04] p-0.5" role="radiogroup" aria-label="Preview or code">
                   <button type="button" role="radio" aria-checked={view === "preview"} onClick={() => setView("preview")} className={`flex h-6 items-center gap-1 rounded px-1.5 text-[11px] ${view === "preview" ? "bg-white/[0.09] text-white" : "text-zinc-500 hover:text-zinc-300"}`}><Eye size={12} /> Preview</button>

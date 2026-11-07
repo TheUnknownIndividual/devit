@@ -17,10 +17,10 @@ const Body = z.discriminatedUnion("step", [
 const key = (email: string) => `email-${sha256(email).slice(0, 40)}`;
 
 async function send(email: string, code: string): Promise<boolean> {
-  const sent = await sendMail(email, `${code} is your sitesmith code`, `Your sitesmith sign-in code is ${code}\n\nIt works for 10 minutes. If you didn't ask for it, ignore this email.`);
+  const sent = await sendMail(email, `${code} is your devit code`, `Your devit sign-in code is ${code}\n\nIt works for 10 minutes. If you didn't ask for it, ignore this email.`);
   if (sent !== null) return sent;
   if (process.env.NODE_ENV === "production") return false;
-  console.log(`[sitesmith] sign-in code for ${email}: ${code}`);
+  console.log(`[devit] sign-in code for ${email}: ${code}`);
   return true;
 }
 

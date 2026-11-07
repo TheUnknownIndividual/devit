@@ -50,7 +50,7 @@ export async function cfPoint(token: string, zoneId: string, host: string, verif
     const have = await list(name);
     if ("error" in have) return have.error;
     if (have.some((x) => x.type === "TXT" && x.content.replace(/^"|"$/g, "") === value)) return null;
-    const r = await call<Rec>(token, "POST", `/zones/${zoneId}/dns_records`, { type: "TXT", name, content: `"${value}"`, ttl: 300, comment: "sitesmith" });
+    const r = await call<Rec>(token, "POST", `/zones/${zoneId}/dns_records`, { type: "TXT", name, content: `"${value}"`, ttl: 300, comment: "devit" });
     return r.ok ? null : r.error;
   };
 
@@ -71,7 +71,7 @@ export async function cfPoint(token: string, zoneId: string, host: string, verif
       if (!d.ok) return { error: d.error };
       replaced.push(`${x.type} ${x.content}`);
     }
-    const body = { type: "CNAME", name: host, content: target, proxied: false, ttl: 300, comment: "sitesmith" };
+    const body = { type: "CNAME", name: host, content: target, proxied: false, ttl: 300, comment: "devit" };
     const w = keep ? await call<Rec>(token, "PUT", `/zones/${zoneId}/dns_records/${keep.id}`, body) : await call<Rec>(token, "POST", `/zones/${zoneId}/dns_records`, body);
     if (!w.ok) return { error: w.error };
     if (keep) replaced.push(`CNAME ${keep.content}`);

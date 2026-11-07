@@ -1,4 +1,4 @@
-# sitesmith builder: one Next app; JSON storage under /app/data (a volume). The runner is Playwright's image so
+# devit builder: one Next app; JSON storage under /app/data (a volume). The runner is Playwright's image so
 # reference sites can be read in a real Chromium (src/lib/reference.ts); without it that step falls back to fetch.
 FROM node:22-bookworm-slim AS build
 RUN corepack enable && corepack prepare pnpm@10.15.0 --activate

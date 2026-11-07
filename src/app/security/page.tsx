@@ -6,8 +6,8 @@ import { posture } from "@/lib/env-guard";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Security · sitesmith",
-  description: "How sitesmith keeps keys secret: AES-256-GCM sealing, log redaction, a leak firewall on every prompt and publish, and paid RPC keys that never reach a page. Checked live on the running server.",
+  title: "Security · devit",
+  description: "How devit keeps keys secret: AES-256-GCM sealing, log redaction, a leak firewall on every prompt and publish, and paid RPC keys that never reach a page. Checked live on the running server.",
   alternates: { canonical: "/security" },
 };
 

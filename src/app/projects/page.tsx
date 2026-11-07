@@ -13,7 +13,7 @@ import { siteUrl } from "@/lib/sites";
 import { displayName } from "@/lib/spec";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Projects · sitesmith" };
+export const metadata: Metadata = { title: "Projects · devit" };
 
 function ago(t: number): string {
   const s = Math.max(1, Math.round((Date.now() - t) / 1000));

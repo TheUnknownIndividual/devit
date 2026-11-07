@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     let userId: string;
     if (s.intent === "connect") {
       const v = await viewer();
-      if (!v.user) return fail("Sign in to sitesmith first, then connect GitHub.");
+      if (!v.user) return fail("Sign in to devit first, then connect GitHub.");
       userId = v.user.id;
       await completeMethod(method); // links it as a sign-in too, unless another account already has it (fine either way)
     } else {
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
 function fail(msg: string) {
   const esc = msg.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
   return new NextResponse(
-    `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GitHub didn't finish</title><body style="margin:0;display:grid;min-height:100vh;place-items:center;background:#08080A;color:#EDEDEF;font:14px system-ui,sans-serif"><main style="max-width:360px;padding:24px"><h1 style="font-size:16px;margin:0 0 8px">GitHub didn't finish</h1><p style="color:#a1a1aa;margin:0 0 16px">${esc}</p><a href="/" style="color:#C6F24E">Back to sitesmith</a></main>`,
+    `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GitHub didn't finish</title><body style="margin:0;display:grid;min-height:100vh;place-items:center;background:#08080A;color:#EDEDEF;font:14px system-ui,sans-serif"><main style="max-width:360px;padding:24px"><h1 style="font-size:16px;margin:0 0 8px">GitHub didn't finish</h1><p style="color:#a1a1aa;margin:0 0 16px">${esc}</p><a href="/" style="color:#C6F24E">Back to devit</a></main>`,
     { status: 400, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
   );
 }

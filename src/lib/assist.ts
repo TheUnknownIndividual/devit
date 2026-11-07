@@ -42,7 +42,7 @@ export async function askAbout(p: Project, text: string): Promise<{ reply: strin
   if (!llmAvailable()) return { reply: "Questions need a model. Add one in Settings.", via: "offline editor" };
   const cx = await connectorContext(p, text);
   const system = [
-    "You answer questions about a token website the team is building in sitesmith. Don't change anything; if they want a change, say what to ask for.",
+    "You answer questions about a token website the team is building in devit. Don't change anything; if they want a change, say what to ask for.",
     "Answer in at most 5 short sentences, plainly. Use the site JSON for facts about the page; don't invent token facts.",
     "Builder facts: Publish puts it at <slug>.<sites domain>; custom domains, private links and passwords are on Pro; Export sends the code to GitHub or a zip; Database keeps signup entries; Integrations sets WalletConnect and Privy; double-click text in the preview to type over it; History restores any earlier version.",
     knowledgeLine(p),

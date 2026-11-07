@@ -1,4 +1,4 @@
-# sitesmith
+# devit
 
 An AI website builder for tokens and dApps. You type one sentence, optionally with a contract address, and it builds a working site with live chain data, a wallet button, an in-page swap and buys from any chain through NEAR Intents. You edit it by clicking parts of the preview and leaving comments; only those parts change.
 
@@ -7,7 +7,7 @@ An AI website builder for tokens and dApps. You type one sentence, optionally wi
 
 ## The problem
 
-A new token or dApp needs a website on day one: price, chart, how to buy, socials, and a buy button that works for people holding coins on other chains. Teams either pay a designer, ship a static template with a dead "Buy" link, or use a general AI builder that knows nothing about the chain. sitesmith reads the chain and the team's own posts, writes the site around them, and wires the buying in.
+A new token or dApp needs a website on day one: price, chart, how to buy, socials, and a buy button that works for people holding coins on other chains. Teams either pay a designer, ship a static template with a dead "Buy" link, or use a general AI builder that knows nothing about the chain. devit reads the chain and the team's own posts, writes the site around them, and wires the buying in.
 
 ## Try it on the hosted demo
 
@@ -74,7 +74,7 @@ The agent writes a JSON site spec (theme plus ordered blocks with stable ids), n
 - Timeline: work started on 2026-10-26, after the hackathon announcement on 2026-10-19, which the rules count as inside the window (HACKATHON.md Q-001). Nothing was committed until 2026-11-04, so the first commit holds the work from Oct 26 onward and later commits are day by day. No code was brought in from an earlier project.
 - One dependency comes from an earlier project by the same author: NEAR swap quotes in the buy box use the public developer API of neartrade (`dev.neartrade.lol`, routing on Rhea pools). It is called over HTTP like any other service; its code is not in this repo and is not part of this submission.
 - Written with AI coding help (Claude Code). Libraries: Next.js 16, React 19, Tailwind CSS 3, zod, `@hot-labs/near-connect`, `@solana/kit`, `@noble/curves` and `@noble/hashes`, `@simplewebauthn`, `@walletconnect/universal-provider`, `@privy-io/react-auth`, `lucide-react`, `simple-icons`, `uqr`, `playwright-core` (style-reference screenshots).
-- Swaps and payments were tested with quotes only. sitesmith never holds user funds; buyers sign in their own wallet or send to a 1-Click deposit address.
+- Swaps and payments were tested with quotes only. devit never holds user funds; buyers sign in their own wallet or send to a 1-Click deposit address.
 
 ## License
 

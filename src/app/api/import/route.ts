@@ -21,7 +21,7 @@ const plain = (md: string) => md
   .replace(/^#+\s*/gm, "").replace(/[`*_>|]/g, " ");
 
 async function github(owner: string, repo: string, token?: string) {
-  const h: Record<string, string> = { accept: "application/vnd.github+json", "user-agent": "sitesmith", ...(token ? { authorization: `Bearer ${token}` } : {}) };
+  const h: Record<string, string> = { accept: "application/vnd.github+json", "user-agent": "devit", ...(token ? { authorization: `Bearer ${token}` } : {}) };
   const r = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers: h, signal: AbortSignal.timeout(8000) }).catch(() => null);
   if (!r?.ok) return { error: r?.status === 404 ? token ? "That repo isn't there, or this GitHub connection can't see it." : "That repo isn't public, or doesn't exist." : "GitHub didn't answer. Try again in a minute." };
   const j = (await r.json()) as { full_name: string; description: string | null; homepage: string | null; topics?: string[]; language: string | null };

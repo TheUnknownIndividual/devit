@@ -92,7 +92,7 @@ export function SignInDialog({ open, onClose, onDone, link = false }: { open: bo
     offers.apple && { kind: "apple" as const, name: "Apple", mark: <BrandIcon icon={BRANDS.apple} size={17} color="#fafafa" /> },
   ]).filter((x): x is { kind: "google" | "github" | "apple"; name: string; mark: React.JSX.Element } => !!x);
 
-  const title = link ? "Add a sign-in method" : "Sign in to sitesmith";
+  const title = link ? "Add a sign-in method" : "Sign in to devit";
   return (
     <Dialog open={open} onClose={onClose} title={title} icon={<Fingerprint size={15} />} width={440}>
       <div className="space-y-5 p-5">

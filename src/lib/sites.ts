@@ -1,4 +1,4 @@
-// Where published sites live. With SITES_DOMAIN set (e.g. "sitesmith.xyz"), each site is served at
+// Where published sites live. With SITES_DOMAIN set (e.g. "devit.lol"), each site is served at
 // <slug>.<SITES_DOMAIN>, either by the Cloudflare Worker in edge/ or by any wildcard host pointed at this app.
 // Without it, sites stay at /s/<slug> on the builder's own origin.
 

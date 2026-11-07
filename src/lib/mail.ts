@@ -5,7 +5,7 @@ export async function sendMail(to: string, subject: string, text: string): Promi
   const r = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { authorization: `Bearer ${api}`, "content-type": "application/json" },
-    body: JSON.stringify({ from: process.env.EMAIL_FROM || "sitesmith <onboarding@resend.dev>", to: [to], subject, text }),
+    body: JSON.stringify({ from: process.env.EMAIL_FROM || "devit <onboarding@resend.dev>", to: [to], subject, text }),
     signal: AbortSignal.timeout(8000),
   }).catch(() => null);
   return !!r?.ok;

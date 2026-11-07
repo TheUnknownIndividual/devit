@@ -141,7 +141,7 @@ const openrouter: Call = async (system, user, timeoutMs, tier, key, picked) => {
   try {
     const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${key}`, "x-title": "sitesmith" },
+      headers: { "content-type": "application/json", authorization: `Bearer ${key}`, "x-title": "devit" },
       body: JSON.stringify({ model, messages: [{ role: "system", content: system }, { role: "user", content: user }], response_format: { type: "json_object" } }),
       signal: AbortSignal.timeout(timeoutMs),
     });

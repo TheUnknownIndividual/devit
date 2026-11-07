@@ -231,7 +231,7 @@ function build(x: Sample): SiteSpec {
   if (x.roadmap) blocks.push(block("roadmap", { title: x.theme === "retro" ? "Levels" : "Roadmap", items: x.roadmap }));
   blocks.push(block("faq", { title: "FAQ", items: x.faq }));
   blocks.push(block("socials", { title: x.theme === "cozy" ? "come say hi" : "Join us" }));
-  blocks.push(block("footer", { disclaimer: `This is a sample site made with sitesmith. $${x.ticker} is made up and can't be bought.` }));
+  blocks.push(block("footer", { disclaimer: `This is a sample site made with devit. $${x.ticker} is made up and can't be bought.` }));
   return {
     name: x.name, ticker: x.ticker, tagline: x.tagline, chain: x.chain, theme: { ...t, fx: t.fx ? { ...t.fx } : undefined },
     token: token(x), blocks, logo: MARKS[x.theme],

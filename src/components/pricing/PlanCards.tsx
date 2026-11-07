@@ -184,7 +184,7 @@ function PayDialog({ title, endpoint, body, paidText, shortText, after, onClose 
             <button type="button" className="btn btn-primary w-full" disabled={busy || refundTo.trim().length < 8} onClick={() => void getQuote()}>
               {busy ? <Loader2 size={15} className="animate-spin" /> : <ArrowRight size={15} />} Get deposit address
             </button>
-            <p className="text-[11.5px] leading-relaxed text-zinc-500">NEAR Intents swaps what you send into USDC on NEAR. sitesmith never holds or moves your funds.</p>
+            <p className="text-[11.5px] leading-relaxed text-zinc-500">NEAR Intents swaps what you send into USDC on NEAR. devit never holds or moves your funds.</p>
           </>
         ) : (
           <>

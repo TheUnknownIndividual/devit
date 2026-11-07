@@ -11,7 +11,7 @@ import { teamsOf } from "@/lib/teams";
 import { teamView } from "@/lib/team-view";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Settings · sitesmith" };
+export const metadata: Metadata = { title: "Settings · devit" };
 
 export default async function Settings() {
   const v = await viewer();

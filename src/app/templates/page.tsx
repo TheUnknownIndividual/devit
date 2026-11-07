@@ -3,8 +3,8 @@ import { TopBar } from "@/components/account/TopBar";
 import { Gallery } from "@/components/templates/Gallery";
 
 export const metadata: Metadata = {
-  title: "Templates · sitesmith",
-  description: "Starter templates for memecoin, dApp and NFT sites. Pick a style, press Use template, and sitesmith builds it around your token with live price, chart, trades and buys.",
+  title: "Templates · devit",
+  description: "Starter templates for memecoin, dApp and NFT sites. Pick a style, press Use template, and devit builds it around your token with live price, chart, trades and buys.",
   alternates: { canonical: "/templates" },
 };
 

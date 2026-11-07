@@ -6,7 +6,7 @@ import { sitesDomain } from "./sites";
 // the facts (one list feeds the visible FAQ, the JSON-LD and llms.txt so they never disagree), and the per-site
 // structured data built from a site's spec.
 
-export const BRAND = "sitesmith";
+export const BRAND = "devit";
 const DEFAULT_ORIGIN = "https://devit.lol";
 
 /** The builder's public origin. Static pages are rendered at build time without env, so it falls back to devit.lol. */
@@ -17,7 +17,7 @@ export function appOrigin(): string {
 
 export const TAGLINE = "AI website builder for tokens and dApps";
 export const DESCRIPTION =
-  "sitesmith builds a live website for a token or dApp from one sentence. Paste a contract address and the AI agent reads the chain, the token's socials and the team's posts on X, then writes a site with live price and charts, wallet connect, an in-page swap and buys from any chain through NEAR Intents and Relay. Publish to a free subdomain or your own domain, edit by clicking any block, export the code to GitHub.";
+  "devit builds a live website for a token or dApp from one sentence. Paste a contract address and the AI agent reads the chain, the token's socials and the team's posts on X, then writes a site with live price and charts, wallet connect, an in-page swap and buys from any chain through NEAR Intents and Relay. Publish to a free subdomain or your own domain, edit by clicking any block, export the code to GitHub.";
 
 export const KEYWORDS = [
   "AI website builder", "memecoin website builder", "token website", "crypto website builder", "web3 website builder",
@@ -42,10 +42,10 @@ export const FEATURES = [
 export const CHAINS_SUPPORTED = ["NEAR", "Solana", "Ethereum", "Base", "BNB Chain", "Robinhood Chain"];
 
 export const FAQ: Array<{ q: string; a: string }> = [
-  { q: "What is sitesmith?", a: "sitesmith is an AI website builder for crypto tokens and dApps. You describe the project in one sentence, optionally with a contract address, and it builds a live website with real chain data, wallet connect, a swap and buys from any chain. It runs at devit.lol." },
-  { q: "How do I make a website for my memecoin?", a: "Open devit.lol, type a sentence about your token and paste its contract address. sitesmith reads the chain, your socials and your posts on X, writes the site in your voice and shows it in a live preview. Click Publish to put it at yourname.devit.lol." },
+  { q: "What is devit?", a: "devit is an AI website builder for crypto tokens and dApps. You describe the project in one sentence, optionally with a contract address, and it builds a live website with real chain data, wallet connect, a swap and buys from any chain. It runs at devit.lol." },
+  { q: "How do I make a website for my memecoin?", a: "Open devit.lol, type a sentence about your token and paste its contract address. devit reads the chain, your socials and your posts on X, writes the site in your voice and shows it in a live preview. Click Publish to put it at yourname.devit.lol." },
   { q: "Which chains does it support?", a: `${CHAINS_SUPPORTED.join(", ")}. A site can show live data for a token on any of these and let visitors buy it from other chains through NEAR Intents or Relay.` },
-  { q: "Can visitors buy my token from another chain?", a: "Yes. The buy box takes ETH, USDC, SOL, BNB, BTC and more from other chains. NEAR Intents 1Click and Relay route the swap and the token lands in the buyer's wallet. Buyers sign in their own wallet; sitesmith never holds funds. NEAR Intents also offers private buys." },
+  { q: "Can visitors buy my token from another chain?", a: "Yes. The buy box takes ETH, USDC, SOL, BNB, BTC and more from other chains. NEAR Intents 1Click and Relay route the swap and the token lands in the buyer's wallet. Buyers sign in their own wallet; devit never holds funds. NEAR Intents also offers private buys." },
   { q: "Is it free?", a: `Yes, the Free plan includes ${PLANS[0].credits} AI credits a day (about 3 site builds plus edits), unlimited use on your own model key and hosting on a devit.lol subdomain. Pro ($${PLANS[1].monthly}/month) adds ${PLANS[1].credits} credits a month, a custom domain, private projects and removes the footer credit. Team ($${PLANS[2].monthly}/month) adds 5 seats and shared projects.` },
   { q: "Can I edit the site after it's built?", a: "Yes. Click any block or element in the preview, leave comments, and the agent changes only those parts. You can also chat with it, switch styles, upload images, and undo any change." },
   { q: "Can I get the code?", a: "Yes. Export pushes a Next.js app to a new GitHub repo in your account, or downloads it as a zip. Live prices, trades and cross-chain buys keep working in the exported app." },

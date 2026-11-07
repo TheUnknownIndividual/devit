@@ -65,7 +65,7 @@ export function ExportDialog({ open, onClose, project: p, onSaved }: { open: boo
   return (
     <Dialog open={open} onClose={onClose} title="Export code" icon={<BrandIcon icon={BRANDS.github} size={15} color="#e4e4e7" />} width={520}>
       <div className="space-y-4 p-5">
-        <p className="text-[13px] leading-relaxed text-zinc-400">Your site as a Next.js app: the page, its blocks and its spec. Live price, trades and cross-chain buys keep running through sitesmith, no keys needed.</p>
+        <p className="text-[13px] leading-relaxed text-zinc-400">Your site as a Next.js app: the page, its blocks and its spec. Live price, trades and cross-chain buys keep running through devit, no keys needed.</p>
 
         <section className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
           <div className="flex items-center gap-2.5">
@@ -83,7 +83,7 @@ export function ExportDialog({ open, onClose, project: p, onSaved }: { open: boo
             <p className="mt-3 text-[12.5px] text-zinc-500">GitHub isn't set up on this server yet. Download the code below instead.</p>
           ) : !gh?.canPush ? (
             <div className="mt-3 space-y-3">
-              <p className="text-[12.5px] text-zinc-500">Connect your GitHub account once. sitesmith makes the repo and commits the code; it never touches your other repos.</p>
+              <p className="text-[12.5px] text-zinc-500">Connect your GitHub account once. devit makes the repo and commits the code; it never touches your other repos.</p>
               <button type="button" className="btn btn-primary" disabled={ghOn === null} onClick={connect}><BrandIcon icon={BRANDS.github} size={15} color="currentColor" /> Connect GitHub</button>
             </div>
           ) : repo ? (

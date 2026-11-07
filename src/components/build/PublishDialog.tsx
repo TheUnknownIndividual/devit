@@ -43,7 +43,7 @@ export function PublishDialog({ open, onClose, project, onSaved }: { open: boole
   }
 
   const liveUrl = project.liveUrl ? (project.liveUrl.startsWith("/") ? `${typeof window !== "undefined" ? window.location.origin : ""}${project.liveUrl}` : project.liveUrl) : null;
-  const suffix = project.sitesDomain ? `.${project.sitesDomain}` : ".sitesmith";
+  const suffix = project.sitesDomain ? `.${project.sitesDomain}` : ".devit";
   return (
     <Dialog open={open} onClose={onClose} title="Publish" icon={<Globe size={15} />} width={620}>
       <div className="space-y-4 p-5">
@@ -86,7 +86,7 @@ export function PublishDialog({ open, onClose, project, onSaved }: { open: boole
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-[12px] border border-sel/60 bg-sel/[0.06] p-3.5">
             <div className="flex items-center gap-2 text-[13.5px] font-medium text-white"><Globe size={15} className="text-sel" /> Free</div>
-            <ul className="mt-2 space-y-1 text-[12.5px] text-zinc-400"><li>Your own subdomain</li><li>Live data, wallet, buy box</li><li>&ldquo;Built with sitesmith&rdquo; footer</li></ul>
+            <ul className="mt-2 space-y-1 text-[12.5px] text-zinc-400"><li>Your own subdomain</li><li>Live data, wallet, buy box</li><li>&ldquo;Built with devit&rdquo; footer</li></ul>
           </div>
           <div className="rounded-[12px] border border-white/[0.08] bg-ink-850 p-3.5 opacity-80">
             <div className="flex items-center gap-2 text-[13.5px] font-medium text-white"><Crown size={15} className="text-amber-300" /> Pro <span className="ml-auto rounded-md bg-white/[0.08] px-1.5 py-0.5 text-[10.5px] text-zinc-400">Soon</span></div>

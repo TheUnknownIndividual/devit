@@ -39,7 +39,7 @@ export function validAddress(kind: WalletKind, a: string): boolean {
   return /^(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/.test(a) && a.length >= 2 && a.length <= 64;
 }
 
-const STATEMENT = "Sign in to sitesmith. This only proves you own this wallet: no transaction, no cost.";
+const STATEMENT = "Sign in to devit. This only proves you own this wallet: no transaction, no cost.";
 
 /** The text to sign. NEAR signs the same statement inside a NEP-413 payload. */
 export function signInMessage(kind: WalletKind, o: { domain: string; uri: string; address: string; nonce: string; issuedAt: string; expiresAt: string }): string {

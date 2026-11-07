@@ -11,8 +11,8 @@ import { Payments } from "@/components/pricing/Payments";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Pricing · sitesmith",
-  description: "sitesmith plans: Free with 15 AI credits a day and a devit.lol subdomain, Pro with 800 credits a month, a custom domain and private projects, Team with shared projects. Pay with any coin through NEAR Intents.",
+  title: "Pricing · devit",
+  description: "devit plans: Free with 15 AI credits a day and a devit.lol subdomain, Pro with 800 credits a month, a custom domain and private projects, Team with shared projects. Pay with any coin through NEAR Intents.",
   alternates: { canonical: "/pricing" },
 };
 

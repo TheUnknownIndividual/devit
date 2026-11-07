@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal/LegalPage";
 
-export const metadata: Metadata = { title: "Privacy · sitesmith" };
+export const metadata: Metadata = { title: "Privacy · devit" };
 
 export default function Privacy() {
   return (
     <LegalPage title="Privacy policy" updated="November 6, 2026">
-      <p>sitesmith is an AI website builder for web3 projects. This page explains what we store and why.</p>
+      <p>devit is an AI website builder for web3 projects. This page explains what we store and why.</p>
       <section>
         <h2>What we store</h2>
         <ul>

@@ -12,9 +12,9 @@ export function LogoMark({ size = 22 }: { size?: number }) {
 
 export function Logo() {
   return (
-    <Link href="/" className="flex items-center gap-2.5 text-[17px] font-semibold tracking-tight text-white" aria-label="sitesmith home">
+    <Link href="/" className="flex items-center gap-2.5 text-[17px] font-semibold tracking-tight text-white" aria-label="devit home">
       <LogoMark />
-      sitesmith
+      devit
     </Link>
   );
 }

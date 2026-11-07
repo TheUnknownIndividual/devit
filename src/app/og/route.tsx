@@ -14,7 +14,7 @@ export function GET() {
             <rect x="13" y="2.5" width="8.5" height="8.5" rx="2.2" stroke="#C6F24E" strokeWidth="1.8" />
             <rect x="2.5" y="13" width="19" height="8.5" rx="2.2" stroke="#C6F24E" strokeWidth="1.8" />
           </svg>
-          <div style={{ fontSize: 40, fontWeight: 700, letterSpacing: -1 }}>sitesmith</div>
+          <div style={{ fontSize: 40, fontWeight: 700, letterSpacing: -1 }}>devit</div>
           <div style={{ fontSize: 26, color: "#a1a1aa", marginLeft: 6 }}>devit.lol</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>

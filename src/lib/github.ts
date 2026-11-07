@@ -13,7 +13,7 @@ export type GithubIntent = "signin" | "connect";
 export const scopeFor = (intent: GithubIntent) => (intent === "connect" ? "repo read:user user:email" : "read:user user:email");
 
 const API = "https://api.github.com";
-const UA = "sitesmith";
+const UA = "devit";
 
 export interface GithubUser { id: number; login: string; name: string | null; avatar: string | null; email: string | null }
 

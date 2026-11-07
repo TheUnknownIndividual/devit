@@ -108,7 +108,7 @@ class Session {
   }
 
   async open() {
-    await this.request("initialize", { protocolVersion: PROTOCOL, capabilities: {}, clientInfo: { name: "sitesmith", version: "1" } });
+    await this.request("initialize", { protocolVersion: PROTOCOL, capabilities: {}, clientInfo: { name: "devit", version: "1" } });
     await this.post({ jsonrpc: "2.0", method: "notifications/initialized" }).catch(() => undefined);
   }
 }

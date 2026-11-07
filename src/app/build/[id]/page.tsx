@@ -8,7 +8,7 @@ import { accessTo } from "@/lib/access";
 import { canRead, sharedWith } from "@/lib/site-access";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Builder · sitesmith" };
+export const metadata: Metadata = { title: "Builder · devit" };
 
 export default async function Build({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ share?: string }> }) {
   const { id } = await params;

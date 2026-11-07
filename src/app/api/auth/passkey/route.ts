@@ -31,10 +31,10 @@ export async function POST(req: Request) {
     if (b.mode === "register") {
       const { user } = await viewer();
       const options = await generateRegistrationOptions({
-        rpName: "sitesmith",
+        rpName: "devit",
         rpID: site.rpID,
-        userName: user?.email || user?.name || `sitesmith-${id.slice(0, 5).toLowerCase()}`,
-        userDisplayName: user?.name || user?.email || "sitesmith",
+        userName: user?.email || user?.name || `devit-${id.slice(0, 5).toLowerCase()}`,
+        userDisplayName: user?.name || user?.email || "devit",
         attestationType: "none",
         excludeCredentials: (user?.methods ?? []).filter((m) => m.kind === "passkey").map((m) => ({ id: m.id, transports: m.passkey?.transports })),
         authenticatorSelection: { residentKey: "required", userVerification: "preferred" },

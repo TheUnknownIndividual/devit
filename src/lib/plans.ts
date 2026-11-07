@@ -29,11 +29,11 @@ export const TYPICAL = { buildLow: 3, buildHigh: 8, edit: 0.5 };
 export const PLANS: Plan[] = [
   {
     id: "free", name: "Free", blurb: "Launch a site and see it live.", monthly: 0, yearly: 0, credits: 15, per: "day", seats: 1,
-    perks: ["15 AI credits a day (about 3 builds plus edits)", "Hosting on a devit.lol subdomain", "“Built with sitesmith” footer", "Unlimited use on your own model key"],
+    perks: ["15 AI credits a day (about 3 builds plus edits)", "Hosting on a devit.lol subdomain", "“Built with devit” footer", "Unlimited use on your own model key"],
   },
   {
     id: "pro", name: "Pro", blurb: "For teams shipping a token for real.", monthly: 20, yearly: 16, credits: 800, per: "month", seats: 1,
-    perks: ["800 AI credits a month (100+ builds, or thousands of edits)", "Custom domain, or buy one in the builder", "No sitesmith footer", "Private projects", "Priority models and build queue"],
+    perks: ["800 AI credits a month (100+ builds, or thousands of edits)", "Custom domain, or buy one in the builder", "No devit footer", "Private projects", "Priority models and build queue"],
   },
   {
     id: "team", name: "Team", blurb: "One workspace for the whole crew.", monthly: 49, yearly: 39, credits: 2000, per: "month", seats: 5,
@@ -78,7 +78,7 @@ export const COMPARE: Array<{ label: string; values: Record<PlanId, string | boo
   { label: "On your own model key", values: { free: "Unlimited", pro: "Unlimited", team: "Unlimited" } },
   { label: "Credit packs", values: { free: true, pro: true, team: true } },
   { label: "Hosting", values: { free: "devit.lol subdomain", pro: "Custom domain", team: "Custom domain" } },
-  { label: "“Built with sitesmith” footer", values: { free: "Shown", pro: false, team: false } },
+  { label: "“Built with devit” footer", values: { free: "Shown", pro: false, team: false } },
   { label: "Private projects", values: { free: false, pro: true, team: true } },
   { label: "Priority models and queue", values: { free: false, pro: true, team: true } },
   { label: "Seats", values: { free: "1", pro: "1", team: "5" } },

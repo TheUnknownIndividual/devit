@@ -6,7 +6,7 @@ import { getUser, viewer } from "@/lib/accounts";
 import { inviteByToken, roleIn } from "@/lib/teams";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Join a team · sitesmith", robots: { index: false } };
+export const metadata: Metadata = { title: "Join a team · devit", robots: { index: false } };
 
 /** An invite link: who's asking, for which team and role. Joining needs an account, made or signed into here. */
 export default async function Invite({ params }: { params: Promise<{ token: string }> }) {

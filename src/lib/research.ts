@@ -14,7 +14,7 @@ import type { Chain, Finding, Research, SocialInput, TokenInfo, Voice, XPost, XP
 // the team's website and their recent posts on X. Every finding keeps where it came from.
 
 const TIMEOUT_MS = 8000;
-const UA = "sitesmith/0.1 (+https://github.com/sitesmith)";
+const UA = "devit/0.1 (+https://devit.lol)";
 
 async function fetchText(raw: string, max = 1_500_000, accept = "text/html,application/json"): Promise<{ text: string; url: string } | null> {
   let url = raw;

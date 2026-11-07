@@ -38,8 +38,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const again = !b.data.fresh && p.github && p.github.repo.split("/")[0].toLowerCase() === gh.login.toLowerCase() ? p.github.repo : undefined;
   try {
     const out = await pushFiles(token, files, {
-      repo: again, name, private: b.data.private ?? true, description: `${p.spec.name} ($${p.spec.ticker}) website, built with sitesmith`,
-      message: again ? `Update site from sitesmith (v${p.version})` : "Site from sitesmith",
+      repo: again, name, private: b.data.private ?? true, description: `${p.spec.name} ($${p.spec.ticker}) website, built with devit`,
+      message: again ? `Update site from devit (v${p.version})` : "Site from devit",
     });
     const github = { ...out, at: Date.now() };
     await updateProject(p.id, (q) => { q.github = github; });

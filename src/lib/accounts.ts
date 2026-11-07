@@ -43,7 +43,7 @@ export interface StoredKey { enc: string; last4: string; host?: string; at: numb
 /** status is 1-Click's word for the deposit; received is the USDC it delivered; settledAt is set once, when the plan turned on. */
 export interface Payment { depositAddress: string; plan: PlanId; cycle: Cycle; usd: number; pay: string; at: number; status?: string; received?: number; settledAt?: number; checkedAt?: number }
 /**
- * A domain bought through sitesmith (lib/domain-orders.ts). awaiting: deposit address handed out; paid: 1-Click
+ * A domain bought through devit (lib/domain-orders.ts). awaiting: deposit address handed out; paid: 1-Click
  * delivered the full amount; registering: Spaceship is registering it; live: registered and pointed at the site;
  * refund: paid but couldn't be bought (taken or the price rose), for the owner to refund by hand.
  */
@@ -53,7 +53,7 @@ export interface DomainOrder {
   status?: string; received?: number; paidAt?: number; op?: string; opAt?: number; liveAt?: number; error?: string; checkedAt?: number;
 }
 /**
- * A credit pack bought through sitesmith (lib/credit-orders.ts). awaiting: deposit address handed out; paid: 1-Click
+ * A credit pack bought through devit (lib/credit-orders.ts). awaiting: deposit address handed out; paid: 1-Click
  * delivered the full amount and the builds were added (once, in the same write); refund: arrived short or to the
  * wrong account, for the owner to refund by hand; closed: refunded, failed or abandoned.
  */

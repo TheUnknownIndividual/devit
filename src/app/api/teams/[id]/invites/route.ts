@@ -24,7 +24,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!out) return NextResponse.json({ error: "not found" }, { status: 404 });
   const url = `${originOf(req)}/invite/${out.token}`;
   const who = g.me.name || g.me.email || "A teammate";
-  const emailed = email ? await sendMail(email, `${who} invited you to ${g.t.name} on sitesmith`, `${who} invited you to join ${g.t.name} on sitesmith as ${out.invite.role === "editor" ? "an editor" : "a viewer"}.\n\nJoin here: ${url}\n\nThe link works once and for ${INVITE_DAYS} days.`) : null;
+  const emailed = email ? await sendMail(email, `${who} invited you to ${g.t.name} on devit`, `${who} invited you to join ${g.t.name} on devit as ${out.invite.role === "editor" ? "an editor" : "a viewer"}.\n\nJoin here: ${url}\n\nThe link works once and for ${INVITE_DAYS} days.`) : null;
   return NextResponse.json({ url, emailed, team: await teamView(out.team, g.me) });
 }
 

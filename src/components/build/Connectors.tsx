@@ -38,7 +38,7 @@ export function Connectors({ project, onSaved, onClose }: { project: PublicProje
     setAdding(true);
     setResult(null);
     const r = await post("/api/connectors", { name: form.name, url: form.url, header: form.header, secret: form.secret || undefined }).catch(() => null);
-    const j = r ? ((await r.json().catch(() => ({}))) as { error?: string; connectors?: Conn[]; added?: Conn }) : { error: "Couldn't reach sitesmith." };
+    const j = r ? ((await r.json().catch(() => ({}))) as { error?: string; connectors?: Conn[]; added?: Conn }) : { error: "Couldn't reach devit." };
     setAdding(false);
     if (r?.ok && j.connectors) {
       setList(j.connectors);

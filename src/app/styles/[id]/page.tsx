@@ -15,7 +15,7 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
   const spec = SHOWCASE[id as ThemeId];
-  return spec ? { title: `${spec.name} · ${THEME_LABELS[id as ThemeId]} sample · sitesmith`, robots: { index: false } } : {};
+  return spec ? { title: `${spec.name} · ${THEME_LABELS[id as ThemeId]} sample · devit`, robots: { index: false } } : {};
 }
 
 export default async function StyleSample({ params }: { params: Promise<{ id: string }> }) {
