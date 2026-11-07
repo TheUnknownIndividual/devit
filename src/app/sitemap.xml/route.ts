@@ -24,7 +24,7 @@ export async function GET(req: Request) {
   const o = appOrigin();
   const urls: Array<{ loc: string; lastmod?: number; priority?: number }> = [
     { loc: `${o}/`, priority: 1 }, { loc: `${o}/pricing`, priority: 0.8 }, { loc: `${o}/templates`, priority: 0.7 }, { loc: `${o}/llms.txt`, priority: 0.5 },
-    { loc: `${o}/privacy`, priority: 0.3 }, { loc: `${o}/terms`, priority: 0.3 },
+    { loc: `${o}/security`, priority: 0.4 }, { loc: `${o}/privacy`, priority: 0.3 }, { loc: `${o}/terms`, priority: 0.3 },
   ];
   // Published sites only belong here once they have their own host; /s/<slug> on the builder is kept out of the index.
   if (sitesDomain()) {

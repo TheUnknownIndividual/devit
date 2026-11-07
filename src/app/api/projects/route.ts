@@ -9,6 +9,7 @@ import { entitled, planOf } from "@/lib/entitlements";
 import { hasOwnLlm, runWithKeys } from "@/lib/keyscope";
 import { withBuildSlot } from "@/lib/buildqueue";
 import { modelFrom } from "@/lib/models";
+import { findLeaks } from "@/lib/leaks";
 import { BUILDS_PER_HOUR, FAIR_USE_BUILDS_PER_DAY, plan } from "@/lib/plans";
 
 const Body = z.object({
@@ -32,6 +33,9 @@ export async function POST(req: Request) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Describe your site in a sentence first." }, { status: 400 });
   const { prompt, chain, kind, address, style, socials } = parsed.data;
+  // Leak firewall: a description with a key or token in it is refused before anything is saved or sent to a model.
+  const leaks = [...new Set(findLeaks(prompt).map((l) => l.kind))];
+  if (leaks.length) return NextResponse.json({ error: `Your description has ${leaks.join(" and ")} in it. Take it out and try again: keys never go to the model or into a site.`, leak: true }, { status: 400 });
   // The plan's daily build cap, per account or per anonymous browser; "unlimited" stops at fair use. Builds on the
   // owner's own model key are free.
   const anon = v.user ? undefined : await ensureAnon();

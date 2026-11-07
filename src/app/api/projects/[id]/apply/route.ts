@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { findLeaks } from "@/lib/leaks";
 import { applyComments } from "@/lib/agent";
 import { updateProject } from "@/lib/store";
 import { newId } from "@/lib/spec";
@@ -29,6 +30,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Add a comment first." }, { status: 400 });
+  // Leak firewall: a comment with a key in it isn't sent to the model.
+  const leaks = [...new Set(parsed.data.comments.flatMap((c) => findLeaks(c.text).map((l) => l.kind)))];
+  if (leaks.length) return NextResponse.json({ error: `A comment has ${leaks.join(" and ")} in it. Take it out first: keys never go to the model or into a site.` }, { status: 400 });
   const g = await editable(id);
   if (g instanceof Response) return g;
   const { p } = g;

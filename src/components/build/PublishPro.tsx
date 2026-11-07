@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { DomainBuy, SpaceshipConnect } from "./DomainBuy";
-import { AlertTriangle, Check, CheckCircle2, Copy, Crown, Globe, KeyRound, Link2, Loader2, Lock, RefreshCw, Trash2 } from "lucide-react";
+import { CloudflareConnect, DomainBuy, SpaceshipConnect } from "./DomainBuy";
+import { AlertTriangle, ArrowUpRight, Check, CheckCircle2, Copy, Crown, Globe, KeyRound, Link2, Loader2, Lock, RefreshCw, Trash2 } from "lucide-react";
 
 // The Pro parts of the Publish dialog: who can open the site, and a custom domain. Both read their own endpoint;
 // a 402 from it (Free plan) becomes the upgrade line.
@@ -33,6 +33,15 @@ function CopyBtn({ text, label }: { text: string; label?: string }) {
   return (
     <button type="button" className="btn btn-ghost btn-icon h-7 w-7 shrink-0" aria-label={label ?? "Copy"} onClick={() => { void navigator.clipboard?.writeText(text); setDone(true); setTimeout(() => setDone(false), 1400); }}>
       {done ? <Check size={13} /> : <Copy size={13} />}
+    </button>
+  );
+}
+
+function CopyAll({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button type="button" className="btn btn-ghost h-7 shrink-0 px-2 text-[12px]" onClick={() => { void navigator.clipboard?.writeText(text); setDone(true); setTimeout(() => setDone(false), 1400); }}>
+      {done ? <Check size={13} /> : <Copy size={13} />} {done ? "Copied" : "Copy all"}
     </button>
   );
 }
@@ -125,6 +134,7 @@ type DomainState = {
   domain: { host: string; status: "pending" | "verified" | "live"; apex: boolean; checkedAt: number | null; cf: { status: string; ssl: string; error: string | null } | null } | null;
   records: Rec[];
   check?: { resolved: boolean; txt: Found; route: Found };
+  dnsHost?: { id: string; name: string; url: string; apex: string } | null;
 };
 
 const STATUS: Record<"pending" | "verified" | "live", { label: string; cls: string }> = {
@@ -154,18 +164,31 @@ export function DomainSection({ projectId, open, suggest = "" }: { projectId: st
   const [err, setErr] = useState<string | null>(null);
   const [mode, setMode] = useState<"buy" | "connect">("buy");
 
-  async function call(kind: "add" | "check" | "remove") {
-    setBusy(kind);
-    setErr(null);
+  async function call(kind: "add" | "check" | "remove", quiet = false) {
+    if (!quiet) { setBusy(kind); setErr(null); }
     const r = await fetch(kind === "check" ? `${url}/check` : url, {
       method: kind === "remove" ? "DELETE" : "POST",
       headers: { "content-type": "application/json" },
       body: kind === "add" ? JSON.stringify({ domain: input }) : undefined,
     }).catch(() => null);
-    setErr(await apply(r));
-    setBusy(null);
+    const e = await apply(r);
+    if (!quiet) { setErr(e); setBusy(null); }
     if (r?.ok && kind !== "check") { setEditing(false); setInput(""); }
+    // Records may already be in place (a domain moved from another site): check straight away.
+    if (r?.ok && kind === "add") void call("check", true);
   }
+
+  // While a domain waits for DNS, check every 15 seconds so it turns Live by itself (for up to 15 minutes).
+  const waiting = s.kind === "ok" && !!s.v.domain && s.v.domain.status !== "live" && s.v.entitled && open;
+  const host = s.kind === "ok" ? s.v.domain?.host : undefined;
+  const [tries, setTries] = useState(0);
+  useEffect(() => { setTries(0); }, [host]);
+  useEffect(() => {
+    if (!waiting || tries >= 60) return;
+    const t = setTimeout(() => { setTries((n) => n + 1); void call("check", true); }, 15_000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waiting, tries]);
 
   if (s.kind === "loading") return null;
   if (s.kind === "error") return <div><Head icon={<Globe size={13} />} title="Custom domain" /><p className="mt-2 text-[12px] text-amber-300">{s.error}</p></div>;
@@ -205,10 +228,21 @@ export function DomainSection({ projectId, open, suggest = "" }: { projectId: st
             <button type="button" className="btn btn-ghost btn-icon h-7 w-7" aria-label="Remove domain" disabled={!!busy} onClick={() => void call("remove")}>{busy === "remove" ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}</button>
           </div>
           <div className="space-y-2 p-3.5">
-            <p className="text-[12px] text-zinc-400">Add these records where the domain&rsquo;s DNS is managed{d.apex ? " (this is the root of the domain)" : ""}:</p>
+            {d.status !== "live" && v.dnsHost && (
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-zinc-400">
+                <span className="min-w-0">{v.dnsHost.id === "other" ? <>The DNS for {v.dnsHost.apex} is run by <span className="text-zinc-200">{v.dnsHost.name}</span>.</> : <>Your DNS is at <span className="text-zinc-200">{v.dnsHost.name}</span>.</>}</span>
+                {v.dnsHost.url && <a className="inline-flex items-center gap-0.5 text-zinc-200 underline-offset-2 hover:underline" href={v.dnsHost.url} target="_blank" rel="noreferrer">Open {v.dnsHost.name} DNS <ArrowUpRight size={12} /></a>}
+              </div>
+            )}
+            {d.status !== "live" && v.entitled && (!v.dnsHost || v.dnsHost.id === "cloudflare") && <CloudflareConnect projectId={projectId} host={d.host} onDone={() => void call("check")} />}
+            {d.status !== "live" && v.entitled && (!v.dnsHost || v.dnsHost.id === "spaceship") && <SpaceshipConnect projectId={projectId} onDone={() => void call("check")} />}
+            <div className="flex min-w-0 items-center gap-2">
+              <p className="min-w-0 flex-1 text-[12px] text-zinc-400">{v.dnsHost && ["cloudflare", "spaceship"].includes(v.dnsHost.id) && d.status !== "live" ? "Or add them by hand" : "Add these records where the domain\u2019s DNS is managed"}{d.apex ? " (this is the root of the domain)" : ""}:</p>
+              {v.records.length > 0 && <CopyAll text={v.records.map((r) => `${r.type}\t${r.name}\t${r.value}`).join("\n")} />}
+            </div>
             <div className="overflow-hidden rounded-[10px] border border-white/[0.07]">
               {v.records.map((r, i) => (
-                <div key={i} className="grid grid-cols-[52px_1fr] gap-x-3 gap-y-0.5 border-t border-white/[0.06] px-3 py-2 first:border-t-0">
+                <div key={i} className="grid grid-cols-[52px_minmax(0,1fr)] gap-x-3 gap-y-0.5 border-t border-white/[0.06] px-3 py-2 first:border-t-0">
                   <span className="font-mono text-[11.5px] font-medium text-zinc-300">{r.type}</span>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1"><span className="w-12 shrink-0 text-[11px] text-zinc-500">Name</span><span className="min-w-0 flex-1 break-all font-mono text-[12px] text-zinc-200">{r.name}</span><CopyBtn text={r.name} label={`Copy ${r.type} name`} /></div>
@@ -228,10 +262,9 @@ export function DomainSection({ projectId, open, suggest = "" }: { projectId: st
             {d.cf && <p className="text-[12px] text-zinc-400">Certificate: <span className={d.cf.ssl === "active" ? "text-lime" : "text-zinc-200"}>{d.cf.ssl.replace(/_/g, " ")}</span>{d.cf.error && <span className="text-amber-300"> ({d.cf.error})</span>}</p>}
             {!v.cloudflare && d.status !== "pending" && <p className="text-[12px] text-zinc-500">Certificates aren&rsquo;t automatic on this server yet: its admin adds {d.host} under Cloudflare Custom Hostnames.</p>}
             {!v.published && <p className="text-[12px] text-zinc-500">Publish the site and the domain serves it.</p>}
-            {d.status !== "live" && v.entitled && <SpaceshipConnect projectId={projectId} onDone={() => void call("check")} />}
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex flex-wrap items-center gap-2 pt-1">
               <button type="button" className="btn btn-outline" disabled={!!busy || !v.entitled} onClick={() => void call("check")}>{busy === "check" ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Check DNS</button>
-              <span className="text-[11px] text-zinc-500">{d.checkedAt ? `Last checked ${new Date(d.checkedAt).toLocaleTimeString()}` : "DNS changes can take a few minutes to show."}</span>
+              <span className="min-w-0 text-[11px] text-zinc-500">{waiting && tries < 60 ? "Checking every 15 seconds: it turns Live by itself." : d.checkedAt ? `Last checked ${new Date(d.checkedAt).toLocaleTimeString()}` : "DNS changes can take a few minutes to show."}</span>
             </div>
           </div>
         </div>

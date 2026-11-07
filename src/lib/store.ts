@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, rm, writeFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import type { Project } from "./spec";
+import { isSealed, seal, unseal } from "./secrets";
 
 // Projects live as JSON files for the prototype. One writer per project id at a time.
 const DIR = path.join(process.cwd(), "data", "projects");
@@ -11,9 +12,24 @@ function file(id: string): string {
   return path.join(DIR, `${id}.json`);
 }
 
+// Paid RPC URLs carry the owner's provider key, so on disk they're sealed (AES-256-GCM, see secrets.ts) and only
+// opened in memory here. Plain values from older files read as they are and are sealed on the next save.
+const open = (v: string | undefined) => (isSealed(v) ? unseal(v) ?? undefined : v);
+const close = (v: string | undefined) => (v && !isSealed(v) ? seal(v) : v);
+
+function mapSecrets(p: Project, f: (v: string | undefined) => string | undefined): Project {
+  const n = p.network;
+  const urls = n?.rpcUrls ? Object.fromEntries(Object.entries(n.rpcUrls).map(([k, v]) => [k, f(v)])) : undefined;
+  return {
+    ...p,
+    network: n && { ...n, rpcUrl: f(n.rpcUrl), ...(urls ? { rpcUrls: urls } : {}) },
+    ...(p.integrations ? { integrations: { ...p.integrations, rpcUrl: f(p.integrations.rpcUrl) } } : {}),
+  };
+}
+
 export async function getProject(id: string): Promise<Project | null> {
   try {
-    return JSON.parse(await readFile(file(id), "utf8")) as Project;
+    return mapSecrets(JSON.parse(await readFile(file(id), "utf8")) as Project, open);
   } catch {
     return null;
   }
@@ -24,7 +40,7 @@ export async function saveProject(p: Project): Promise<void> {
   const f = file(p.id);
   const tmp = `${f}.${process.pid}.tmp`;
   p.updatedAt = Date.now();
-  await writeFile(tmp, JSON.stringify(p));
+  await writeFile(tmp, JSON.stringify(mapSecrets(p, close)), { mode: 0o600 });
   await rename(tmp, f);
 }
 

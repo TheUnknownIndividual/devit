@@ -53,8 +53,8 @@ export const newDomain = (host: string, apex: boolean): CustomDomain => ({ host,
 
 // ---------- DNS over HTTPS ----------
 
-export type RrType = "A" | "AAAA" | "CNAME" | "TXT" | "SOA";
-const TYPE_NO: Record<RrType, number> = { A: 1, CNAME: 5, SOA: 6, TXT: 16, AAAA: 28 };
+export type RrType = "A" | "AAAA" | "CNAME" | "TXT" | "SOA" | "NS";
+const TYPE_NO: Record<RrType, number> = { A: 1, NS: 2, CNAME: 5, SOA: 6, TXT: 16, AAAA: 28 };
 export interface Rr { name: string; type: number; data: string }
 /** Answers for a name, or null when no resolver could be reached. */
 export type Resolver = (name: string, type: RrType) => Promise<Rr[] | null>;
@@ -113,6 +113,49 @@ export async function targetAddresses(target: string): Promise<string[]> {
   // A miss is kept for a minute too (as if fetched 9 min ago), so a resolver outage doesn't slow every dialog open.
   targetIpCache = { t: target, ips, at: ips.length ? Date.now() : Date.now() - 9 * 60_000 };
   return ips;
+}
+
+// ---------- where the DNS is ----------
+
+/** DNS hosts we can name from their nameservers, with the page where their records are edited. */
+const DNS_HOSTS: Array<{ id: string; name: string; ns: RegExp; url: (apex: string) => string }> = [
+  { id: "cloudflare", name: "Cloudflare", ns: /\.ns\.cloudflare\.com$/, url: () => "https://dash.cloudflare.com/?to=/:account/:zone/dns" },
+  { id: "spaceship", name: "Spaceship", ns: /(^|\.)spaceship\.(net|com)$/, url: (a) => `https://www.spaceship.com/application/advanced-dns-application/manage/${a}/` },
+  { id: "godaddy", name: "GoDaddy", ns: /\.domaincontrol\.com$/, url: (a) => `https://dcc.godaddy.com/control/portfolio/${a}/settings?tab=dns` },
+  { id: "namecheap", name: "Namecheap", ns: /\.registrar-servers\.com$/, url: (a) => `https://ap.www.namecheap.com/Domains/DomainControlPanel/${a}/advancedns` },
+  { id: "porkbun", name: "Porkbun", ns: /\.porkbun\.com$/, url: (a) => `https://porkbun.com/account/domainsSpeedy?q=${a}` },
+  { id: "squarespace", name: "Squarespace", ns: /\.(googledomains|squarespacedns)\.com$/, url: () => "https://account.squarespace.com/domains" },
+  { id: "vercel", name: "Vercel", ns: /\.vercel-dns\.com$/, url: (a) => `https://vercel.com/domains/${a}` },
+  { id: "route53", name: "AWS Route 53", ns: /\.awsdns-\d+\./, url: () => "https://console.aws.amazon.com/route53/v2/hostedzones" },
+  { id: "hostinger", name: "Hostinger", ns: /\.dns-parking\.com$/, url: (a) => `https://hpanel.hostinger.com/domain/${a}/dns` },
+  { id: "ionos", name: "IONOS", ns: /\.ui-dns\.(com|de|org|biz)$/, url: () => "https://my.ionos.com/domains" },
+  { id: "gandi", name: "Gandi", ns: /\.gandi\.net$/, url: (a) => `https://admin.gandi.net/domain/${a}/records` },
+  { id: "dynadot", name: "Dynadot", ns: /\.dynadot\.com$/, url: () => "https://www.dynadot.com/account/domain/name/list.html" },
+  { id: "namecom", name: "Name.com", ns: /\.name\.com$/, url: (a) => `https://www.name.com/account/domain/details/${a}#dns` },
+  { id: "digitalocean", name: "DigitalOcean", ns: /\.digitalocean\.com$/, url: (a) => `https://cloud.digitalocean.com/networking/domains/${a}` },
+];
+
+export type DnsHost = { id: string; name: string; url: string; apex: string } | null;
+const hostCache = new Map<string, { v: DnsHost; at: number }>();
+
+/** Who runs the domain's DNS, read from the nameservers of the host or its nearest parent that has them. */
+export async function dnsHost(host: string, resolve: Resolver = doh): Promise<DnsHost> {
+  const hit = hostCache.get(host);
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.v;
+  const labels = host.split(".");
+  let v: DnsHost = null;
+  for (let i = 0; i < labels.length - 1 && i < 4; i++) {
+    const name = labels.slice(i).join(".");
+    const rr = await resolve(name, "NS");
+    if (rr === null) return null; // resolvers down: say nothing, try again next time
+    const ns = rr.filter((r) => r.type === TYPE_NO.NS && bare(r.name) === name).map((r) => bare(r.data));
+    if (!ns.length) continue;
+    const h = DNS_HOSTS.find((d) => ns.some((n) => d.ns.test(n)));
+    v = h ? { id: h.id, name: h.name, url: h.url(name), apex: name } : { id: "other", name: ns[0].split(".").slice(-2).join("."), url: "", apex: name };
+    break;
+  }
+  hostCache.set(host, { v, at: Date.now() });
+  return v;
 }
 
 // ---------- Cloudflare for SaaS ----------
@@ -198,5 +241,6 @@ export async function domainView(p: Project, entitled: boolean) {
     published: !!p.published,
     domain: d && { host: d.host, status: d.status, apex: d.apex, checkedAt: d.checkedAt ?? null, cf: d.cf ? { status: d.cf.status, ssl: d.cf.ssl, error: d.cf.error ?? null } : null },
     records: d && target ? dnsRecords(d, target, d.apex ? await targetAddresses(target) : []) : [],
+    dnsHost: d && d.status !== "live" ? await dnsHost(d.host).catch(() => null) : null,
   };
 }

@@ -201,3 +201,49 @@ export function SpaceshipConnect({ projectId, onDone }: { projectId: string; onD
     </div>
   );
 }
+
+/** One click for a domain on Cloudflare DNS: a token with Zone → DNS → Edit, used once and never saved. */
+export function CloudflareConnect({ projectId, host, onDone }: { projectId: string; host: string; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [token, setToken] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function go() {
+    setBusy(true); setMsg(null);
+    const r = await fetch(`/api/projects/${projectId}/domain/cloudflare`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token }) }).catch(() => null);
+    const j = await r?.json().catch(() => null);
+    setBusy(false);
+    setToken("");
+    if (r?.ok) {
+      const gone = (j?.replaced as string[] | undefined)?.length ? ` Replaced ${(j.replaced as string[]).join(", ")}.` : "";
+      setMsg({ ok: true, text: `Records added on Cloudflare.${gone} Checking DNS…` });
+      onDone();
+    } else setMsg({ ok: false, text: j?.error ?? "That didn't work. Check the token and try again." });
+  }
+
+  if (!open) {
+    return (
+      <button type="button" className="btn btn-primary w-full justify-center" onClick={() => setOpen(true)}>
+        <BrandIcon icon={BRANDS.cloudflare} size={14} /> Connect with Cloudflare in one step <Wand2 size={13} />
+      </button>
+    );
+  }
+  return (
+    <div className="min-w-0 space-y-2 rounded-[10px] border border-white/[0.07] bg-ink-900 p-3">
+      <ol className="list-decimal space-y-1 pl-4 text-[12px] text-zinc-400">
+        <li>Open <a className="text-zinc-200 underline-offset-2 hover:underline" href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noreferrer">Cloudflare API tokens</a> and press <b className="font-medium text-zinc-200">Create Token</b>, then <b className="font-medium text-zinc-200">Edit zone DNS</b>.</li>
+        <li>Under Zone Resources pick <span className="break-all font-mono text-zinc-200">{host.split(".").slice(-2).join(".")}</span>, create it and paste it here.</li>
+      </ol>
+      <p className="text-[11px] text-zinc-500">The token is used once for this and never saved. You can delete it on Cloudflare right after.</p>
+      <input className="field font-mono text-[12.5px]" type="password" placeholder="Cloudflare API token" spellCheck={false} autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} aria-label="Cloudflare API token" />
+      <div className="flex gap-2">
+        <button type="button" className="btn btn-ghost" onClick={() => { setOpen(false); setMsg(null); setToken(""); }}>Cancel</button>
+        <button type="button" className="btn btn-primary flex-1" disabled={busy || token.trim().length < 20} onClick={() => void go()}>
+          {busy ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />} Add records
+        </button>
+      </div>
+      {msg && <p className={`text-[12px] ${msg.ok ? "text-lime" : "text-amber-300"}`}>{msg.text}</p>}
+    </div>
+  );
+}

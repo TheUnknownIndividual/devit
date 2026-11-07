@@ -8,6 +8,7 @@ import { editable } from "@/lib/access";
 import { syncRouting } from "@/lib/routing";
 import { appOrigin, pingIndexNow } from "@/lib/seo";
 import { isPrivateSite } from "@/lib/site-access";
+import { checkSite } from "@/lib/safety";
 
 const Body = z.object({ slug: z.string().trim().toLowerCase().regex(/^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/) });
 
@@ -26,6 +27,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!parsed.success) return NextResponse.json({ error: "Use 3–32 letters, numbers or dashes." }, { status: 400 });
   const { slug } = parsed.data;
   if (RESERVED.has(slug) || (await slugTaken(slug, id))) return NextResponse.json({ error: "That address is taken." }, { status: 409 });
+  // A key or token on the page would go public with it: refuse until it's gone.
+  const secret = checkSite(g.p).findings.find((f) => f.blocks);
+  if (secret) return NextResponse.json({ error: `Not published: ${secret.title.charAt(0).toLowerCase()}${secret.title.slice(1)}. Ask the chat to take it out, then publish.`, safety: true }, { status: 422 });
   const p = await updateProject(id, (q) => {
     q.slug = slug;
     const first = !q.published;

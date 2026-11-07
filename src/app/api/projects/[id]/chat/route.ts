@@ -18,6 +18,7 @@ import { editable } from "@/lib/access";
 import { runWithKeys } from "@/lib/keyscope";
 import { modelFrom } from "@/lib/models";
 import { projectEntitled } from "@/lib/entitlements";
+import { redactLeaks, removedNote } from "@/lib/leaks";
 
 const Body = z.object({
   text: z.string().trim().min(1).max(1200),
@@ -60,6 +61,19 @@ async function chat(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { text, docs } = parsed.data;
   const p = await getProject(id);
   if (!p?.spec) return NextResponse.json({ error: "not ready" }, { status: 409 });
+
+  // Leak firewall: a key or token in the message (or a dropped file) never reaches a model or the history. The message
+  // is kept with the secret cut out, and nothing else runs.
+  const red = redactLeaks(text);
+  const docLeaks = (docs ?? []).flatMap((d) => redactLeaks(d.text).removed);
+  if (red.removed.length || docLeaks.length) {
+    const removed = [...new Set([...red.removed, ...docLeaks])];
+    const saved = await updateProject(id, (q) => {
+      q.messages.push({ id: newId(), role: "user", text: red.text, at: Date.now() });
+      q.messages.push({ id: newId(), role: "agent", text: `${removedNote(removed)} Send the request again without it.`, at: Date.now(), via: "leak firewall" });
+    });
+    return saved ? NextResponse.json(publicProject(saved)) : NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   const own = new Set((p.assets ?? []).map((a) => a.id));
   const assets = (parsed.data.assets ?? []).filter((a) => own.has(a));
   const assetUrls = (p.assets ?? []).filter((a) => assets.includes(a.id)).map((a) => a.url);

@@ -88,7 +88,7 @@ export function SettingsView({ initial, usage, admin = false, teams }: { initial
   }
 
   return (
-    <div className="mt-6 grid gap-8 lg:grid-cols-[180px_1fr]">
+    <div className="mt-6 grid gap-8 lg:grid-cols-[180px_minmax(0,1fr)]">
       <nav aria-label="Settings" className="hidden lg:block">
         <ul className="sticky top-6 space-y-0.5">
           {SECTIONS.map(([id, label]) => <li key={id}><a href={`#${id}`} className="btn btn-ghost w-full justify-start">{label}</a></li>)}

@@ -1,9 +1,11 @@
 import type { Project, SiteSpec } from "./spec";
+import { findLeaks } from "./leaks";
 
 // The check Publish runs before a site goes live (like Lovable's security scan, made for token sites): the things that
 // get a memecoin site reported, scammed through, or simply break a buy. Read from the spec only; nothing is fetched.
 
-export type Finding = { level: "high" | "warn" | "info"; title: string; detail: string; blockId?: string };
+/** `blocks`: publishing is refused while this is on the page (a secret would go public). */
+export type Finding = { level: "high" | "warn" | "info"; title: string; detail: string; blockId?: string; blocks?: true };
 
 const EVM = /\b0x[a-fA-F0-9]{40}\b/g;
 const SOL = /\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/g;
@@ -78,6 +80,14 @@ export function checkSite(p: Project): { findings: Finding[]; checked: number } 
       if (!hosts.has(u.hostname)) hosts.set(u.hostname, blockId);
     }
   };
+
+  // Secrets first, in every string the page carries (image and link URLs too): these stop a publish.
+  const leak = (s: string, where: string, blockId?: string) => {
+    for (const kind of new Set(findLeaks(s).map((l) => l.kind))) out.push({ level: "high", blocks: true, title: `${where} has ${kind} in it`, detail: "Anyone who opens the site could copy it. Ask the chat to take it out (and revoke it where it was issued, since it's been pasted). Publishing waits until it's gone.", blockId });
+  };
+  leak(`${spec.name} ${spec.tagline}`, "The site name");
+  for (const b of spec.blocks) for (const { s } of strings(b.props)) leak(s, LABEL[b.type] ?? b.type, b.id);
+  for (const l of spec.links ?? []) leak(l.url, "Your links");
 
   scan(`${spec.name} ${spec.tagline}`, "The site name");
   for (const b of spec.blocks) for (const { key, s } of strings(b.props)) if (!/^(id|type|color|icon|image|src)$/i.test(key)) scan(s, LABEL[b.type] ?? b.type, b.id);

@@ -55,8 +55,8 @@ export default function Home() {
       <Faq />
 
       <footer className="mx-auto flex max-w-[1240px] flex-wrap items-center justify-between gap-4 px-5 py-10 text-[13px] text-zinc-500">
-        <span className="flex items-center gap-4"><span>Built for NEAR HACKATHON 2026</span><a href="/templates" className="hover:text-zinc-300">Templates</a><a href="/privacy" className="hover:text-zinc-300">Privacy</a><a href="/terms" className="hover:text-zinc-300">Terms</a><a href="/llms.txt" className="hover:text-zinc-300">llms.txt</a></span>
-        <span className="flex items-center gap-4">
+        <span className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2"><span>Built for NEAR HACKATHON 2026</span><a href="/templates" className="hover:text-zinc-300">Templates</a><a href="/security" className="hover:text-zinc-300">Security</a><a href="/privacy" className="hover:text-zinc-300">Privacy</a><a href="/terms" className="hover:text-zinc-300">Terms</a><a href="/llms.txt" className="hover:text-zinc-300">llms.txt</a></span>
+        <span className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
           <span className="flex items-center gap-1.5"><BrandIcon icon={BRANDS.near} size={13} color="#a1a1aa" /> NEAR AI Cloud</span>
           <span className="flex items-center gap-1.5"><BrandIcon icon={BRANDS.near} size={13} color="#a1a1aa" /> NEAR Intents</span>
           <span className="flex items-center gap-1.5"><BrandIcon icon={BRANDS.solana} size={13} color="#a1a1aa" /> Helius</span>

@@ -112,7 +112,7 @@ export function PublishDialog({ open, onClose, project, onSaved }: { open: boole
   );
 }
 
-type Finding = { level: "high" | "warn" | "info"; title: string; detail: string };
+type Finding = { level: "high" | "warn" | "info"; title: string; detail: string; blocks?: true };
 
 /** The pre-publish check (lib/safety.ts): drainer wording, promises of profit, a wrong CA, lookalike or http links. */
 function SafetySection({ projectId, open, version }: { projectId: string; open: boolean; version: number }) {
@@ -143,14 +143,14 @@ function SafetySection({ projectId, open, version }: { projectId: string; open: 
             <li key={i} className="flex min-w-0 gap-2">
               {x.level === "info" ? <Info size={13} className="mt-0.5 shrink-0 text-zinc-500" /> : <AlertTriangle size={13} className={`mt-0.5 shrink-0 ${x.level === "high" ? "text-red-300" : "text-amber-300"}`} />}
               <div className="min-w-0">
-                <p className="text-[12.5px] text-zinc-200">{x.title}</p>
+                <p className="text-[12.5px] text-zinc-200">{x.title}{x.blocks && <span className="text-red-300"> · stops publishing</span>}</p>
                 <p className="break-words text-[12px] leading-snug text-zinc-500">{x.detail}</p>
               </div>
             </li>
           ))}
         </ul>
       )}
-      {!f.length && <p className="mt-1.5 text-[12px] text-zinc-500">Checked the words and links for drainer wording, promises of profit, a wrong contract address and lookalike links.</p>}
+      {!f.length && <p className="mt-1.5 text-[12px] text-zinc-500">Checked every word and link for leaked keys, drainer wording, promises of profit, a wrong contract address and lookalike links.</p>}
     </div>
   );
 }

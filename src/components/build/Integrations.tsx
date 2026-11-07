@@ -177,7 +177,7 @@ export function IntegrationsDialog({ open, onClose, project, onSaved, heliusOnSe
 
   return (
     <Dialog open={open} onClose={onClose} title="Integrations" icon={<Plug size={15} />} width={900}>
-      <div className="grid min-h-[520px] md:grid-cols-[260px_1fr]">
+      <div className="grid min-h-[520px] md:grid-cols-[260px_minmax(0,1fr)]">
         <div className="space-y-0.5 border-b border-white/[0.07] p-2 md:border-b-0 md:border-r">
           {rows.map((r) => <Row key={r.id} {...r} active={active === r.id} onClick={() => setActive(r.id)} />)}
         </div>

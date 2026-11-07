@@ -272,7 +272,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
   const title = p.title;
 
   return (
-    <div className="flex h-screen flex-col bg-ink-950">
+    <div className="flex h-screen flex-col overflow-hidden bg-ink-950">
       {/* Top bar */}
       <header className="flex h-14 shrink-0 items-center gap-2 border-b border-white/[0.07] px-3">
         {/* Our logo (home) / the project's logo / its name */}
@@ -341,7 +341,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
       </header>
       {!canEdit && <div className="shrink-0 border-b border-white/[0.07] bg-ink-900 px-4 py-2 text-[12px] text-zinc-400">{viewNote ?? "View only: this project belongs to another account. Duplicate it from your own projects to make changes."}</div>}
 
-      <div className="grid min-h-0 flex-1 md:grid-cols-[400px_1fr]">
+      <div className="grid min-h-0 flex-1 md:grid-cols-[400px_minmax(0,1fr)]">
         {/* Chat */}
         <aside
           className={`relative min-h-0 flex-col border-r border-white/[0.07] bg-ink-950 ${mobileTab === "chat" ? "flex" : "hidden"} md:flex`}
@@ -531,9 +531,9 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
         </aside>
 
         {/* Preview */}
-        <section className={`min-h-0 flex-col bg-[radial-gradient(rgba(255,255,255,0.05)_1px,transparent_1px)] [background-size:16px_16px] ${mobileTab === "preview" ? "flex" : "hidden"} md:flex`}>
-          <div className="flex min-h-0 flex-1 justify-center overflow-hidden p-3">
-            <div className="flex h-full flex-col overflow-hidden rounded-[14px] border border-white/[0.08] bg-ink-900 shadow-[0_12px_40px_rgba(0,0,0,0.4)] transition-[width] duration-300" style={{ width: view === "code" ? "100%" : WIDTH[device], maxWidth: "100%" }}>
+        <section className={`min-h-0 min-w-0 flex-col bg-[radial-gradient(rgba(255,255,255,0.05)_1px,transparent_1px)] [background-size:16px_16px] ${mobileTab === "preview" ? "flex" : "hidden"} md:flex`}>
+          <div className="flex min-h-0 min-w-0 flex-1 justify-center overflow-hidden p-3">
+            <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-[14px] border border-white/[0.08] bg-ink-900 shadow-[0_12px_40px_rgba(0,0,0,0.4)] transition-[width] duration-300" style={{ width: view === "code" ? "100%" : WIDTH[device], maxWidth: "100%" }}>
               <div className="flex h-9 shrink-0 items-center gap-2 border-b border-white/[0.06] px-3">
                 <span className="flex gap-1.5"><span className="h-2 w-2 rounded-full bg-white/15" /><span className="h-2 w-2 rounded-full bg-white/15" /><span className="h-2 w-2 rounded-full bg-white/15" /></span>
                 <span className="mx-auto flex h-6 min-w-0 max-w-[360px] flex-1 items-center justify-center gap-1.5 truncate rounded-md bg-white/[0.04] px-2 font-mono text-[11px] text-zinc-500">

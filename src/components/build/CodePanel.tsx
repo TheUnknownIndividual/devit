@@ -241,11 +241,11 @@ export function CodePanel({ projectId, version, onAsk }: { projectId: string; ve
                 <button type="button" className="btn btn-ghost btn-icon h-7 w-7" onClick={download} aria-label="Download the file" title="Download this file"><Download size={13} /></button>
               </div>
             </div>
-            <div ref={codeRef} className="min-h-0 flex-1 overflow-auto py-2 font-mono text-[12px] leading-[1.65] text-zinc-200">
+            <div ref={codeRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden py-2 font-mono text-[12px] leading-[1.65] text-zinc-200">
               {lines.map((l, i) => (
-                <div key={i} data-line={i + 1} className={`flex min-w-max pr-6 ${jump && jump.path === cur && jump.line === i + 1 ? "bg-sel/15" : "hover:bg-white/[0.025]"}`}>
-                  <span className="sticky left-0 shrink-0 select-none bg-ink-950 pl-3 pr-4 text-right text-zinc-600" style={{ width: `${gutter + 3}ch` }}>{i + 1}</span>
-                  <span className="whitespace-pre">{l ? colour(l, kind) : " "}</span>
+                <div key={i} data-line={i + 1} className={`flex min-w-0 pr-4 ${jump && jump.path === cur && jump.line === i + 1 ? "bg-sel/15" : "hover:bg-white/[0.025]"}`}>
+                  <span className="shrink-0 select-none pl-3 pr-4 text-right text-zinc-600" style={{ width: `${gutter + 3}ch` }}>{i + 1}</span>
+                  <span className="min-w-0 flex-1 whitespace-pre-wrap [overflow-wrap:anywhere]">{l ? colour(l, kind) : " "}</span>
                 </div>
               ))}
             </div>

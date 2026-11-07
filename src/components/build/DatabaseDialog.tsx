@@ -156,16 +156,16 @@ export function DatabaseDialog({ open, onClose, project, hasForm }: { open: bool
                 {hasForm ? "No entries yet. They appear here when visitors use the form on your published site." : "Your site has no signup form yet. Comment on any section with “add a waitlist” (or “collect wallets for the whitelist”) and the agent adds one."}
               </div>
             ) : (
-              <div className="max-h-64 overflow-auto rounded-[12px] border border-white/[0.08]">
-                <table className="w-full text-left text-[12.5px]">
+              <div className="max-h-64 overflow-y-auto overflow-x-hidden rounded-[12px] border border-white/[0.08]">
+                <table className="w-full table-fixed text-left text-[12.5px]">
                   <thead className="sticky top-0 bg-ink-850 text-zinc-500"><tr><th className="px-3 py-2 font-medium">When</th><th className="px-3 py-2 font-medium">Email</th><th className="px-3 py-2 font-medium">Wallet</th><th className="px-3 py-2 font-medium">List</th></tr></thead>
                   <tbody>
                     {v.rows.map((r, i) => (
                       <tr key={i} className="border-t border-white/[0.05] text-zinc-300">
-                        <td className="whitespace-nowrap px-3 py-2 text-zinc-500">{r.created_at ? new Date(r.created_at).toLocaleString() : ""}</td>
-                        <td className="max-w-[200px] truncate px-3 py-2">{r.email ?? ""}</td>
-                        <td className="max-w-[180px] truncate px-3 py-2 font-mono text-[12px]">{r.wallet ?? ""}</td>
-                        <td className="px-3 py-2 text-zinc-500">{r.kind}</td>
+                        <td className="truncate px-3 py-2 text-zinc-500">{r.created_at ? new Date(r.created_at).toLocaleString() : ""}</td>
+                        <td className="truncate px-3 py-2">{r.email ?? ""}</td>
+                        <td className="truncate px-3 py-2 font-mono text-[12px]">{r.wallet ?? ""}</td>
+                        <td className="truncate px-3 py-2 text-zinc-500">{r.kind}</td>
                       </tr>
                     ))}
                   </tbody>
