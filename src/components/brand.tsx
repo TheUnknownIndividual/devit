@@ -50,7 +50,7 @@ export function LetterMark({ letter, bg, fg = "#fff", size = 20 }: { letter: str
 export const LOGOS = {
   metamask: "/brands/metamask.svg", phantom: "/brands/phantom.svg", solflare: "/brands/solflare.svg", backpack: "/brands/backpack.png",
   rabby: "/brands/rabby.png", hot: "/brands/hot.svg", meteor: "/brands/meteor.png", intear: "/brands/intear.svg",
-  walletconnect: "/brands/walletconnect.png", privy: "/brands/privy.png", helius: "/brands/helius.svg", alchemy: "/brands/alchemy.svg", jupiter: "/brands/jupiter.svg",
+  walletconnect: "/brands/walletconnect.png", privy: "/brands/privy.png", helius: "/brands/helius.svg", alchemy: "/brands/alchemy.svg", hex: "/brands/hex.png", jupiter: "/brands/jupiter.svg",
   kyberswap: "/brands/kyberswap.png", nearIntents: "/brands/near-intents.png",
 } as const;
 

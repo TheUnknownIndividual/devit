@@ -17,7 +17,7 @@ const INTEGRATIONS: Array<{ name: string; what: string; mark: React.ReactNode }>
   { name: "Privy", what: "Email and social sign-in", mark: <BrandLogo src={LOGOS.privy} /> },
   { name: "Helius", what: "Solana data and RPC", mark: <BrandLogo src={LOGOS.helius} /> },
   { name: "Alchemy", what: "EVM data and RPC", mark: <BrandLogo src={LOGOS.alchemy} /> },
-  { name: "NEAR Intents", what: "Cross-chain buys", mark: <BrandLogo src={LOGOS.nearIntents} /> },
+  { name: "NEAR Intents · HEX", what: "Cross-chain buys and bridging", mark: <LogoStack srcs={[LOGOS.nearIntents, LOGOS.hex]} /> },
   { name: "Jupiter · KyberSwap", what: "Swaps on the site", mark: <LogoStack srcs={[LOGOS.jupiter, LOGOS.kyberswap]} /> },
 ];
 

@@ -563,8 +563,22 @@ function IntentsRoute({ chain, token, ticker }: { chain: Chain; token: TokenInfo
         </div>
       )}
       {err && <div className="ss-err">{err}</div>}
+      {!live && (
+        <div className="ss-note">
+          Rather use an exchange app? <a className="ss-tr-link" href={hexUrl(pay, chain, token)} target="_blank" rel="noreferrer">Swap on HEX Exchange</a>, HOT Labs&apos; cross-chain swap across 35+ networks, with this token already picked.
+        </div>
+      )}
     </>
   );
+}
+
+// HEX Exchange (hex.exchange, HOT Labs) takes ?from=<chain>:<token|native>&to=<chain>:<token|native>. Its chain keys
+// match our pay-with prefixes (eth, sol, btc, near, base, arb, op, avax, pol, sui, aptos, doge, zec).
+const HEX_CHAIN: Record<Chain, string> = { near: "near", solana: "sol", ethereum: "eth", base: "base", bsc: "bsc", robinhood: "hood" };
+function hexUrl(pay: string, chain: Chain, token: TokenInfo | null): string {
+  const from = `${pay.split(":")[0]}:native`;
+  const to = `${HEX_CHAIN[chain]}:${token && !token.demo ? token.address : "native"}`;
+  return `https://hex.exchange/?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
 }
 
 interface RelayQ { requestId: string | null; amountOut: string; amountOutUsd: string | null; symbol: string; impactPct: number | null; timeEstimate: number | null; feesUsd: number | null; txs: Array<{ to: string; data: string; value: string; chainId: number; gas: string | null }>; walletChain: Chain }
