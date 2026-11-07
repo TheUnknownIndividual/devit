@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import { TopBar } from "@/components/account/TopBar";
 import { SettingsView } from "@/components/settings/SettingsView";
 import { SignInNudge } from "@/components/projects/SignInNudge";
-import { buildsToday, getUser, publicUser, viewer } from "@/lib/accounts";
+import { getUser, publicUser, viewer } from "@/lib/accounts";
+import { balance, payerFor } from "@/lib/credits";
 import { isAdmin, sweepPayments } from "@/lib/billing";
 import { sweepCreditOrders } from "@/lib/credit-orders";
-import { entitled, planOf } from "@/lib/entitlements";
-import { FAIR_USE_BUILDS_PER_DAY, plan } from "@/lib/plans";
+import { entitled } from "@/lib/entitlements";
 import { teamsOf } from "@/lib/teams";
 import { teamView } from "@/lib/team-view";
 
@@ -26,7 +26,7 @@ export default async function Settings() {
         {user ? (
           <SettingsView
             initial={publicUser(user)}
-            usage={{ today: await buildsToday(`user:${user.id}`), cap: (await entitled(user, "unlimitedBuilds")) ? null : plan(await planOf(user)).buildsPerDay, fairUse: FAIR_USE_BUILDS_PER_DAY }}
+            usage={await balance(await payerFor(user, "-"))}
             admin={isAdmin(user)}
             teams={{ list: await Promise.all((await teamsOf(user.id)).map((t) => teamView(t, user))), canCreate: await entitled(user, "teams") }}
           />

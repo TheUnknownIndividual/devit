@@ -26,6 +26,9 @@ const Patch = z.object({
   rpcUrl: z.union([z.literal(""), z.string().max(400).refine(isPublicHttps, "Use a public https RPC URL")]).optional(),
   walletconnectProjectId: z.union([z.literal(""), z.string().regex(/^[0-9a-f]{32}$/i)]).optional(),
   privyAppId: z.union([z.literal(""), z.string().regex(/^[a-z0-9]{25}$/i)]).optional(),
+  gaId: z.union([z.literal(""), z.string().trim().toUpperCase().regex(/^G-[A-Z0-9]{4,16}$/, "A GA4 measurement ID looks like G-XXXXXXXXXX.")]).optional(),
+  /** The Search Console token, or the whole <meta name="google-site-verification" …> tag pasted as it is. */
+  gscToken: z.string().trim().max(400).transform((v) => v.match(/content=["']([^"']+)["']/i)?.[1] ?? v).pipe(z.union([z.literal(""), z.string().regex(/^[A-Za-z0-9_-]{20,80}$/, "Paste the HTML tag from Search Console, or just its content value.")])).optional(),
   themeId: z.enum(THEME_IDS).optional(),
   accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   /** A picture uploaded to this project (its /api/assets url) as the site's logo; "" goes back to the token's. */
@@ -70,6 +73,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (b.walletconnectProjectId !== undefined) p.integrations.walletconnectProjectId = b.walletconnectProjectId || undefined;
     if (b.connectorsOff) p.connectorsOff = b.connectorsOff.length ? [...new Set(b.connectorsOff)] : undefined;
     if (b.privyAppId !== undefined) p.integrations.privyAppId = b.privyAppId || undefined;
+    if (b.gaId !== undefined) p.integrations.gaId = b.gaId || undefined;
+    if (b.gscToken !== undefined) p.integrations.gscToken = b.gscToken || undefined;
     if (p.spec && b.logo !== undefined && (b.logo === "" || (p.assets ?? []).some((a) => a.url === b.logo))) {
       snapshot(p, b.logo ? "New logo" : "Logo reset");
       p.spec.logo = b.logo || null;

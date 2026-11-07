@@ -8,7 +8,7 @@ import {
 import { HistoryPanel, KnowledgeDialog, useDictation } from "./BuilderExtras";
 import { CodePanel } from "./CodePanel";
 import { matchCommands, type SlashCommand } from "@/lib/commands";
-import { ProjectLogo } from "@/components/projects/ProjectList";
+import { LogoUpload, ProjectLogo } from "@/components/projects/ProjectList";
 import { LogoMark } from "@/components/Logo";
 import { Tour, BUILDER_TOUR, restartTour } from "@/components/ui/Tour";
 import { BRANDS, BrandIcon, ChainIcon } from "@/components/brand";
@@ -48,6 +48,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
   const [viewing, setViewing] = useState<number | null>(null);
   const [view, setView] = useState<"preview" | "code">("preview");
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeTopup, setNoticeTopup] = useState(false);
   const [device, setDevice] = useState<Device>("desktop");
   const [selectOn, setSelectOn] = useState(canEdit);
   // Every pick in the preview; shift-click adds or removes one, and a comment goes to all of them.
@@ -231,8 +232,10 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
     setBusy(kind);
     try {
       const r = await fetch(`/api/projects/${p.id}${path}`, { method, headers: { "content-type": "application/json", ...modelHeader() }, body: JSON.stringify(body) });
-      const j = await r.json();
-      if (r.ok && j.id) setP(j as PublicProject);
+      const j = await r.json().catch(() => null);
+      if (r.ok && j?.id) setP(j as PublicProject);
+      // Refusals (out of AI credits, the hourly cap) say why, with a way to top up when that's the fix.
+      if (!r.ok) { setNotice(j?.error ?? "That didn't go through. Try again."); setNoticeTopup(!!j?.topup); }
       return r.ok;
     } finally {
       setBusy(null);
@@ -250,7 +253,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
       void apply([...comments, ...fresh]);
       return;
     }
-    void call("/chat", { text: t, ...(assets.length ? { assets } : {}), ...(docs.length ? { docs } : {}), ...(mode !== "edit" ? { mode } : {}) }, "chat");
+    void call("/chat", { text: t, ...(assets.length ? { assets } : {}), ...(docs.length ? { docs } : {}), ...(mode !== "edit" ? { mode } : {}) }, "chat").then((ok) => { if (!ok) setText((cur) => cur || t); });
   }
 
   // A plan's go-ahead: the request and its steps go in as one edit.
@@ -278,7 +281,11 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
         {/* Our logo (home) / the project's logo / its name */}
         <Link href="/" className="btn btn-ghost btn-icon" aria-label="Home" title="Home"><LogoMark size={20} /></Link>
         <span aria-hidden="true" className="select-none text-[18px] font-light text-zinc-700">/</span>
-        <span className="px-1" title={title}><ProjectLogo src={p.spec?.logo ?? p.spec?.token?.logo ?? p.spec?.x?.profile.avatar ?? null} name={p.spec?.ticker || title} size={28} /></span>
+        <span className="flex px-1" title={title}>
+          {canEdit
+            ? <LogoUpload projectId={p.id} src={p.spec?.logo ?? p.spec?.token?.logo ?? p.spec?.x?.profile.avatar ?? null} name={p.spec?.ticker || title} size={28} ready={ready} onDone={(err, saved) => { if (err) setNotice(err); else if (saved && typeof saved === "object" && "id" in saved) { setP(saved as PublicProject); setNotice("Logo updated."); } }} />
+            : <ProjectLogo src={p.spec?.logo ?? p.spec?.token?.logo ?? p.spec?.x?.profile.avatar ?? null} name={p.spec?.ticker || title} size={28} />}
+        </span>
         <span aria-hidden="true" className="hidden select-none text-[18px] font-light text-zinc-700 sm:inline">/</span>
         <ProjectName name={title} ticker={p.spec?.ticker ?? null} editable={canEdit} onSave={(name) => call("", { name }, "patch", "PATCH")} />
         {!canEdit && <span className="hidden h-6 shrink-0 items-center sm:inline-flex gap-1 rounded-md border border-white/10 bg-white/[0.04] px-1.5 text-[11px] text-zinc-400"><Eye size={12} /> View only</span>}
@@ -397,7 +404,7 @@ export function Workspace({ initial, heliusOnServer, canEdit = true, viewNote, s
             {busy === "apply" || busy === "chat" ? (
               <div className="flex items-center gap-2.5 text-[13px] text-zinc-400"><Loader2 size={14} className="animate-spin text-sel" /> {busy === "apply" ? `Applying ${applying} change${applying === 1 ? "" : "s"}…` : mode === "plan" ? "Drafting a plan…" : mode === "ask" ? "Thinking…" : "Working on it…"}</div>
             ) : null}
-            {notice && <div className="flex items-start gap-2 rounded-[10px] border border-amber-300/20 bg-amber-300/[0.05] px-3 py-2 text-[12.5px] text-amber-200"><span className="flex-1">{notice}</span><button type="button" aria-label="Dismiss" className="text-amber-200/70 hover:text-amber-100" onClick={() => setNotice(null)}><X size={13} /></button></div>}
+            {notice && <div className="flex items-start gap-2 rounded-[10px] border border-amber-300/20 bg-amber-300/[0.05] px-3 py-2 text-[12.5px] text-amber-200"><span className="min-w-0 flex-1">{notice}{noticeTopup && <> <Link href="/pricing#topup" className="underline underline-offset-2 hover:text-amber-100">Top up credits</Link></>}</span><button type="button" aria-label="Dismiss" className="text-amber-200/70 hover:text-amber-100" onClick={() => setNotice(null)}><X size={13} /></button></div>}
           </div>
 
           {comments.length > 0 && busy !== "apply" && (

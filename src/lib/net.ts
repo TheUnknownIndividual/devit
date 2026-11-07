@@ -8,9 +8,12 @@ export function isPublicHttps(raw: string): boolean {
 
 const hits = new Map<string, number[]>();
 
+/** The visitor's address as Cloudflare saw it (the tunnel sets cf-connecting-ip). */
+export const clientIp = (req: Request) => req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for")?.split(",")[0].trim() || "local";
+
 /** Per-visitor hourly cap for routes that spend AI credits. Returns a 429 response once the cap is hit, else null. */
 export function overLimit(req: Request, bucket: string, perHour: number): Response | null {
-  const ip = req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for")?.split(",")[0].trim() || "local";
+  const ip = clientIp(req);
   const key = `${bucket}:${ip}`, now = Date.now();
   const recent = (hits.get(key) ?? []).filter((t) => now - t < 3_600_000);
   if (recent.length >= perHour) {

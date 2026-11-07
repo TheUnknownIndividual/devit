@@ -12,10 +12,11 @@ import { snapshot } from "@/lib/history";
 import { connectorContext } from "@/lib/connector-context";
 import { askAbout, planChange } from "@/lib/assist";
 import { THEMES, fitAccent, readableOn } from "@/lib/themes";
-import { overLimit } from "@/lib/net";
+import { clientIp, overLimit } from "@/lib/net";
+import { metered, payerForProject } from "@/lib/credits";
 import { ownerKeysFor } from "@/lib/accounts";
 import { editable } from "@/lib/access";
-import { runWithKeys } from "@/lib/keyscope";
+import { hasOwnLlm, runWithKeys } from "@/lib/keyscope";
 import { modelFrom } from "@/lib/models";
 import { projectEntitled } from "@/lib/entitlements";
 import { redactLeaks, removedNote } from "@/lib/leaks";
@@ -48,8 +49,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const g = await editable(id);
   if (g instanceof Response) return g;
-  // Model calls and chain reads run on the owner's own keys when they've added some.
-  return runWithKeys(await ownerKeysFor(g.p.ownerId), () => chat(req, ctx), await projectEntitled(g.p, "priorityModels"), modelFrom(req));
+  // Model calls and chain reads run on the owner's own keys when they've added some; what runs on ours is charged to
+  // the owner's AI credits at what it really cost.
+  const keys = await ownerKeysFor(g.p.ownerId);
+  const priority = await projectEntitled(g.p, "priorityModels");
+  const r = await metered(await payerForProject(g.p.ownerId, clientIp(req)), "edit", hasOwnLlm(keys), () => runWithKeys(keys, () => chat(req, ctx), priority, modelFrom(req)));
+  return "refused" in r ? r.refused : r.value;
 }
 
 async function chat(req: Request, ctx: { params: Promise<{ id: string }> }) {

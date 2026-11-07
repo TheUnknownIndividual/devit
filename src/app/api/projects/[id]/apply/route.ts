@@ -6,10 +6,11 @@ import { updateProject } from "@/lib/store";
 import { newId } from "@/lib/spec";
 import { publicProject } from "@/lib/public";
 import { snapshot } from "@/lib/history";
-import { overLimit } from "@/lib/net";
+import { clientIp, overLimit } from "@/lib/net";
+import { metered, payerForProject } from "@/lib/credits";
 import { ownerKeysFor } from "@/lib/accounts";
 import { editable } from "@/lib/access";
-import { runWithKeys } from "@/lib/keyscope";
+import { hasOwnLlm, runWithKeys } from "@/lib/keyscope";
 import { modelFrom } from "@/lib/models";
 import { projectEntitled } from "@/lib/entitlements";
 
@@ -40,7 +41,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const own = new Set((p.assets ?? []).map((a) => a.id));
   const comments = parsed.data.comments.map((c) => ({ ...c, assets: c.assets?.filter((a) => own.has(a)) }));
   const urls = (p.assets ?? []).filter((a) => comments.some((c) => c.assets?.includes(a.id))).map((a) => a.url);
-  const res = await runWithKeys(await ownerKeysFor(p.ownerId), () => applyComments(p, comments), await projectEntitled(p, "priorityModels"), modelFrom(req));
+  const keys = await ownerKeysFor(p.ownerId);
+  const priority = await projectEntitled(p, "priorityModels");
+  const m = await metered(await payerForProject(p.ownerId, clientIp(req)), "edit", hasOwnLlm(keys), () => runWithKeys(keys, () => applyComments(p, comments), priority, modelFrom(req)));
+  if ("refused" in m) return m.refused;
+  const res = m.value;
   const out = await updateProject(id, (q) => {
     if (!q.spec) return;
     snapshot(q, comments.map((c) => `${c.blockLabel}: ${c.text}`).join("; "));

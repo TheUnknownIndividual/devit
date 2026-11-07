@@ -53,12 +53,12 @@ export interface DomainOrder {
   status?: string; received?: number; paidAt?: number; op?: string; opAt?: number; liveAt?: number; error?: string; checkedAt?: number;
 }
 /**
- * A build pack bought through sitesmith (lib/credit-orders.ts). awaiting: deposit address handed out; paid: 1-Click
+ * A credit pack bought through sitesmith (lib/credit-orders.ts). awaiting: deposit address handed out; paid: 1-Click
  * delivered the full amount and the builds were added (once, in the same write); refund: arrived short or to the
  * wrong account, for the owner to refund by hand; closed: refunded, failed or abandoned.
  */
 export interface CreditOrder {
-  depositAddress: string; pack: string; builds: number; usd: number; pay: string; refundTo: string; at: number;
+  depositAddress: string; pack: string; credits: number; usd: number; pay: string; refundTo: string; at: number;
   state: "awaiting" | "paid" | "refund" | "closed";
   status?: string; received?: number; paidAt?: number; error?: string; checkedAt?: number;
 }
@@ -77,7 +77,7 @@ export interface User {
   planUntil?: number;
   payments?: Payment[];
   domainOrders?: DomainOrder[];
-  /** Extra builds from packs, used once a Free day's builds are gone. Never expire. */
+  /** AI credits from packs (1 credit = $0.01 of model cost); spent after the plan's own credits for the period. */
   credits?: number;
   creditOrders?: CreditOrder[];
   grants?: Grant[];
@@ -183,7 +183,7 @@ export function publicUser(u: User) {
     avatar: u.avatar ?? u.picture ?? null, ownAvatar: !!u.avatar, avatarSeed: avatarSeed(u), plan: activePlan(u), planUntil: u.planUntil ?? null,
     payments: (u.payments ?? []).map((x) => ({ depositAddress: x.depositAddress, plan: x.plan, cycle: x.cycle, usd: x.usd, pay: x.pay, at: x.at, status: x.status ?? null, received: x.received ?? null, settledAt: x.settledAt ?? null })),
     credits: u.credits ?? 0,
-    creditOrders: (u.creditOrders ?? []).map((o) => ({ depositAddress: o.depositAddress, pack: o.pack, builds: o.builds, usd: o.usd, pay: o.pay, at: o.at, state: o.state, status: o.status ?? null, received: o.received ?? null, error: o.error ?? null })),
+    creditOrders: (u.creditOrders ?? []).map((o) => ({ depositAddress: o.depositAddress, pack: o.pack, credits: o.credits, usd: o.usd, pay: o.pay, at: o.at, state: o.state, status: o.status ?? null, received: o.received ?? null, error: o.error ?? null })),
     github: u.github ? { login: u.github.login, canPush: u.github.scopes.includes("repo") || u.github.scopes.includes("public_repo"), at: u.github.at } : null,
     grants: (u.grants ?? []).map((g) => ({ plan: g.plan, days: g.days, at: g.at })),
     methods: u.methods.map((m) => ({ kind: m.kind, id: m.kind === "passkey" ? m.id.slice(0, 12) : m.id, fullId: m.id, label: m.label, at: m.at })),
@@ -323,20 +323,20 @@ export async function countBuild(who: string): Promise<void> {
   await writeJson(`usage/${sha256(who)}.json`, { day: today(), builds: n + 1 });
 }
 
-// ---------- build credits ----------
+// ---------- AI credits ----------
 
-/** Takes one build credit, if there is one. Under the account lock, so two builds at once can't spend the same one. */
-export async function takeCredit(userId: string): Promise<boolean> {
-  let took = false;
-  await updateUser(userId, (u) => {
-    if ((u.credits ?? 0) >= 1) { u.credits = (u.credits ?? 0) - 1; took = true; }
-  });
-  return took;
+/** Model spend in a credit period, per payer (lib/credits.ts keeps the arithmetic). */
+export async function readCreditUse(who: string): Promise<{ period: string; usd: number } | null> {
+  return readJson(`usage/credits-${sha256(who)}.json`);
+}
+export async function writeCreditUse(who: string, v: { period: string; usd: number }): Promise<void> {
+  await writeJson(`usage/credits-${sha256(who)}.json`, v);
 }
 
-/** Gives back a credit taken for a build that never got going. */
-export async function refundCredit(userId: string): Promise<void> {
-  await updateUser(userId, (u) => { u.credits = (u.credits ?? 0) + 1; });
+/** Takes up to `credits` from the account's pack balance, under the account lock; never below zero. */
+export async function spendPackCredits(userId: string, credits: number): Promise<void> {
+  if (!(credits > 0)) return;
+  await updateUser(userId, (u) => { u.credits = Math.max(0, Math.round(((u.credits ?? 0) - credits) * 100) / 100); });
 }
 
 // ---------- API keys ----------

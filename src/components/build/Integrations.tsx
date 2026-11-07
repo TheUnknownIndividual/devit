@@ -3,14 +3,15 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AlertTriangle, ArrowUpRight, Check, CheckCircle2, ClipboardPaste, Copy, Loader2, MousePointerClick, Plug, ShieldCheck, Cable, UserPlus } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
-import { BrandLogo, LogoStack, LOGOS } from "@/components/brand";
+import { BRANDS, BrandIcon, BrandLogo, LogoStack, LOGOS } from "@/components/brand";
+import { GooglePane, XDataPane } from "./IntegrationsGoogle";
 import { Connectors } from "./Connectors";
 import type { PublicProject } from "@/lib/public";
 
 // Guided setup for services that need an ID from their own dashboard. Each guide is a short run of
 // illustrated steps, a button that opens the right page, a paste box, and a live check before saving.
 
-type Id = "evm" | "solana" | "near" | "intents" | "walletconnect" | "privy" | "helius" | "connectors";
+type Id = "evm" | "solana" | "near" | "intents" | "walletconnect" | "privy" | "helius" | "ga" | "gsc" | "xdata" | "connectors";
 
 interface GuideStep { title: string; body: string; art: ReactNode }
 
@@ -172,6 +173,9 @@ export function IntegrationsDialog({ open, onClose, project, onSaved, heliusOnSe
     { id: "walletconnect", name: "WalletConnect", mark: <BrandLogo src={LOGOS.walletconnect} />, on: !!ints.walletconnectProjectId, status: ints.walletconnectProjectId ? "Connected" : "Needs a Project ID" },
     { id: "privy", name: "Privy", mark: <BrandLogo src={LOGOS.privy} />, on: !!ints.privyAppId, status: ints.privyAppId ? "Connected" : project.kind === "dapp" ? "Recommended for dApps" : "Email and social sign-in" },
     { id: "helius", name: "Helius", mark: <BrandLogo src={LOGOS.helius} />, on: heliusOnServer, status: heliusOnServer ? "On for Solana data" : "Public Solana RPC" },
+    { id: "ga", name: "Google Analytics", mark: <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-white/[0.07]"><BrandIcon icon={BRANDS.googleAnalytics} size={15} /></span>, on: !!ints.gaId, status: ints.gaId ? ints.gaId : "Visitors, sources, buys" },
+    { id: "gsc", name: "Google Search Console", mark: <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-white/[0.07]"><BrandIcon icon={BRANDS.searchConsole} size={15} /></span>, on: !!ints.gscToken, status: ints.gscToken ? "Verified tag on the site" : "Show up on Google" },
+    { id: "xdata", name: "X data (twitterapi.io)", mark: <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-white/[0.07]"><BrandIcon icon={BRANDS.x} size={13} color="#fff" /></span>, on: false, status: "Live posts from your X" },
     { id: "connectors", name: "Connectors (MCP)", mark: <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-white/[0.07] text-zinc-300"><Cable size={15} /></span>, on: false, status: "Data the agent can read" },
   ];
 
@@ -184,6 +188,10 @@ export function IntegrationsDialog({ open, onClose, project, onSaved, heliusOnSe
         <div className="min-w-0 p-5">
           {active === "connectors"
             ? <Connectors project={project} onSaved={onSaved} onClose={onClose} />
+            : active === "ga" || active === "gsc"
+            ? <GooglePane key={active} which={active} project={project} onSaved={onSaved} />
+            : active === "xdata"
+            ? <XDataPane project={project} />
             : active === "walletconnect" || active === "privy"
             ? <Guide key={active} which={active} project={project} onSaved={onSaved} />
             : <BuiltIn which={active} heliusOnServer={heliusOnServer} />}
@@ -199,7 +207,7 @@ const PANE_LOGOS: Record<"evm" | "solana" | "near" | "intents" | "helius", strin
   near: [LOGOS.hot, LOGOS.meteor, LOGOS.intear], intents: [LOGOS.nearIntents], helius: [LOGOS.helius],
 };
 
-function BuiltIn({ which, heliusOnServer }: { which: Exclude<Id, "walletconnect" | "privy" | "connectors">; heliusOnServer: boolean }) {
+function BuiltIn({ which, heliusOnServer }: { which: Exclude<Id, "walletconnect" | "privy" | "connectors" | "ga" | "gsc" | "xdata">; heliusOnServer: boolean }) {
   const copy: Record<typeof which, { title: string; points: string[] }> = {
     evm: { title: "MetaMask, Rabby, Coinbase Wallet and more", points: ["Every installed EVM wallet announces itself (EIP-6963), so visitors see their own wallet with its real logo.", "On Robinhood Chain the site asks the wallet to switch networks, or adds the network if it's new.", "Buys swap right on the site through KyberSwap; the visitor confirms in their wallet.", "No setup needed."] },
     solana: { title: "Phantom, Solflare and Backpack", points: ["Found through the Wallet Standard, with each wallet's own logo. If none is installed, the menu links to Phantom and Solflare.", "Buys swap right on the site through Jupiter; the visitor confirms in their wallet.", "No setup needed."] },
@@ -284,10 +292,10 @@ function Guide({ which, project, onSaved }: { which: "walletconnect" | "privy"; 
 
       <div className="mt-5 rounded-[12px] border border-white/[0.08] bg-ink-850 p-3.5">
         <label htmlFor="int-id" className="text-[12.5px] font-medium text-zinc-300">{g.idLabel}</label>
-        <div className="mt-2 flex gap-2">
+        <div className="mt-2 flex flex-wrap gap-2">
           <input
             id="int-id"
-            className="field font-mono text-[13px]"
+            className="field min-w-0 flex-1 basis-[220px] font-mono text-[13px]"
             value={value}
             placeholder={g.placeholder}
             spellCheck={false}

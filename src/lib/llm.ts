@@ -12,8 +12,16 @@
 
 import { hasOwnLlm, ownerKeys, pickedModel, priorityModels } from "./keyscope";
 import type { ModelChoice } from "./models";
+import { addCost, costOf, oursAllowed } from "./meter";
 
-export interface LlmResult { text: string; via: string }
+/** usage: tokens the provider reported, for the meter (our keys only). */
+export interface LlmResult { text: string; via: string; model: string; usage?: { in: number; out: number } }
+
+/** Output caps on every provider, so one reply can never run up an open-ended bill. */
+const MAX_OUT: Record<Tier, number> = { light: 2000, heavy: 6000 };
+
+type OaiUsage = { prompt_tokens?: number; completion_tokens?: number };
+const oaiUsage = (u?: OaiUsage) => (u ? { in: u.prompt_tokens ?? 0, out: u.completion_tokens ?? 0 } : undefined);
 
 const NEAR_AI_URL = process.env.NEAR_AI_BASE_URL || "https://cloud-api.near.ai/v1";
 export type Tier = "light" | "heavy";
@@ -37,7 +45,7 @@ const MODELS: Record<"nearAi" | "claude" | "openai" | "openrouter", Record<Tier,
 };
 
 export function llmAvailable(): boolean {
-  return !!(process.env.NEAR_AI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY) || hasOwnLlm(ownerKeys());
+  return (oursAllowed() && !!(process.env.NEAR_AI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY)) || hasOwnLlm(ownerKeys());
 }
 
 type Call = (system: string, user: string, timeoutMs: number, tier: Tier, key: string, model?: string) => Promise<LlmResult | null>;
@@ -69,14 +77,15 @@ const nearAi: Call = async (system, user, timeoutMs, tier, key, picked) => {
         model,
         messages: [{ role: "system", content: system }, { role: "user", content: user }],
         temperature: 0.7,
+        max_tokens: MAX_OUT[tier],
         response_format: { type: "json_object" },
       }),
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!r.ok) return null;
-    const j = (await r.json()) as { choices?: { message?: { content?: string } }[] };
+    const j = (await r.json()) as { choices?: { message?: { content?: string } }[]; usage?: OaiUsage };
     const text = j.choices?.[0]?.message?.content;
-    return text ? { text, via: `NEAR AI Cloud · ${model.split("/").pop()}` } : null;
+    return text ? { text, via: `NEAR AI Cloud · ${model.split("/").pop()}`, model, usage: oaiUsage(j.usage) } : null;
   } catch {
     return null;
   }
@@ -88,13 +97,14 @@ const claude: Call = async (system, user, timeoutMs, tier, key, picked) => {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model, max_tokens: tier === "light" ? 2000 : 6000, system, messages: [{ role: "user", content: user }] }),
+      body: JSON.stringify({ model, max_tokens: MAX_OUT[tier], system, messages: [{ role: "user", content: user }] }),
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!r.ok) return null;
-    const j = (await r.json()) as { content?: { type: string; text?: string }[] };
+    const j = (await r.json()) as { content?: { type: string; text?: string }[]; usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } };
     const text = j.content?.find((c) => c.type === "text")?.text;
-    return text ? { text, via: `Claude · ${model}` } : null;
+    const u = j.usage;
+    return text ? { text, via: `Claude · ${model}`, model, usage: u ? { in: (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0), out: u.output_tokens ?? 0 } : undefined } : null;
   } catch {
     return null;
   }
@@ -111,14 +121,16 @@ const openai: Call = async (system, user, timeoutMs, tier, key, picked) => {
         model,
         messages: [{ role: "system", content: system }, { role: "user", content: user }],
         response_format: { type: "json_object" },
+        // Reasoning counts toward this, so it's roomier than the visible reply needs.
+        max_completion_tokens: MAX_OUT[tier] * 2,
         ...(effort ? { reasoning_effort: effort } : {}),
       }),
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!r.ok) return null;
-    const j = (await r.json()) as { choices?: { message?: { content?: string } }[] };
+    const j = (await r.json()) as { choices?: { message?: { content?: string } }[]; usage?: OaiUsage };
     const text = j.choices?.[0]?.message?.content;
-    return text ? { text, via: `OpenAI · ${model}` } : null;
+    return text ? { text, via: `OpenAI · ${model}`, model, usage: oaiUsage(j.usage) } : null;
   } catch {
     return null;
   }
@@ -136,7 +148,7 @@ const openrouter: Call = async (system, user, timeoutMs, tier, key, picked) => {
     if (!r.ok) return null;
     const j = (await r.json()) as { model?: string; choices?: { message?: { content?: string } }[] };
     const text = j.choices?.[0]?.message?.content;
-    return text ? { text, via: `OpenRouter · ${j.model ?? model}` } : null;
+    return text ? { text, via: `OpenRouter · ${j.model ?? model}`, model: j.model ?? model } : null;
   } catch {
     return null;
   }
@@ -148,7 +160,7 @@ type Provider = { call: Call; key: string; own: boolean; id: "nearai" | "anthrop
 function providers(): Provider[] {
   const k = ownerKeys();
   const own: Provider[] = ([[nearAi, k.nearai, "nearai"], [claude, k.anthropic, "anthropic"], [openai, k.openai, "openai"], [openrouter, k.openrouter, "openrouter"]] as const).filter(([, key]) => !!key).map(([call, key, id]) => ({ call, key: key!, own: true, id }));
-  const ours: Provider[] = ([[nearAi, process.env.NEAR_AI_API_KEY, "nearai"], [claude, process.env.ANTHROPIC_API_KEY, "anthropic"], [openai, process.env.OPENAI_API_KEY, "openai"]] as const).filter(([, key]) => !!key).map(([call, key, id]) => ({ call, key: key!, own: false, id }));
+  const ours: Provider[] = !oursAllowed() ? [] : ([[nearAi, process.env.NEAR_AI_API_KEY, "nearai"], [claude, process.env.ANTHROPIC_API_KEY, "anthropic"], [openai, process.env.OPENAI_API_KEY, "openai"]] as const).filter(([, key]) => !!key).map(([call, key, id]) => ({ call, key: key!, own: false, id }));
   const choice = pickedModel();
   if (choice === "auto") return [...own, ...ours];
   const pick = PICKS[choice];
@@ -178,6 +190,8 @@ export async function askJson<T>(system: string, user: string, validate: (v: unk
     for (const t of tiers) {
       const res = await call(sys, user, t === "light" ? 25_000 : 60_000, t, key, model);
       if (!res) break;
+      // Our key: what it cost goes on the meter, valid answer or not.
+      if (!own) addCost(res.usage ? costOf(res.model, res.usage.in, res.usage.out) : costOf(res.model, (sys.length + user.length) / 3.5, MAX_OUT[t]));
       const v = parse(res.text, validate);
       if (v) return { value: v, via: own ? `${res.via} · your key` : res.via };
     }

@@ -1,4 +1,4 @@
-import { siNeon, siSupabase, siSpaceship, siApple, siClaude, siOpenrouter, siGoogle, siBitcoin, siBnbchain, siCloudflare, siCoinbase, siDiscord, siEthereum, siFigma, siGithub, siNear, siRobinhood, siSolana, siTelegram, siWalletconnect, siX } from "simple-icons";
+import { siNeon, siSupabase, siSpaceship, siApple, siClaude, siOpenrouter, siGoogle, siGoogleanalytics, siGooglesearchconsole, siBitcoin, siBnbchain, siCloudflare, siCoinbase, siDiscord, siEthereum, siFigma, siGithub, siNear, siRobinhood, siSolana, siTelegram, siWalletconnect, siX } from "simple-icons";
 import type { Chain } from "@/lib/spec";
 
 // Brand marks from simple-icons (CC0). Wallets that simple-icons doesn't carry (MetaMask, Phantom) show the
@@ -18,7 +18,7 @@ export const BRANDS = {
   github: siGithub, figma: siFigma, walletconnect: siWalletconnect, solana: siSolana, ethereum: siEthereum, near: siNear,
   apple: siApple, google: siGoogle, claude: siClaude, openrouter: siOpenrouter,
   robinhood: siRobinhood, x: siX, telegram: siTelegram, discord: siDiscord, coinbase: siCoinbase, bitcoin: siBitcoin, cloudflare: siCloudflare,
-  neon: siNeon, supabase: siSupabase, spaceship: siSpaceship,
+  neon: siNeon, supabase: siSupabase, spaceship: siSpaceship, googleAnalytics: siGoogleanalytics, searchConsole: siGooglesearchconsole,
 };
 
 export const CHAIN_BRAND: Record<Chain, { icon: Si; tint: string }> = {

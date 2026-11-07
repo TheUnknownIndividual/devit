@@ -1,10 +1,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { addCost, costOf } from "./meter";
 import path from "node:path";
 import { isPublicHttps } from "./net";
 import { logoAccent, themeColorOf } from "./palette";
 import { metadataAddress, parseMetadata } from "./solana";
 import { BLOCKSCOUT, DEFAULT_RPC, rpcFor } from "./chain";
 import { isVenueHost } from "./venues";
+import { ownerKeys } from "./keyscope";
 import type { Chain, Finding, Research, SocialInput, TokenInfo, Voice, XPost, XProfile } from "./spec";
 
 // Before writing a word, find out who the project is: socials and story from DexScreener, CoinGecko,
@@ -351,15 +353,21 @@ interface ApiTweet {
   extendedEntities?: { media?: Array<{ url?: string; media_url_https?: string; type?: string }> };
 }
 
-/** The same X provider neartrade reads (twitterapi.io): one call for an account's latest posts. Needs TWITTERAPI_IO_KEY. */
-async function twitterApi(handle: string): Promise<XRead | null> {
-  const key = (process.env.TWITTERAPI_IO_KEY ?? "").trim();
+/**
+ * The same X provider neartrade reads (twitterapi.io): one call for an account's latest posts. Uses the project
+ * owner's own twitterapi.io key when they've added one (Keys), else the server's TWITTERAPI_IO_KEY.
+ */
+export async function twitterApi(handle: string, ownKey?: string): Promise<XRead | null> {
+  const key = (ownKey ?? ownerKeys().twitterapi ?? process.env.TWITTERAPI_IO_KEY ?? "").trim();
   if (!key) return null;
   const body = await fetchJson<{ status?: string; tweets?: ApiTweet[]; data?: { tweets?: ApiTweet[] } }>(
     `https://api.twitterapi.io/twitter/user/last_tweets?${new URLSearchParams({ userName: handle, includeReplies: "false" })}`,
     { headers: { "X-API-Key": key } },
   );
   const list = body?.tweets ?? body?.data?.tweets;
+  // On the server's key, what twitterapi.io charges goes on the meter like a model call ($0.15 per 1k posts read).
+  const ours = !ownKey && !ownerKeys().twitterapi;
+  if (ours) addCost(Math.max(costOf("twitterapi:tweet", 0, Array.isArray(list) ? list.length : 0), 0.00015));
   if (!Array.isArray(list) || !list.length) return null;
   const own = list.filter((t) => t.author?.userName?.toLowerCase() === handle.toLowerCase());
   const a = own[0]?.author;

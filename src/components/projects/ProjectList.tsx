@@ -35,45 +35,54 @@ export function ProjectLogo({ src, name, size = 36 }: { src: string | null; name
 
 const host = (u: string) => u.replace(/^https?:\/\//, "");
 
-/** The logo on a row you can edit: click to pick a picture, or drop one on it. */
-function LogoDrop({ row, name, onDone }: { row: ProjectRow; name: string; onDone: (err: string | null) => void }) {
+/**
+ * A project logo you can change: click to pick a picture, or drop one on it. Uploads it as a project asset, sets it
+ * as the logo and hands back the saved project (or why not). Used on the Projects list and the builder header.
+ */
+export function LogoUpload({ projectId, src, name, size = 36, ready = true, onDone, className = "" }: { projectId: string; src: string | null; name: string; size?: number; ready?: boolean; onDone: (err: string | null, project?: unknown) => void; className?: string }) {
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState(false);
   async function use(file: File | undefined) {
     if (!file) return;
+    if (!file.type.startsWith("image/")) { onDone("Drop a picture (PNG, JPG, WebP or GIF)."); return; }
     const img = await prepareImage(file);
     if ("error" in img) { onDone(img.error); return; }
     setBusy(true);
     try {
-      const r = await fetch(`/api/projects/${row.id}/assets`, { method: "POST", body: img.blob, headers: { "x-name": file.name.slice(0, 60), "x-w": String(img.w), "x-h": String(img.h), "content-type": img.blob.type } });
+      const r = await fetch(`/api/projects/${projectId}/assets`, { method: "POST", body: img.blob, headers: { "x-name": file.name.slice(0, 60), "x-w": String(img.w), "x-h": String(img.h), "content-type": img.blob.type } });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.asset) { onDone(j.error ?? "That picture didn't upload."); return; }
-      const s = await fetch(`/api/projects/${row.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ logo: j.asset.url }) });
-      onDone(s.ok ? null : "Couldn't set the logo.");
+      const s = await fetch(`/api/projects/${projectId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ logo: j.asset.url }) });
+      onDone(s.ok ? null : "Couldn't set the logo.", s.ok ? await s.json().catch(() => undefined) : undefined);
     } finally { setBusy(false); }
   }
   return (
     <>
       <button
         type="button"
-        title={row.status === "ready" ? "Change the logo: click to pick a picture, or drop one here" : "The logo can change once the site is built"}
+        title={ready ? "Change the logo: click to pick a picture, or drop one here" : "The logo can change once the site is built"}
         aria-label={`Change the logo of ${name}`}
-        disabled={row.status !== "ready" || busy}
+        disabled={!ready || busy}
         onClick={() => input.current?.click()}
-        onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setOver(true); } }}
+        onDragOver={(e) => { if (ready && e.dataTransfer.types.includes("Files")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setOver(true); } }}
         onDragLeave={() => setOver(false)}
-        onDrop={(e) => { e.preventDefault(); setOver(false); void use(e.dataTransfer.files[0]); }}
-        className={`group/logo relative ml-4 shrink-0 rounded-lg ${over ? "ring-2 ring-sel" : ""}`}
+        onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setOver(false); if (ready) void use(e.dataTransfer.files[0]); }}
+        className={`group/logo relative shrink-0 rounded-lg ${over ? "ring-2 ring-sel ring-offset-2 ring-offset-ink-950" : ""} ${className}`}
       >
-        <ProjectLogo src={row.logo} name={name} />
-        <span className={`absolute inset-0 grid place-items-center rounded-lg bg-black/55 transition-opacity ${busy ? "opacity-100" : "opacity-0 group-hover/logo:opacity-100"}`}>
-          {busy ? <Loader2 size={14} className="animate-spin text-white" /> : <ImagePlus size={14} className="text-white" />}
+        <ProjectLogo src={src} name={name} size={size} />
+        <span className={`absolute inset-0 grid place-items-center rounded-lg bg-black/55 transition-opacity ${busy || over ? "opacity-100" : "opacity-0 group-hover/logo:opacity-100"}`}>
+          {busy ? <Loader2 size={Math.round(size * 0.4)} className="animate-spin text-white" /> : <ImagePlus size={Math.round(size * 0.4)} className="text-white" />}
         </span>
       </button>
       <input ref={input} type="file" hidden accept="image/png,image/jpeg,image/webp,image/gif" onChange={(e) => { void use(e.target.files?.[0]); e.target.value = ""; }} />
     </>
   );
+}
+
+/** The logo on a row you can edit. */
+function LogoDrop({ row, name, onDone }: { row: ProjectRow; name: string; onDone: (err: string | null) => void }) {
+  return <LogoUpload projectId={row.id} src={row.logo} name={name} ready={row.status === "ready"} onDone={(e) => onDone(e)} className="ml-4" />;
 }
 
 type Pick = "rename" | "duplicate" | "delete" | `move:${string}`;

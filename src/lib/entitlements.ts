@@ -4,12 +4,12 @@ import { plan, type PlanId } from "./plans";
 import type { Project } from "./spec";
 import { teamsOf, type Team } from "./teams";
 
-export type Feature = "unlimitedBuilds" | "customDomain" | "noFooter" | "privateSites" | "priorityModels" | "teams";
+export type Feature = "customDomain" | "noFooter" | "privateSites" | "priorityModels" | "teams";
 
 const FEATURES: Record<PlanId, Feature[]> = {
   free: [],
-  pro: ["unlimitedBuilds", "customDomain", "noFooter", "privateSites", "priorityModels"],
-  team: ["unlimitedBuilds", "customDomain", "noFooter", "privateSites", "priorityModels", "teams"],
+  pro: ["customDomain", "noFooter", "privateSites", "priorityModels"],
+  team: ["customDomain", "noFooter", "privateSites", "priorityModels", "teams"],
 };
 const RANK: Record<PlanId, number> = { free: 0, pro: 1, team: 2 };
 

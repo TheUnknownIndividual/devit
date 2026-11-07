@@ -6,9 +6,9 @@ import { PAY_WITH, intentQuote, oneClickTokens } from "@/lib/intents";
 import { CREDIT_PACKS, creditPack } from "@/lib/plans";
 import { overLimit } from "@/lib/net";
 
-// Buying a build pack with any token on any chain, the same way plans are paid: a NEAR Intents 1-Click quote that
+// Buying a credit pack with any token on any chain, the same way plans are paid: a NEAR Intents 1-Click quote that
 // delivers USDC on NEAR to PAYMENTS_NEAR_ACCOUNT. POST hands out the deposit address; GET moves the order along
-// (lib/credit-orders.ts) and adds the builds once the full amount lands. We never move funds ourselves.
+// (lib/credit-orders.ts) and adds the credits once the full amount lands. We never move funds ourselves.
 
 const USDC_NEAR = "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1";
 
@@ -22,9 +22,9 @@ export async function POST(req: Request) {
   const limited = overLimit(req, "billing", 20);
   if (limited) return limited;
   const to = process.env.PAYMENTS_NEAR_ACCOUNT?.trim();
-  if (!to) return NextResponse.json({ error: "Buying build packs is coming soon." }, { status: 503 });
+  if (!to) return NextResponse.json({ error: "Buying credit packs is coming soon." }, { status: 503 });
   const { user } = await viewer();
-  if (!user) return NextResponse.json({ error: "Sign in first, so the builds land on your account." }, { status: 401 });
+  if (!user) return NextResponse.json({ error: "Sign in first, so the credits land on your account." }, { status: 401 });
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Pick a coin and paste your refund address." }, { status: 400 });
   const b = parsed.data;
@@ -38,12 +38,12 @@ export async function POST(req: Request) {
   if ("error" in q) return NextResponse.json({ error: q.error }, { status: 502 });
   if (!q.depositAddress) return NextResponse.json({ error: "NEAR Intents didn't give a deposit address. Try again." }, { status: 502 });
   await updateUser(user.id, (u) => {
-    u.creditOrders = [...(u.creditOrders ?? []).filter((o) => o.depositAddress !== q.depositAddress).slice(-29), { depositAddress: q.depositAddress!, pack: pack.id, builds: pack.builds, usd: pack.usd, pay: b.pay, refundTo: b.refundTo, at: Date.now(), state: "awaiting" }];
+    u.creditOrders = [...(u.creditOrders ?? []).filter((o) => o.depositAddress !== q.depositAddress).slice(-29), { depositAddress: q.depositAddress!, pack: pack.id, credits: pack.credits, usd: pack.usd, pay: b.pay, refundTo: b.refundTo, at: Date.now(), state: "awaiting" }];
   });
-  return NextResponse.json({ depositAddress: q.depositAddress, amountIn: q.amountIn, symbol: sym, chain: PAY_WITH.find((x) => x.key === b.pay)!.chain, usd: pack.usd, builds: pack.builds, timeEstimate: q.timeEstimate });
+  return NextResponse.json({ depositAddress: q.depositAddress, amountIn: q.amountIn, symbol: sym, chain: PAY_WITH.find((x) => x.key === b.pay)!.chain, usd: pack.usd, credits: pack.credits, timeEstimate: q.timeEstimate });
 }
 
-/** Where a pack order is; adds the builds the first time 1-Click says SUCCESS with the full amount delivered. */
+/** Where a pack order is; adds the credits the first time 1-Click says SUCCESS with the full amount delivered. */
 export async function GET(req: Request) {
   const { user } = await viewer();
   if (!user) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
@@ -52,7 +52,7 @@ export async function GET(req: Request) {
   const o = await advanceCreditOrder(user.id, dep);
   const fresh = await getUser(user.id);
   return NextResponse.json(
-    { status: o?.status ?? "PENDING_DEPOSIT", state: o?.state ?? "awaiting", received: o?.received ?? null, usd: o?.usd, builds: o?.builds, error: o?.error ?? null, user: fresh ? publicUser(fresh) : null },
+    { status: o?.status ?? "PENDING_DEPOSIT", state: o?.state ?? "awaiting", received: o?.received ?? null, usd: o?.usd, credits: o?.credits, error: o?.error ?? null, user: fresh ? publicUser(fresh) : null },
     { headers: { "cache-control": "no-store" } },
   );
 }

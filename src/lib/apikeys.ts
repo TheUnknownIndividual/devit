@@ -10,6 +10,7 @@ export const KEY_LABELS: Record<KeyId, { name: string; hint: string; get: string
   openai: { name: "OpenAI", hint: "GPT models.", get: "https://platform.openai.com/api-keys" },
   openrouter: { name: "OpenRouter", hint: "Optional. Any model, one key.", get: "https://openrouter.ai/keys" },
   helius: { name: "Helius", hint: "Solana names, logos and reads.", get: "https://dashboard.helius.dev" },
+  twitterapi: { name: "twitterapi.io", hint: "Your X posts in builds, and kept fresh on your live site.", get: "https://twitterapi.io/dashboard" },
   "rpc:near": { name: "NEAR RPC", hint: "Used for NEAR reads in your builds.", get: "https://fastnear.com" },
   "rpc:solana": { name: "Solana RPC", hint: "Wins over Helius for Solana reads.", get: "https://drpc.org" },
   "rpc:ethereum": { name: "Ethereum RPC", hint: "Used for Ethereum reads.", get: "https://drpc.org" },
@@ -38,6 +39,7 @@ export async function verifyKey(id: KeyId, key: string): Promise<{ ok: true } | 
     if (id === "anthropic") r = await fetch("https://api.anthropic.com/v1/models?limit=1", { headers: { "x-api-key": key, "anthropic-version": "2023-06-01" }, signal: t });
     else if (id === "openai") r = await fetch("https://api.openai.com/v1/models", { headers: { authorization: `Bearer ${key}` }, signal: t });
     else if (id === "openrouter") r = await fetch("https://openrouter.ai/api/v1/key", { headers: { authorization: `Bearer ${key}` }, signal: t });
+    else if (id === "twitterapi") r = await fetch("https://api.twitterapi.io/oapi/my/info", { headers: { "X-API-Key": key }, signal: t });
     else if (id === "helius") r = await fetch(`https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(key)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getHealth" }), signal: t });
     else {
       r = await fetch(key, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: PROBE[id.slice(4)], params: [] }), signal: t, redirect: "error" });

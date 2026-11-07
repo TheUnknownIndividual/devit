@@ -12,7 +12,7 @@ import { Payments } from "@/components/pricing/Payments";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Pricing · sitesmith",
-  description: "sitesmith plans: Free with 5 builds a day and a devit.lol subdomain, Pro with a custom domain and private projects, Team with shared projects. Pay with any coin through NEAR Intents.",
+  description: "sitesmith plans: Free with 15 AI credits a day and a devit.lol subdomain, Pro with 800 credits a month, a custom domain and private projects, Team with shared projects. Pay with any coin through NEAR Intents.",
   alternates: { canonical: "/pricing" },
 };
 
@@ -68,7 +68,7 @@ export default async function Pricing() {
               </tbody>
             </table>
           </div>
-          <p className="mt-2 text-[11.5px] text-zinc-500">* Within fair use. Builds on your own API key never count toward a limit.</p>
+          <p className="mt-2 text-[11.5px] text-zinc-500">1 AI credit is 1 cent of model cost, counted from each reply. Work on your own model key never uses credits.</p>
         </section>
 
         <section className="mt-16" aria-labelledby="faq">

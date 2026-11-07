@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { overLimit } from "@/lib/net";
+import { clientIp, overLimit } from "@/lib/net";
+import { metered, payerFor } from "@/lib/credits";
+import { viewer } from "@/lib/accounts";
 import { enhancePrompt } from "@/lib/enhance";
 import { getProject } from "@/lib/store";
 import { canRead } from "@/lib/site-access";
@@ -20,7 +22,11 @@ export async function POST(req: Request) {
   if (leaks.length) return NextResponse.json({ error: `That has ${leaks.join(" and ")} in it. Take it out first: keys never go to the model.` }, { status: 400 });
   const p = projectId ? await getProject(projectId) : null;
   const ok = p ? await canRead(p) : false;
-  const r = await enhancePrompt(text, projectId ? "change" : "new", ok ? p : null);
+  // Charged to whoever's typing (it runs on our small model); out of credits, it's simply not offered.
+  const { user } = await viewer();
+  const m = await metered(await payerFor(user, clientIp(req)), "edit", false, () => enhancePrompt(text, projectId ? "change" : "new", ok ? p : null));
+  if ("refused" in m) return m.refused;
+  const r = m.value;
   if ("error" in r) return NextResponse.json(r, { status: 503 });
   return NextResponse.json(r);
 }

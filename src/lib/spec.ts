@@ -141,6 +141,10 @@ export interface Integrations {
   walletconnectProjectId?: string;
   privyAppId?: string;
   heliusKeyOnServer?: boolean;
+  /** Google Analytics 4 measurement id (G-XXXX) for the published site. */
+  gaId?: string;
+  /** Google Search Console HTML-tag verification token for the published site. */
+  gscToken?: string;
   /** Paid RPC URLs never reach a published page: reads go through /api/rpc. */
   rpcUrl?: string;
 }

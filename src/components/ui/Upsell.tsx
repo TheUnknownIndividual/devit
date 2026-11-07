@@ -6,13 +6,13 @@ import { ArrowUpRight, Lock } from "lucide-react";
 // What a refused Pro/Team request looks like in place: the 402 body from needsPlan() (lib/entitlements.ts), or a
 // build limit with an upgrade hint. Render it where the action's error would go.
 
-/** topup: a Free day's builds are gone, so a build pack is offered next to the plan. */
-export interface PlanRefusal { error: string; upgrade: string; feature?: string; topup?: boolean }
+/** topup: out of AI credits, so a credit pack is offered (next to the plan, when there's one to go up to). */
+export interface PlanRefusal { error: string; upgrade?: string; feature?: string; topup?: boolean }
 
 /** The body as an upsell, when it is one. */
 export const refusalOf = (j: unknown): PlanRefusal | null => {
   const o = j as Partial<PlanRefusal> | null;
-  return o && typeof o.error === "string" && typeof o.upgrade === "string" ? (o as PlanRefusal) : null;
+  return o && typeof o.error === "string" && (typeof o.upgrade === "string" || o.topup === true) ? (o as PlanRefusal) : null;
 };
 
 export function Upsell({ body, className = "" }: { body: PlanRefusal; className?: string }) {
@@ -22,7 +22,7 @@ export function Upsell({ body, className = "" }: { body: PlanRefusal; className?
       <Lock size={14} className="shrink-0 text-zinc-400" />
       <p className="min-w-0 flex-1 text-[12.5px] text-zinc-300">{body.error}</p>
       {body.topup && <Link href="/pricing#topup" className="btn btn-outline h-7 px-2.5 text-[12px]">Top up <ArrowUpRight size={13} /></Link>}
-      <Link href={`/pricing#${name.toLowerCase()}`} className="btn btn-outline h-7 px-2.5 text-[12px]">See {name} <ArrowUpRight size={13} /></Link>
+      {body.upgrade && <Link href={`/pricing#${name.toLowerCase()}`} className="btn btn-outline h-7 px-2.5 text-[12px]">See {name} <ArrowUpRight size={13} /></Link>}
     </div>
   );
 }

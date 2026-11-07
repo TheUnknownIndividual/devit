@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { Lock } from "lucide-react";
+import Script from "next/script";
 import { Site } from "@/blocks/Site";
 import { findBySlug } from "@/lib/store";
 import { siteCredit } from "@/lib/credit";
@@ -11,6 +12,7 @@ import type { Project } from "@/lib/spec";
 import { JsonLd } from "@/components/JsonLd";
 import { publishedUrl, siteDescription, siteJsonLd } from "@/lib/seo";
 import { recordVisit } from "@/lib/visits";
+import { withLivePosts } from "@/lib/x-live";
 
 // A published site. Locally it lives at /s/<slug>; the Cloudflare Worker serves the same page at <slug>.<domain>
 // and at a verified custom domain. The proxy says which (x-sitesmith-via) and adds noindex for private sites.
@@ -50,6 +52,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     alternates: { canonical: l.url, ...(l.via ? { types: { "text/plain": `${l.url}/llms.txt` } } : {}) },
     openGraph: { type: "website", siteName: spec.name, title, description, url: l.url, images: [{ url: og, width: 1200, height: 630, alt: title }] },
     twitter: { card: "summary_large_image", title, description, images: [og] },
+    ...(l.p.integrations.gscToken ? { verification: { google: l.p.integrations.gscToken } } : {}),
     robots: robots ?? { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 } },
   };
 }
@@ -61,13 +64,24 @@ export default async function Published({ params, searchParams }: Props) {
   const gate = await siteGate(l.p, slug);
   if (gate === "link") notFound();
   if (gate === "password") return <PasswordGate slug={slug} to={l.via ? "/" : `/s/${slug}`} error={(await searchParams).e} />;
-  const spec = (l.p.publishedSpec ?? l.p.spec)!;
+  const spec = await withLivePosts(l.p, (l.p.publishedSpec ?? l.p.spec)!);
   // "Open" in the builder's Publish dialog adds ?from=builder, so the owner checking their own site isn't counted.
   if ((await searchParams).from !== "builder") await countVisit(l.p.id);
   return (
     <>
       <Site spec={spec} mode="live" walletconnect={l.p.integrations.walletconnectProjectId ?? null} privy={l.p.integrations.privyAppId ?? null} credit={await siteCredit(l.p)} />
       {!isPrivateSite(l.p) && <JsonLd data={siteJsonLd(spec, l.url)} />}
+      {l.p.integrations.gaId && /^G-[A-Z0-9]{4,16}$/.test(l.p.integrations.gaId) && <SiteAnalytics id={l.p.integrations.gaId} />}
+    </>
+  );
+}
+
+/** The team's own Google Analytics 4 on their published site (Integrations). The id is checked against G-XXXX above. */
+function SiteAnalytics({ id }: { id: string }) {
+  return (
+    <>
+      <Script src={`https://www.googletagmanager.com/gtag/js?id=${id}`} strategy="afterInteractive" />
+      <Script id="site-ga" strategy="afterInteractive">{`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag("js",new Date());gtag("config",${JSON.stringify(id)});`}</Script>
     </>
   );
 }

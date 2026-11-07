@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 // A first-visit walkthrough: each step lights up one part of the page (found by a [data-tour] selector) and points
@@ -15,15 +16,6 @@ export function restartTour(id: string) {
   try { localStorage.removeItem(KEY(id)); } catch { /* private mode */ }
   window.dispatchEvent(new CustomEvent(EVENT, { detail: id }));
 }
-
-export const LANDING_TOUR: TourStep[] = [
-  { sel: "#prompt", title: "Start with one sentence", body: "Say what you're launching and the look you want, like “retro arcade site for $PIXEL on Solana”. Paste a contract address and it pulls in live price, chart and trades." },
-  { sel: '[data-tour="kinds"]', title: "Pick what you're making", body: "A memecoin site, a dApp landing page or an NFT mint. It changes the sections the agent starts with." },
-  { sel: '[data-tour="options"]', title: "Chain and style", body: "Choose the chain your token lives on and a style, or leave Style on auto and let it pick from your words." },
-  { sel: '[data-tour="import"]', title: "Start from GitHub or Figma", body: "Paste a public repo or a Figma file link and the agent reads its description, README or colours first." },
-  { sel: '[data-tour="plan"]', title: "Plan before it builds", body: "Turn on Plan to see the sections and style it would use, switch any off, then build." },
-  { sel: '[data-tour="build"]', title: "Build", body: "Your site appears in about a minute, with a live preview you can click on and change." },
-];
 
 export const BUILDER_TOUR: TourStep[] = [
   { sel: '[data-tour="preview"]', title: "Your site, live", body: "This is the real site. Double-click any text to type over it; nothing else changes." },
@@ -110,7 +102,9 @@ export function Tour({ id, steps, delay = 900 }: { id: string; steps: TourStep[]
   const arrowX = Math.min(Math.max(16, hole.left + hole.width / 2 - left), W - 16);
   const last = i === live.length - 1;
 
-  return (
+  // Rendered on <body>: inside a section with a transform, filter or overflow, "fixed" would be relative to that
+  // section and the card would be cut off.
+  return createPortal(
     <div className="fixed inset-0 z-[90]" role="dialog" aria-modal="true" aria-label={`Tour: ${step.title}`}>
       <div className="absolute inset-0" onClick={done} />
       {/* The lit-up target: a darker page around it, a solid 3px frame in the accent and a pulsing outer ring so it can't be missed. */}
@@ -131,6 +125,7 @@ export function Tour({ id, steps, delay = 900 }: { id: string; steps: TourStep[]
         </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

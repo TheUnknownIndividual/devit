@@ -12,14 +12,15 @@ import { Payments } from "@/components/pricing/Payments";
 import { Menu } from "@/components/ui/Menu";
 import type { PublicUser } from "@/lib/accounts";
 import type { KeyId } from "@/lib/keyscope";
-import { PLANS, type PlanId } from "@/lib/plans";
+import { PLANS, fmtCredits, type PlanId } from "@/lib/plans";
+import type { Balance } from "@/lib/credits";
 import type { TeamView } from "@/lib/team-view";
 import { TeamPanel } from "./TeamPanel";
 import { KeyRow } from "./KeyRow";
 
 const SECTIONS = [["account", "Account"], ["methods", "Sign-in methods"], ["keys", "API keys"], ["plan", "Plan"], ["team", "Team"]] as const;
 const MODEL_KEYS: KeyId[] = ["nearai", "anthropic", "openai", "openrouter"];
-const CHAIN_KEYS: KeyId[] = ["helius", "rpc:near", "rpc:solana", "rpc:ethereum", "rpc:robinhood"];
+const CHAIN_KEYS: KeyId[] = ["helius", "twitterapi", "rpc:near", "rpc:solana", "rpc:ethereum", "rpc:robinhood"];
 
 const day = (t: number) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
@@ -28,8 +29,8 @@ async function send(method: string, path: string, body?: unknown) {
   return { ok: r.ok, j: await r.json().catch(() => ({})) };
 }
 
-/** usage.cap: the plan's builds a day; fairUse: the cap behind "unlimited". admin: env ADMINS lists this account. */
-export function SettingsView({ initial, usage, admin = false, teams }: { initial: PublicUser; usage: { today: number; cap: number | null; fairUse: number }; admin?: boolean; teams: { list: TeamView[]; canCreate: boolean } }) {
+/** usage: the AI credits of whoever pays for this account's work (lib/credits.ts). admin: env ADMINS lists this account. */
+export function SettingsView({ initial, usage, admin = false, teams }: { initial: PublicUser; usage: Balance; admin?: boolean; teams: { list: TeamView[]; canCreate: boolean } }) {
   const router = useRouter();
   const [user, setUser] = useState(initial);
   const [name, setName] = useState(initial.name ?? "");
@@ -144,7 +145,7 @@ export function SettingsView({ initial, usage, admin = false, teams }: { initial
         <Section id="keys" title="API keys" hint="Bring your own keys and your builds and edits run on them first, then on ours if they fail. Builds on your own model key don't count toward your plan. Keys are encrypted at rest and never shown again.">
           <h3 className="mb-2 text-[12px] font-medium text-zinc-400">Models</h3>
           <div className="space-y-2">{MODEL_KEYS.map((id) => <KeyRow key={id} id={id} saved={user.keys[id]} onUser={update} />)}</div>
-          <h3 className="mb-2 mt-5 text-[12px] font-medium text-zinc-400">Chain data</h3>
+          <h3 className="mb-2 mt-5 text-[12px] font-medium text-zinc-400">Chain and X data</h3>
           <div className="space-y-2">{CHAIN_KEYS.map((id) => <KeyRow key={id} id={id} saved={user.keys[id]} onUser={update} />)}</div>
         </Section>
 
@@ -153,20 +154,20 @@ export function SettingsView({ initial, usage, admin = false, teams }: { initial
             <div className="min-w-0 flex-1">
               <div className="text-[15px] font-semibold text-white">{plan.name}</div>
               <div className="mt-0.5 text-[12.5px] text-zinc-400">
-                {usage.cap == null ? `Unlimited builds within fair use · ${usage.today} today of ${usage.fairUse}` : `${Math.min(usage.today, usage.cap)} of ${usage.cap} builds used today`}
-                {hasOwnModel && " · builds on your own key don't count"}
+                {fmtCredits(usage.left)} of {fmtCredits(usage.allowance)} AI credits left {usage.per === "day" ? "today" : "this stretch"} · back {usage.per === "day" ? "tomorrow (UTC)" : `on ${day(usage.resetsAt)}`}
+                {usage.plan !== plan.id && ` · from your team's ${usage.plan === "team" ? "Team" : "Pro"} plan`}
               </div>
               {user.plan !== "free" && (
                 <div className="mt-0.5 text-[12.5px] text-zinc-400">{user.planUntil ? `Paid through ${day(user.planUntil)}. Pay again before then to add time; nothing renews by itself.` : "No end date."}</div>
               )}
-              {usage.cap != null && <div className="mt-2 h-1.5 max-w-[320px] overflow-hidden rounded-sm bg-white/[0.06]"><div className="h-full bg-lime" style={{ width: `${Math.min(100, (usage.today / usage.cap) * 100)}%` }} /></div>}
+              <div className="mt-2 h-1.5 max-w-[320px] overflow-hidden rounded-sm bg-white/[0.06]"><div className="h-full bg-lime" style={{ width: `${usage.allowance ? Math.min(100, (usage.left / usage.allowance) * 100) : 0}%` }} /></div>
               <div className="mt-2 text-[12.5px] text-zinc-400">
-                {user.credits} extra {user.credits === 1 ? "build" : "builds"} from packs
-                {user.plan === "free" ? ", used once today's free builds are gone. They never expire." : ". Not needed while your plan is unlimited; they're kept for later."}
+                {fmtCredits(usage.packs)} pack credits, used once the plan&apos;s credits run out. They never expire.
+                {hasOwnModel ? " Work on your own model key uses no credits." : " Add your own model key above and nothing uses credits."}
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              {usage.cap != null && <Link href="/pricing#topup" className="btn btn-outline">Top up <ArrowUpRight size={14} /></Link>}
+              <Link href="/pricing#topup" className="btn btn-outline">Top up <ArrowUpRight size={14} /></Link>
               <Link href="/pricing" className="btn btn-outline">{user.plan === "free" ? "Upgrade" : "Extend or change"} <ArrowUpRight size={14} /></Link>
             </div>
           </div>
@@ -174,16 +175,16 @@ export function SettingsView({ initial, usage, admin = false, teams }: { initial
           <Payments initial={user.payments} onUser={update} />
           {user.creditOrders.length > 0 && (
             <>
-              <h3 className="mb-2 mt-5 text-[12px] font-medium text-zinc-400">Build packs</h3>
+              <h3 className="mb-2 mt-5 text-[12px] font-medium text-zinc-400">Credit packs</h3>
               <ul className="divide-y divide-white/[0.06] rounded-[12px] border border-white/[0.08]">
                 {[...user.creditOrders].sort((a, b) => b.at - a.at).slice(0, 10).map((o) => (
                   <li key={o.depositAddress} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5">
                     <div className="min-w-0 flex-1">
-                      <div className="text-[13px] text-white">{o.builds} builds · ${o.usd}</div>
+                      <div className="text-[13px] text-white">{fmtCredits(o.credits)} credits · ${o.usd}</div>
                       <div className="truncate text-[11.5px] text-zinc-500" title={o.depositAddress}>{day(o.at)} · {o.depositAddress.slice(0, 10)}…</div>
                     </div>
                     <span className={`text-[12px] ${o.state === "paid" ? "text-lime" : o.state === "refund" ? "text-amber-200" : o.state === "closed" ? "text-zinc-500" : "text-zinc-300"}`}>
-                      {o.state === "paid" ? "Paid, builds added" : o.state === "refund" ? `Short: $${o.received ?? 0} of $${o.usd} arrived, no builds added` : o.state === "closed" ? (o.status === "REFUNDED" ? "Refunded" : "Closed, nothing arrived") : "Waiting for your deposit"}
+                      {o.state === "paid" ? "Paid, credits added" : o.state === "refund" ? `Short: $${o.received ?? 0} of $${o.usd} arrived, no credits added` : o.state === "closed" ? (o.status === "REFUNDED" ? "Refunded" : "Closed, nothing arrived") : "Waiting for your deposit"}
                     </span>
                   </li>
                 ))}

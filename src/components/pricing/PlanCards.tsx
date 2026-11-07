@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, ArrowRight, Check, CheckCircle2, Copy, Loader2, Wallet } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
 import { openSignIn, setSessionUser, useSession } from "@/components/account/session";
-import { CREDIT_PACKS, PLANS, priceUsd, type CreditPack, type Cycle, type Plan, type PlanId } from "@/lib/plans";
+import { CREDIT_PACKS, PLANS, TYPICAL, fmtCredits, priceUsd, type CreditPack, type Cycle, type Plan, type PlanId } from "@/lib/plans";
 
 export function PlanCards({ current, paymentsOn }: { current: PlanId | null; paymentsOn: boolean }) {
   const [cycle, setCycle] = useState<Cycle>("monthly");
@@ -74,7 +74,7 @@ export function PlanCards({ current, paymentsOn }: { current: PlanId | null; pay
   );
 }
 
-/** Build packs under the plan cards: extra builds for a Free day, paid once, never expiring. */
+/** Credit packs under the plan cards: extra AI credits on any plan, paid once, never expiring. */
 export function TopUp({ paymentsOn }: { paymentsOn: boolean }) {
   const [buying, setBuying] = useState<CreditPack | null>(null);
   const { user } = useSession();
@@ -82,18 +82,18 @@ export function TopUp({ paymentsOn }: { paymentsOn: boolean }) {
   return (
     <section id="topup" className="mt-12 scroll-mt-6" aria-labelledby="topup-h">
       <div className="flex flex-wrap items-baseline justify-between gap-2 lg:max-w-[700px]">
-        <h2 id="topup-h" className="text-[18px] font-semibold text-white">Top up builds</h2>
-        {user && <p className="text-[12.5px] text-zinc-400">You have {credits} extra {credits === 1 ? "build" : "builds"}</p>}
+        <h2 id="topup-h" className="text-[18px] font-semibold text-white">Top up AI credits</h2>
+        {user && <p className="text-[12.5px] text-zinc-400">You have {fmtCredits(credits)} pack credits</p>}
       </div>
       <p className="mt-1 max-w-[620px] text-[13px] leading-relaxed text-zinc-400">
-        On Free and out of builds for the day? Buy a pack once. A build from the pack is used only after the day&apos;s free builds are gone, and they never expire. Pro and Team builds are unlimited, so packs aren&apos;t needed there.
+        Out of credits before they come back? Buy a pack once, on any plan. Pack credits are used only after your plan&apos;s own credits are gone, and they never expire. A site build takes about {TYPICAL.buildLow} to {TYPICAL.buildHigh} credits.
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:max-w-[700px]">
         {CREDIT_PACKS.map((k) => (
           <div key={k.id} className="flex items-center gap-4 rounded-2xl border border-white/[0.08] bg-ink-900 p-4">
             <div className="min-w-0 flex-1">
-              <div className="text-[15px] font-semibold text-white">{k.builds} builds</div>
-              <div className="mt-0.5 text-[12.5px] text-zinc-400">${k.usd} once · ${(k.usd / k.builds).toFixed(2)} a build</div>
+              <div className="text-[15px] font-semibold text-white">{fmtCredits(k.credits)} credits</div>
+              <div className="mt-0.5 text-[12.5px] text-zinc-400">${k.usd} once · about {Math.round(k.credits / ((TYPICAL.buildLow + TYPICAL.buildHigh) / 2))} builds</div>
             </div>
             {!paymentsOn ? (
               <button type="button" className="btn btn-outline" disabled>Coming soon</button>
@@ -105,12 +105,12 @@ export function TopUp({ paymentsOn }: { paymentsOn: boolean }) {
       </div>
       {buying && (
         <PayDialog
-          title={`${buying.builds} builds · $${buying.usd}`}
+          title={`${fmtCredits(buying.credits)} credits · $${buying.usd}`}
           endpoint="/api/billing/credits"
           body={{ pack: buying.id }}
-          paidText={`Paid. ${buying.builds} builds added.`}
-          shortText={(got, usd) => `Only $${got} of $${usd} arrived, so no builds were added. Get in touch and we'll sort it out.`}
-          after="the builds are added once the swap lands"
+          paidText={`Paid. ${fmtCredits(buying.credits)} credits added.`}
+          shortText={(got, usd) => `Only $${got} of $${usd} arrived, so no credits were added. Get in touch and we'll sort it out.`}
+          after="the credits are added once the swap lands"
           onClose={() => setBuying(null)}
         />
       )}
@@ -122,7 +122,7 @@ interface Quote { depositAddress: string; amountIn: string; symbol: string; chai
 
 /**
  * Paying for something with any token: pick a coin, get a 1-Click deposit address from `endpoint`, then poll it there.
- * Plans (/api/billing) answer a short payment with outcome "short"; build packs (/api/billing/credits) with state "refund".
+ * Plans (/api/billing) answer a short payment with outcome "short"; credit packs (/api/billing/credits) with state "refund".
  */
 function PayDialog({ title, endpoint, body, paidText, shortText, after, onClose }: {
   title: string; endpoint: string; body: Record<string, string>; paidText: string; shortText: (got: number, usd: number) => string; after: string; onClose: () => void;

@@ -18,7 +18,6 @@ import { THEME_LABELS } from "@/lib/themes";
 import { usd } from "@/blocks/format";
 import { BLOCK_LABELS, CHAINS, type BlockType, type Chain, type Finding, type ThemeId, type TokenInfo } from "@/lib/spec";
 import { Upsell, refusalOf, type PlanRefusal } from "@/components/ui/Upsell";
-import { Tour, LANDING_TOUR } from "@/components/ui/Tour";
 
 type Kind = "memecoin" | "dapp" | "nft";
 type SitePlan = { name: string | null; style: ThemeId; sections: Array<{ type: BlockType; label: string; why: string; on: boolean }>; notes: string[]; via: string };
@@ -637,7 +636,6 @@ export function PromptBox() {
       {error && (refusal ? <Upsell body={refusal} className="mt-3 animate-rise" /> : <p role="alert" className="mt-3 animate-rise text-[13px] text-red-300">{error}</p>)}
 
       <div data-tour="kinds"><KindPicker kind={kind} onPick={setKind} /></div>
-      <Tour id="landing" steps={LANDING_TOUR} delay={1400} />
     </div>
   );
 }
