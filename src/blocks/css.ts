@@ -565,7 +565,8 @@ export const SITE_CSS = `
 @keyframes ssFlashUp{from{color:#22c55e;text-shadow:0 0 12px rgba(34,197,94,.5)}}
 @keyframes ssFlashDown{from{color:#ef4444;text-shadow:0 0 12px rgba(239,68,68,.5)}}
 @media (prefers-reduced-motion:reduce){[data-ss-mode=live] *{animation:none!important;transition:none!important}.ss-progress{display:none}[data-ss-mode=live] .ss-sec.ss-wait{opacity:1;transform:none}}
-[data-ss-mode=preview] *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+[data-ss-mode=preview]:not(.ss-code) *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+.ss-code[data-ss-mode=preview] *{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition:none!important;scroll-behavior:auto!important}
 /* treasury */
 .ss-tr{display:grid;gap:36px}.ss-tr>*{min-width:0}
 .ss-tr-acc{display:grid;gap:16px}.ss-tr-acc>*{min-width:0}

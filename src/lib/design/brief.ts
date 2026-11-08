@@ -6,6 +6,7 @@ import { contrast, type Palette } from "../palette";
 import { CHAINS, type BriefSection, type Chain, type DesignBrief, type Dossier, type Research, type Theme, type TokenInfo } from "../spec";
 import { ARCHETYPES, analystSystem, directorSystem, WIDGET_DOC } from "./principles";
 import { INSPIRATION_RULES, inspirationShots, inspirationText, pickInspiration } from "./inspiration";
+import { learnedRefs } from "./learned";
 import { BANNED_DISPLAY, fontMenu, fontPair, fontStacks, FONT_PAIRS, pairForMoods } from "./fonts";
 
 // Two thinking passes before any code: the analyst reads everything research found (and looks at the pictures) and
@@ -213,7 +214,9 @@ export async function direct(i: DesignInput, d: Dossier): Promise<DesignBrief | 
   const lights = past.slice(-4).map((p) => (p.light ? "light" : "dark"));
   const images = imagesOf(i).slice(0, 3);
   // A few references from the team's library that suit this project, shown with their screenshots.
-  const refs = pickInspiration(d, seed.id, i.palette ? i.palette.lean === "light" : null, past.flatMap((p) => p.refs ?? []).slice(-9));
+  // Plus devit's own clean published sites, never one of this same token.
+  const own = (await learnedRefs()).filter((r) => !i.token?.address || r.address !== i.token.address);
+  const refs = pickInspiration(d, seed.id, i.palette ? i.palette.lean === "light" : null, past.flatMap((p) => p.refs ?? []).slice(-9), 3, own);
   const shots = await inspirationShots(refs);
   const user = `DOSSIER:\n${JSON.stringify(d)}\n
 ARTWORK COLOURS: ${i.palette ? i.palette.swatches.map((s) => `${s.hex} (${(s.share * 100).toFixed(0)}%, sat ${s.s.toFixed(2)})`).join(", ") + `; vivid ${i.palette.vivid ?? "none"}; artwork reads ${i.palette.lean}` : "not readable; derive from the imagery description"}

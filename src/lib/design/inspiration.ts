@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { Dossier } from "../spec";
 import type { LocalImage } from "../llm";
+import { learnedShot } from "./learned";
 
 // The reference library: sites the team collected as examples of good work (token sites and DeFi/brand pages),
 // each studied for what makes it work: composition, type, colour use, framing devices, motion. Screenshots live in
@@ -22,6 +23,8 @@ export interface Inspiration {
   hero: string;
   /** What is worth learning from it, specific and measurable where possible. */
   dna: string[];
+  /** One of devit's own published sites that measured clean (lib/design/learned.ts), not a hand-picked one. */
+  own?: boolean;
 }
 
 export const INSPIRATIONS: Inspiration[] = [
@@ -336,12 +339,18 @@ const words = (s: string) => s.toLowerCase().match(/[a-z]{3,}/g) ?? [];
  * appear in the dossier (tone, imagery, subject) add weight, a match on light/dark adds a little, recent picks are
  * pushed down, and a random jitter keeps rebuilds fresh. At least one token site and at most two of one kind.
  */
-export function pickInspiration(d: Dossier | null, archetype: string, light: boolean | null, recent: string[] = [], n = 3): Inspiration[] {
+/**
+ * `extra`: devit's own published sites that earned a place (lib/design/learned.ts). At most one of them is picked,
+ * so the hand-picked library keeps setting the bar and the sites don't drift towards each other.
+ */
+export function pickInspiration(d: Dossier | null, archetype: string, light: boolean | null, recent: string[] = [], n = 3, extra: Inspiration[] = []): Inspiration[] {
   const text = d ? new Set(words([d.oneLiner, d.whatItIs, d.subject?.kind, d.subject?.description, d.imagery?.artStyle, ...(d.imagery?.motifs ?? []), ...(d.tone?.adjectives ?? [])].join(" "))) : new Set<string>();
-  const scored = INSPIRATIONS.map((r) => {
+  const scored = [...INSPIRATIONS, ...extra].map((r) => {
     let s = Math.random() * 1.5;
     if (r.archetypes.includes(archetype)) s += 3;
-    s += r.moods.filter((m) => text.has(m)).length;
+    // Learned sites carry many more mood words than hand-picked ones; cap them so they assist rather than dominate.
+    const moodHits = r.moods.filter((m) => text.has(m)).length;
+    s += r.own ? Math.min(moodHits, 2) - 0.5 : moodHits;
     if (light != null && r.light === light) s += 0.7;
     if (recent.includes(r.id)) s -= 2.5;
     return { r, s };
@@ -351,6 +360,7 @@ export function pickInspiration(d: Dossier | null, archetype: string, light: boo
   for (const { r } of scored) {
     if (out.length >= n) break;
     if ((kinds.get(r.kind) ?? 0) >= 2) continue;
+    if (r.own && out.some((o) => o.own)) continue;
     out.push(r);
     kinds.set(r.kind, (kinds.get(r.kind) ?? 0) + 1);
   }
@@ -363,7 +373,7 @@ export function pickInspiration(d: Dossier | null, archetype: string, light: boo
 
 /** The references as text for a prompt. */
 export function inspirationText(list: Inspiration[]): string {
-  return list.map((r, i) => `REFERENCE ${i + 1}: ${r.id} (${r.kind === "token" ? "token site" : "product/brand site"}, ${r.light ? "light" : "dark"})
+  return list.map((r, i) => `REFERENCE ${i + 1}: ${r.id} (${r.own ? "an earlier devit site that measured clean; learn its craft, never reuse its subject or concept" : r.kind === "token" ? "token site" : "product/brand site"}, ${r.light ? "light" : "dark"})
   first screen: ${r.hero}
   what works: ${r.dna.join(" ")}`).join("\n");
 }
@@ -372,7 +382,7 @@ export function inspirationText(list: Inspiration[]): string {
 export async function inspirationShots(list: Inspiration[]): Promise<LocalImage[]> {
   const out = await Promise.all(list.map(async (r) => {
     try {
-      const data = await fs.readFile(path.join(SHOT_DIR, `${r.id}.jpg`));
+      const data = await fs.readFile(r.own ? learnedShot(r.id) : path.join(SHOT_DIR, `${r.id}.jpg`));
       return { media: "image/jpeg", data: data.toString("base64"), label: `Reference screenshot: ${r.id}` } as LocalImage;
     } catch {
       return null;

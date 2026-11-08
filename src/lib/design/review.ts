@@ -166,10 +166,15 @@ function lint(vw: number): string[] {
       if (gBot > lim) out.push(`At ${vw}px, #${id} has ${Math.round(gBot)}px of empty space below its content.`);
     }
 
-    // 5. Text cut off by its box.
+    // 5. Text cut off by its box. A scrolling band (marquee/ticker: an animated track inside a clipping box) is
+    // clipped on purpose, so it doesn't count.
+    const moving = (el: Element) => [el, ...el.querySelectorAll("*")].slice(0, 40).some((x) => {
+      const c = getComputedStyle(x);
+      return (c.animationName !== "none" && c.animationName !== "") || /marquee|ticker|scroll|track|loop/i.test(x.getAttribute("class") ?? "");
+    });
     const cut = all.find((el) => {
       const cs = getComputedStyle(el);
-      return /(hidden|clip)/.test(cs.overflowX + cs.overflow) && el.scrollWidth > el.clientWidth + 4 && (el.textContent ?? "").trim().length > 3 && el.children.length < 3 && !/ellipsis/.test(cs.textOverflow);
+      return /(hidden|clip)/.test(cs.overflowX + cs.overflow) && el.scrollWidth > el.clientWidth + 4 && (el.textContent ?? "").trim().length > 3 && el.children.length < 3 && !/ellipsis/.test(cs.textOverflow) && !moving(el);
     });
     if (cut) out.push(`At ${vw}px in #${id}, text is cut off: ${name(cut)}.`);
   }
@@ -215,8 +220,13 @@ function lint(vw: number): string[] {
   return out;
 }
 
-/** Renders and measures the page (HTML, or a URL to load). Null when no browser is available. */
-export async function inspect(html: string): Promise<Inspection | null> {
+/**
+ * Renders and measures the page (HTML, or a URL to load). Null when no browser is available. `shots: false` only
+ * measures (quick, for checking an edit); `full: false` keeps the two first-screen shots and skips the long page.
+ */
+export async function inspect(html: string, opts: { shots?: boolean; full?: boolean } = {}): Promise<Inspection | null> {
+  const wantShots = opts.shots !== false;
+  const wantFull = wantShots && opts.full !== false;
   let chromium: typeof import("playwright-core").chromium;
   try { ({ chromium } = await import("playwright-core")); } catch { return null; }
   let browser: Awaited<ReturnType<typeof chromium.launch>>;
@@ -224,11 +234,14 @@ export async function inspect(html: string): Promise<Inspection | null> {
   const issues: string[] = [];
   const shots: LocalImage[] = [];
   try {
-    for (const [w, h] of [[1280, 900], [390, 844]] as const) {
-      const page = await browser.newPage({ viewport: { width: w, height: h } });
-      try {
-        if (/^https?:\/\//.test(html)) await page.goto(html, { waitUntil: "networkidle", timeout: 30_000 }).catch(() => {});
-        else await page.setContent(html, { waitUntil: "load", timeout: 20_000 }).catch(() => {});
+    // One page, loaded once and resized for the phone pass: loading fonts and pictures twice was most of the time.
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    try {
+      if (/^https?:\/\//.test(html)) await page.goto(html, { waitUntil: "networkidle", timeout: 30_000 }).catch(() => {});
+      else await page.setContent(html, { waitUntil: "load", timeout: 20_000 }).catch(() => {});
+      for (const [w, h] of [[1280, 900], [390, 844]] as const) {
+        await page.setViewportSize({ width: w, height: h });
+        await page.evaluate(() => window.scrollTo(0, 0)).catch(() => {});
         // Web fonts load lazily; measuring with a fallback font hides real overflow, so load every face in use first.
         await page.evaluate(async () => {
           const faces = new Set<string>();
@@ -239,11 +252,12 @@ export async function inspect(html: string): Promise<Inspection | null> {
           await Promise.all([...faces].slice(0, 24).map((f) => document.fonts.load(f).catch(() => null)));
           await document.fonts.ready;
         }).catch(() => {});
-        await page.waitForTimeout(400);
+        await page.waitForTimeout(w === 1280 ? 300 : 200);
         issues.push(...(await page.evaluate(lint, w)));
+        if (!wantShots) continue;
         const first = await page.screenshot({ type: "jpeg", quality: 70 });
         shots.push({ media: "image/jpeg", data: first.toString("base64"), label: `Review screenshot: the first screen at ${w}×${h}` });
-        if (w === 1280) {
+        if (w === 1280 && wantFull) {
           // The whole page, scaled so it stays legible to the model (tall pages are split in two).
           const height = await page.evaluate(() => document.documentElement.scrollHeight);
           const step = Math.min(Math.max(height / 2, 2400), 4000);
@@ -252,9 +266,9 @@ export async function inspect(html: string): Promise<Inspection | null> {
             shots.push({ media: "image/jpeg", data: part.toString("base64"), label: `Review screenshot: the page from ${y}px to ${Math.round(Math.min(y + step, height))}px at ${w}px wide` });
           }
         }
-      } finally {
-        await page.close().catch(() => {});
       }
+    } finally {
+      await page.close().catch(() => {});
     }
   } finally {
     await browser.close().catch(() => {});

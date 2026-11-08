@@ -2,7 +2,8 @@ import { askRich } from "../llm";
 import { sanitizeCss, sanitizeSection } from "../sanitize";
 import type { Block, DesignBrief, Dossier, SiteCode, TokenInfo } from "../spec";
 import { fontPair, fontStacks, FONT_PAIRS } from "./fonts";
-import { INSPIRATIONS, INSPIRATION_RULES, inspirationShots, inspirationText } from "./inspiration";
+import { INSPIRATIONS, INSPIRATION_RULES, inspirationShots, inspirationText, type Inspiration } from "./inspiration";
+import { learnedRefs } from "./learned";
 import { codegenSystem } from "./principles";
 import { normalizeSection, openAttr, parseSite } from "./stream";
 
@@ -23,9 +24,9 @@ export interface CodegenInput {
 
 export interface CodegenOut { code: SiteCode; blocks: Block[] }
 
-const cited = (b: DesignBrief) => INSPIRATIONS.filter((r) => (b.inspiration ?? []).some((x) => x.ref === r.id));
+const citedIn = (b: DesignBrief, all: Inspiration[]) => all.filter((r) => (b.inspiration ?? []).some((x) => x.ref === r.id));
 
-function userMessage(i: CodegenInput): string {
+function userMessage(i: CodegenInput, cited: Inspiration[]): string {
   const fp = fontPair(i.brief.fontPair) ?? FONT_PAIRS[0];
   const st = fontStacks(fp);
   const t = i.token;
@@ -45,7 +46,7 @@ ${i.brief.sections.map((s, n) => `${n + 1}. id="${s.id}" label="${s.label}" widg
 LINKS (only these URLs):
 ${i.links.map((l) => `${l.label}: ${l.url}`).join("\n") || "none"}
 
-${cited(i.brief).length ? `REFERENCES THE ART DIRECTOR DREW ON (screenshots attached; the brief's "inspiration" says what to borrow):\n${inspirationText(cited(i.brief))}\n${INSPIRATION_RULES}\n\n` : ""}IMAGES (only these URLs):
+${cited.length ? `REFERENCES THE ART DIRECTOR DREW ON (screenshots attached; the brief's "inspiration" says what to borrow):\n${inspirationText(cited)}\n${INSPIRATION_RULES}\n\n` : ""}IMAGES (only these URLs):
 ${i.images.map((u, n) => `${n === 0 ? "logo" : `image ${n + 1}`}: ${u}`).join("\n") || "none (draw everything in SVG/CSS)"}
 
 Write the site now.`;
@@ -108,12 +109,13 @@ export async function writeSite(i: CodegenInput, onSection?: (soFar: CodegenOut,
     const blocks = toBlocks(sections, i.brief, i.images);
     return { code: { css: sanitizeCss((css ?? "") + tokenCss(i.brief), { images: i.images }), fonts, brief: i.brief, dossier: i.dossier, images: i.images, via }, blocks };
   };
+  const cited = citedIn(i.brief, [...INSPIRATIONS, ...(await learnedRefs())]);
   const res = await askRich(
     {
       system: codegenSystem(),
-      user: userMessage(i),
+      user: userMessage(i, cited),
       images: i.images.slice(0, 3),
-      files: await inspirationShots(cited(i.brief)),
+      files: await inspirationShots(cited),
       maxOut: 24000,
       timeoutMs: 300_000,
       temperature: 0.8,

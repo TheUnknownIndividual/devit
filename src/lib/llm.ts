@@ -224,6 +224,8 @@ export interface RichAsk {
    * effort level for calls that analyse. Thinking counts toward maxOut, so analysing calls get room for both.
    */
   think?: "off" | "low" | "medium" | "high";
+  /** "light" runs each provider's small, fast model (quick edits); a model the person picked still wins. */
+  tier?: Tier;
 }
 
 type AnthropicUsage = { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
@@ -272,10 +274,11 @@ async function richClaude(a: RichAsk, key: string, model: string, withImages: bo
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-    // No temperature: current Claude models reject it. "between_tools" is how this model turns thinking off.
+    // No temperature: current Claude models reject it. "between_tools" is how Sonnet turns thinking off; Haiku
+    // rejects that value (400) and doesn't think unless asked, so it's simply left out there.
     body: JSON.stringify({
       model, max_tokens: a.maxOut, stream: true, system: a.system, messages: [{ role: "user", content }],
-      ...(a.think === "off" ? { thinking: { type: "between_tools" } } : { thinking: { type: "adaptive" }, output_config: { effort: a.think ?? "medium" } }),
+      ...(a.think === "off" ? (/haiku/i.test(model) ? {} : { thinking: { type: "between_tools" } }) : { thinking: { type: "adaptive" }, output_config: { effort: a.think ?? "medium" } }),
     }),
     signal: AbortSignal.timeout(a.timeoutMs),
   });
@@ -344,6 +347,7 @@ export async function askRich(a: RichAsk, accept: (text: string) => boolean = (t
   const order = (p: Provider) => (p.model ? -1 : ({ anthropic: 0, nearai: 1, openai: 2, openrouter: 3 } as const)[p.id]);
   const list = providers().sort((x, y) => order(x) - order(y) || Number(y.own) - Number(x.own));
   const seen = new Set<string>();
+  const t: Tier = a.tier ?? "heavy";
   for (const p of list) {
     const id = `${p.id}:${p.own}:${p.model ?? ""}`;
     if (seen.has(id)) continue;
@@ -351,11 +355,11 @@ export async function askRich(a: RichAsk, accept: (text: string) => boolean = (t
     let res: LlmResult | null = null;
     try {
       if (p.id === "anthropic") {
-        const model = p.model ?? CLAUDE_MODEL;
+        const model = p.model ?? MODELS.claude[t];
         res = (await richClaude(a, p.key, model, true)) ?? (a.images?.length || a.files?.length ? await richClaude(a, p.key, model, false) : null);
-      } else if (p.id === "nearai") res = await richOpenAiShape(a, NEAR_AI_URL, p.key, p.model ?? NEAR_AI_MODEL, "NEAR AI Cloud", { images: false });
-      else if (p.id === "openai") res = await richOpenAiShape(a, OPENAI_URL, p.key, p.model ?? OPENAI_MODEL, "OpenAI", { images: true, reasoning: true });
-      else res = await richOpenAiShape(a, "https://openrouter.ai/api/v1", p.key, p.model ?? OPENROUTER_MODEL, "OpenRouter", { images: false });
+      } else if (p.id === "nearai") res = await richOpenAiShape(a, NEAR_AI_URL, p.key, p.model ?? MODELS.nearAi[t], "NEAR AI Cloud", { images: false });
+      else if (p.id === "openai") res = await richOpenAiShape(a, OPENAI_URL, p.key, p.model ?? MODELS.openai[t], "OpenAI", { images: true, reasoning: true });
+      else res = await richOpenAiShape(a, "https://openrouter.ai/api/v1", p.key, p.model ?? MODELS.openrouter[t], "OpenRouter", { images: false });
     } catch (e) {
       console.warn(`[llm] ${p.id} failed: ${e instanceof Error ? e.name + " " + e.message : "error"}`);
       res = null;
