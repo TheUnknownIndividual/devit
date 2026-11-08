@@ -574,14 +574,23 @@ export async function runBuild(id: string): Promise<void> {
       if (!before) return { skipped: "No browser here to look at the page" };
       const proj = await getProject(id);
       if (!proj) return null;
-      const fixed = await editCode({ ...proj, spec: built }, [], true, { request: reviewRequest(before.issues), shots: before.shots });
       const found = before.issues.length ? `${before.issues.length} layout ${before.issues.length === 1 ? "issue" : "issues"} measured` : "no layout faults measured";
-      if (!fixed) return `Checked at desktop and phone width: ${found}${before.issues.length ? ", couldn't fix them this time" : ", nothing to change"}`;
-      const after = await inspect(staticPage(fixed.spec.code!, fixed.spec.blocks));
-      if (after && after.issues.length > before.issues.length) return `Checked at desktop and phone width: ${found}; the fix measured worse, so I kept the original`;
-      spec = fixed.spec;
-      await updateProject(id, (p) => { p.spec = fixed.spec; });
-      return `Checked at desktop and phone width: ${found}${after ? `, ${after.issues.length} left` : ""}. ${fixed.message}`.slice(0, 400);
+      // Up to two passes: the second only when the first left measured faults and made things better.
+      let cur = { spec: built, issues: before.issues, shots: before.shots };
+      const notes: string[] = [];
+      for (let pass = 0; pass < 2; pass++) {
+        if (pass > 0 && !cur.issues.length) break;
+        const fixed = await editCode({ ...proj, spec: cur.spec }, [], true, { request: reviewRequest(cur.issues), shots: cur.shots });
+        if (!fixed) break;
+        const after = await inspect(staticPage(fixed.spec.code!, fixed.spec.blocks));
+        if (after && after.issues.length > cur.issues.length) break;
+        cur = { spec: fixed.spec, issues: after?.issues ?? [], shots: after?.shots ?? [] };
+        notes.push(fixed.message);
+        await updateProject(id, (p) => { p.spec = fixed.spec; });
+      }
+      if (!notes.length) return `Checked at desktop and phone width: ${found}${before.issues.length ? ", couldn't improve on it this time" : ", nothing to change"}`;
+      spec = cur.spec;
+      return `Checked at desktop and phone width: ${found}, ${cur.issues.length} left${notes.length > 1 ? " after two passes" : ""}. ${notes.join(" ")}`.slice(0, 500);
     });
   }
 

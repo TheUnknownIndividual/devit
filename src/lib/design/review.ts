@@ -103,7 +103,7 @@ function lint(vw: number): string[] {
     }
 
     // 2c. A decorative shape behind the art that is placed against the section instead of centred on the art.
-    const art = all.filter((el) => el.tagName === "IMG" || (el.tagName.toLowerCase() === "svg" && el.getAttribute("aria-hidden") !== "true")).map((el) => ({ el, r: el.getBoundingClientRect() })).filter(({ r }) => r.width * r.height > 40_000).sort((a, b) => b.r.width * b.r.height - a.r.width * a.r.height)[0];
+    const art = all.filter((el) => el.tagName === "IMG").map((el) => ({ el, r: el.getBoundingClientRect() })).filter(({ r }) => r.width * r.height > 40_000).sort((a, b) => b.r.width * b.r.height - a.r.width * a.r.height)[0];
     if (art) {
       const deco = all.filter((el) => {
         const cs = getComputedStyle(el);
@@ -172,6 +172,18 @@ function lint(vw: number): string[] {
       return /(hidden|clip)/.test(cs.overflowX + cs.overflow) && el.scrollWidth > el.clientWidth + 4 && (el.textContent ?? "").trim().length > 3 && el.children.length < 3 && !/ellipsis/.test(cs.textOverflow);
     });
     if (cut) out.push(`At ${vw}px in #${id}, text is cut off: ${name(cut)}.`);
+  }
+
+  // 5a. Headlines wider than their own box: with background-clip:text (chrome/gradient type) the overflow is invisible,
+  // otherwise it spills over the next column.
+  for (const hd of [...document.querySelectorAll(".ss-code-body h1, .ss-code-body h2, .ss-code-body [data-el=headline]")].filter(visible).slice(0, 30)) {
+    const over = hd.scrollWidth - hd.clientWidth;
+    if (over > 3 && hd.clientWidth > 0) {
+      const cs = getComputedStyle(hd);
+      const clipText = /text/.test(cs.backgroundClip + (cs as unknown as Record<string, string>).webkitBackgroundClip);
+      out.push(`At ${vw}px in #${hd.closest("section")?.getAttribute("data-block-id")}, the headline ${name(hd)} is ${Math.round(over)}px wider than its box${clipText ? " and, because it is painted with background-clip:text, the overflowing letters are invisible (the last letters look cut off)" : ", so it spills past its column"}. Reduce its font-size (clamp/vw) or widen its box so the whole word fits.`);
+      break;
+    }
   }
 
   // 5b. Headline words broken in the middle (a name split across lines reads as a bug).
