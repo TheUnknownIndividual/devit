@@ -5,7 +5,9 @@ import { isPublicHttps } from "./net";
 import { logoAccent, themeColorOf } from "./palette";
 import { metadataAddress, parseMetadata } from "./solana";
 import { BLOCKSCOUT, DEFAULT_RPC, rpcFor } from "./chain";
-import { isVenueHost } from "./venues";
+import { launchpadOf } from "./venues";
+import { xHandle } from "./socials";
+export { socialsFromText, xHandle } from "./socials";
 import { ownerKeys } from "./keyscope";
 import type { Chain, Finding, Research, SocialInput, TokenInfo, Voice, XPost, XProfile } from "./spec";
 
@@ -88,17 +90,6 @@ async function fetchMetaJson(uri: string): Promise<MetaJson | null> {
 
 // ---------- links ----------
 
-const RESERVED_X = new Set(["i", "home", "intent", "search", "share", "hashtag", "explore", "settings", "messages", "notifications"]);
-
-export function xHandle(raw: string | undefined | null): string | null {
-  if (!raw) return null;
-  const s = raw.trim();
-  const m = s.match(/(?:twitter|x)\.com\/([A-Za-z0-9_]{1,15})(?:[/?#]|$)/i);
-  const h = m ? m[1] : s.replace(/^@/, "");
-  if (!/^[A-Za-z0-9_]{1,15}$/.test(h) || RESERVED_X.has(h.toLowerCase())) return null;
-  return h;
-}
-
 function kindOf(url: string): string {
   const h = (() => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; } })();
   if (/^(x|twitter)\.com$/.test(h)) return "x";
@@ -150,7 +141,11 @@ class Links {
     }
     let type = kindOf(u);
     if (type === "market") return;
-    if (type === "x") {
+    if (type === "x" && /\/status(es)?\/\d+/.test(u)) {
+      // One post (often the launch announcement, sometimes by someone else entirely): a link to read and show,
+      // never the project's own account.
+      type = "x-post";
+    } else if (type === "x") {
       const h = xHandle(u);
       // A link to one post or a community still names nothing we can read; keep it only as a link.
       if (h) u = `https://x.com/${h}`;
@@ -161,7 +156,7 @@ class Links {
     if (this.items.some((f) => f.url.toLowerCase().replace(/\/$/, "").replace("://www.", "://") === key)) return;
     // One of each kind is enough; the first source to name it wins.
     if (this.items.some((f) => f.type === type)) return;
-    this.items.push({ type, label: type === "x-community" ? "X Community" : LABEL[type] ?? "Link", url: u, source });
+    this.items.push({ type, label: type === "x-community" ? "X Community" : type === "x-post" ? "X post" : LABEL[type] ?? "Link", url: u, source });
   }
   first(type: string) { return this.items.find((f) => f.type === type) ?? null; }
 }
@@ -201,6 +196,11 @@ function readMetaJson(j: MetaJson | null, source: string, links: Links, descript
     else if (/^(website|external_url|homepage|discord|github|medium)$/i.test(k)) links.add(v, source);
   }
   if (Array.isArray(j.links)) for (const l of j.links) if (typeof l === "string") links.add(l, source);
+  // Launchpads nest them: { links: { website, twitter, telegram } } or { socials: {...} }.
+  for (const k of ["links", "socials", "social"] as const) {
+    const v = j[k];
+    if (v && typeof v === "object" && !Array.isArray(v)) readMetaJson({ ...(v as MetaJson), description: undefined }, source, links, descriptions);
+  }
   if (typeof j.description === "string" && j.description.trim()) descriptions.push({ text: j.description.trim(), source });
   return true;
 }
@@ -222,6 +222,15 @@ async function solanaMetadata(t: TokenInfo, links: Links, descriptions: Research
   if (!uri) return null;
   const src = /ipfs/.test(uri) ? "token metadata (IPFS)" : /arweave|ar:\/\//.test(uri) ? "token metadata (Arweave)" : "token metadata";
   return readMetaJson(await fetchMetaJson(uri), src, links, descriptions) ? src : null;
+}
+
+/** The launchpad's own API (nearly.trade, JustHoot): where most NEAR launch pages keep their socials. */
+async function launchpadMetadata(t: TokenInfo, links: Links, descriptions: Research["descriptions"]): Promise<string | null> {
+  const pad = launchpadOf(t.address, t.chain);
+  if (!pad?.api?.includes("<token>")) return null;
+  const j = await fetchJson<MetaJson & { token?: MetaJson; data?: MetaJson }>(pad.api.replace("<token>", encodeURIComponent(t.address)));
+  const body = j && (j.token && typeof j.token === "object" ? j.token : j.data && typeof j.data === "object" ? j.data : j);
+  return readMetaJson(body ?? null, pad.name, links, descriptions) ? pad.name : null;
 }
 
 async function nearMetadata(t: TokenInfo, links: Links, descriptions: Research["descriptions"]): Promise<string | null> {
@@ -548,6 +557,7 @@ export async function findLinks(token: TokenInfo | null, given: SocialInput = {}
     const tasks: Array<Promise<string | null>> = [
       coingecko(token, links, descriptions).then((ok) => (ok ? "CoinGecko" : null)),
       token.chain === "solana" ? solanaMetadata(token, links, descriptions) : token.chain === "near" ? nearMetadata(token, links, descriptions) : evmSource(token, links),
+      launchpadMetadata(token, links, descriptions),
     ];
     for (const s of await Promise.all(tasks.map((p) => p.catch(() => null)))) if (s) sources.push(s);
   }
@@ -587,25 +597,4 @@ export async function research(token: TokenInfo | null, given: SocialInput = {})
     brand: site?.themeColor ? { color: site.themeColor, from: "website" } : logoColor ? { color: logoColor, from: "logo" } : null,
     sources: [...new Set(sources)],
   };
-}
-
-/** Socials named in a chat message: links, or an @handle next to the word X/Twitter (or on its own). */
-export function socialsFromText(text: string): SocialInput {
-  const out: SocialInput = {};
-  const x = text.match(/(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})\b/i)?.[1]
-    ?? (/\b(x|twitter|handle)\b/i.test(text) || /^\s*@[A-Za-z0-9_]{1,15}\s*$/.test(text) ? text.match(/(?:^|\s)@([A-Za-z0-9_]{1,15})\b/)?.[1] : undefined);
-  if (x && xHandle(x)) out.x = x;
-  const tg = text.match(/(?:t\.me|telegram\.me)\/[A-Za-z0-9_+/]{3,64}/i)?.[0] ?? (/\btelegram\b/i.test(text) ? text.match(/(?:^|\s)@([A-Za-z0-9_]{4,32})\b/)?.[1] : undefined);
-  if (tg && tg !== out.x) out.telegram = tg;
-  const dc = text.match(/discord\.(?:gg|com\/invite)\/[A-Za-z0-9-]+/i)?.[0];
-  if (dc) out.discord = dc;
-  for (const m of text.matchAll(/\b(?:https?:\/\/)?((?:[a-z0-9-]+\.)+[a-z]{2,})(\/[^\s]*)?/gi)) {
-    const host = m[1].toLowerCase().replace(/^www\./, "");
-    if (/^(x|twitter|t|telegram|discord)\.(com|me|gg)$/.test(host) || /\.near$|\.tg$/.test(host) || isVenueHost(host)) continue;
-    // A bare word with a dot ("Bonk.fun" in a headline edit) counts only as a link or next to the word site.
-    if (!/^(https?:\/\/|www\.)/i.test(m[0]) && !/\b(web)?site\b/i.test(text) && text.trim() !== m[0]) continue;
-    out.website = m[0];
-    break;
-  }
-  return out;
 }

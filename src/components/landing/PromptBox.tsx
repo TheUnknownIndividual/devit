@@ -14,6 +14,7 @@ import { BrandIcon, BRANDS, ChainIcon } from "@/components/brand";
 import { readIntent } from "@/lib/intent";
 import { detectAddress } from "@/lib/address";
 import { readToken } from "@/lib/venues";
+import { socialsFromText } from "@/lib/socials";
 import { THEME_LABELS } from "@/lib/themes";
 import { usd } from "@/blocks/format";
 import { BLOCK_LABELS, CHAINS, type BlockType, type Chain, type Finding, type ThemeId, type TokenInfo } from "@/lib/spec";
@@ -87,6 +88,8 @@ export function PromptBox() {
   const router = useTransitionRouter();
   const [prompt, setPrompt] = useState("");
   const [address, setAddress] = useState("");
+  // The address field was filled from the prompt (not typed or pasted), so the prompt may change or clear it.
+  const [autoAddr, setAutoAddr] = useState(false);
   const [chain, setChain] = useState<Chain>("solana");
   const [style, setStyle] = useState<Style>("auto");
   const [kind, setKind] = useState<Kind>("memecoin");
@@ -158,6 +161,28 @@ export function PromptBox() {
     if (!r?.address) return null;
     return { address: r.address, chains: r.chains.length ? r.chains : detectAddress(r.address)?.chains ?? [] };
   }, [address]);
+
+  // A contract address in the prompt goes into the field by itself; the lookup below then fills the socials.
+  // Socials named in the prompt (x.com/…, t.me/…, a site link) fill their empty fields too.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const found = readIntent(prompt, chain).address;
+      if (found && (!address.trim() || autoAddr) && found !== address.trim()) { setAddress(found); setAutoAddr(true); }
+      else if (!found && autoAddr && address) { setAddress(""); setAutoAddr(false); setFoundFrom({}); }
+      const named = socialsFromText(prompt);
+      const next: Partial<Record<SocialKey, string>> = {};
+      if (named.x) next.x = `@${named.x.replace(/^@/, "")}`;
+      if (named.telegram) next.telegram = named.telegram.replace(/^https?:\/\//, "");
+      if (named.website) next.website = named.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
+      const keys = (Object.keys(next) as SocialKey[]).filter((k) => !socials[k].trim());
+      if (keys.length) {
+        setSocials((s) => ({ ...s, ...Object.fromEntries(keys.map((k) => [k, next[k]!])) }));
+        setFoundFrom((f) => ({ ...f, ...Object.fromEntries(keys.map((k) => [k, "your prompt"])) }));
+      }
+    }, 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prompt]);
 
   // A pasted address names its chain; follow it so the picker never disagrees with the paste.
   useEffect(() => {
@@ -290,7 +315,7 @@ export function PromptBox() {
   async function pasteAddress() {
     try {
       const t = (await navigator.clipboard.readText()).trim();
-      if (t) setAddress(t.slice(0, 200));
+      if (t) { setAddress(t.slice(0, 200)); setAutoAddr(false); }
     } catch {
       /* clipboard blocked: the field is right there */
     }
@@ -373,7 +398,7 @@ export function PromptBox() {
                 <input
                   ref={addrInput}
                   value={address}
-                  onChange={(e) => setAddress(e.target.value)}
+                  onChange={(e) => { setAddress(e.target.value); setAutoAddr(false); }}
                   placeholder="Contract address or DexScreener link"
                   aria-label="Contract address or DexScreener link"
                   spellCheck={false}
@@ -388,7 +413,7 @@ export function PromptBox() {
                   </span>
                 )}
                 {address ? (
-                  <button type="button" tabIndex={more ? 0 : -1} className="btn btn-ghost btn-icon h-8 w-8" aria-label="Clear contract address" onClick={() => { setAddress(""); setFoundFrom({}); }}><X size={14} className="turn" /></button>
+                  <button type="button" tabIndex={more ? 0 : -1} className="btn btn-ghost btn-icon h-8 w-8" aria-label="Clear contract address" onClick={() => { setAddress(""); setAutoAddr(false); setFoundFrom({}); }}><X size={14} className="turn" /></button>
                 ) : (
                   <button type="button" tabIndex={more ? 0 : -1} className="btn btn-ghost h-8 px-2.5 text-[12.5px]" onClick={() => void pasteAddress()}><ClipboardPaste size={14} className="tilt" /> Paste</button>
                 )}
@@ -398,7 +423,12 @@ export function PromptBox() {
               <div className="grow" data-open={!!lookup || !!lookupErr}>
                 <div>
                   {lookup && (
-                    <div key={lookup.token.address} className="mt-2.5 flex animate-rise items-center gap-3 rounded-xl border border-white/[0.07] bg-ink-850/80 p-2.5">
+                    <div
+                      key={lookup.token.address}
+                      className="mt-2.5 flex animate-rise items-center gap-3 rounded-xl border border-white/[0.07] bg-ink-850/80 bg-cover bg-center p-2.5"
+                      // The banner the design will be built from, dimmed so the text stays readable.
+                      style={lookup.token.header ? { backgroundImage: `linear-gradient(90deg, rgba(10,10,12,.94) 35%, rgba(10,10,12,.7)), url(${JSON.stringify(lookup.token.header)})` } : undefined}
+                    >
                       <span className="grid h-10 w-10 shrink-0 animate-pop place-items-center overflow-hidden rounded-lg bg-ink-700">
                         {lookup.token.logo ? <img src={lookup.token.logo} alt="" className="h-full w-full object-cover" /> : <Coins size={16} className="text-zinc-400" />}
                       </span>
