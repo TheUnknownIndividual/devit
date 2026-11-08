@@ -1,12 +1,12 @@
 "use client";
 
 import { modelHeader } from "@/components/build/ModelPicker";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTransitionRouter } from "glimm/next";
 import {
   Link2,
   AppWindow, ArrowUp, Check, ChevronDown, ClipboardPaste, Coins, FileCode2, Globe, Image as ImageIcon, Lightbulb, Loader2, LogOut, Mic, MicOff,
-  Palette, Rocket, Sparkles, Wand2, X,
+  Lock, Palette, Rocket, Sparkles, Wand2, X,
 } from "lucide-react";
 import { Menu } from "@/components/ui/Menu";
 import { ThemeSwatch } from "@/components/ThemeSwatch";
@@ -19,6 +19,7 @@ import { THEME_LABELS } from "@/lib/themes";
 import { usd } from "@/blocks/format";
 import { BLOCK_LABELS, CHAINS, type BlockType, type Chain, type Finding, type ThemeId, type TokenInfo } from "@/lib/spec";
 import { Upsell, refusalOf, type PlanRefusal } from "@/components/ui/Upsell";
+import { OutOfCredits, type CreditsOut } from "@/components/ui/OutOfCredits";
 import { StartFrom, type Imported } from "@/components/landing/StartFrom";
 
 type Kind = "memecoin" | "dapp" | "nft";
@@ -102,6 +103,21 @@ export function PromptBox() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refusal, setRefusal] = useState<PlanRefusal | null>(null);
+  // Out of AI credits: the build button greys out, and pressing it again opens a dialog that can't be missed.
+  const [outOf, setOutOf] = useState<CreditsOut | null>(null);
+  const [outOpen, setOutOpen] = useState(false);
+  // Checked on load, and again on coming back to the tab or closing the dialog (after a top-up or sign-in elsewhere).
+  const checkCredits = useCallback(() => {
+    fetch("/api/credits", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j: (CreditsOut & { canBuild?: boolean }) | null) => {
+      if (j) setOutOf(j.canBuild === false ? j : null);
+      if (j?.canBuild) setRefusal(null);
+    }).catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    checkCredits();
+    window.addEventListener("focus", checkCredits);
+    return () => window.removeEventListener("focus", checkCredits);
+  }, [checkCredits]);
   const [listening, setListening] = useState(false);
   const [canSpeak, setCanSpeak] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -263,6 +279,7 @@ export function PromptBox() {
   }
 
   async function submit() {
+    if (outOf) { setOutOpen(true); return; }
     if (!ready) return;
     setBusy(true);
     setError(null);
@@ -284,8 +301,9 @@ export function PromptBox() {
           socials: { x: socials.x.trim() || undefined, telegram: socials.telegram.trim() || undefined, website: socials.website.trim() || undefined },
         }),
       });
-      const j = (await r.json().catch(() => ({}))) as { id?: string; error?: string; limit?: boolean };
+      const j = (await r.json().catch(() => ({}))) as { id?: string; error?: string; limit?: boolean; credits?: boolean } & CreditsOut;
       setRefusal(refusalOf(j));
+      if (j.credits) setOutOf(j);
       if (!r.ok || !j.id) throw new Error(j.error || "Couldn't start the build. Try again.");
       router.push(`/build/${j.id}`);
     } catch (e) {
@@ -623,15 +641,18 @@ export function PromptBox() {
                 {listening ? <MicOff size={16} /> : <Mic size={16} className="pop" />}
               </button>
             )}
-            <button type="button" data-tour="build" onClick={() => void submit()} disabled={!ready} className="btn btn-primary" aria-label="Build now">
-              {busy ? <Loader2 size={16} className="animate-spin" /> : <ArrowUp size={16} className="nudge-up" />}
-              <span className="hidden sm:inline">{busy ? "Starting" : "Build now"}</span>
+            <button type="button" data-tour="build" onClick={() => void submit()} disabled={!ready && !outOf}
+              className={outOf ? "btn border border-white/10 bg-white/[0.06] text-zinc-500 hover:bg-white/[0.09] hover:text-zinc-300" : "btn btn-primary"}
+              aria-label={outOf ? "Build now (out of AI credits)" : "Build now"} title={outOf ? "Out of AI credits" : undefined}>
+              {busy ? <Loader2 size={16} className="animate-spin" /> : outOf ? <Lock size={15} /> : <ArrowUp size={16} className="nudge-up" />}
+              <span className="hidden sm:inline">{busy ? "Starting" : outOf ? "No credits" : "Build now"}</span>
             </button>
           </div>
         </div>
       </div>
 
       <StartFrom onImported={setImported} />
+      {outOf && <OutOfCredits open={outOpen} onClose={() => { setOutOpen(false); checkCredits(); }} info={outOf} />}
 
       {error && (refusal ? <Upsell body={refusal} className="mt-3 animate-rise" /> : <p role="alert" className="mt-3 animate-rise text-[13px] text-red-300">{error}</p>)}
 

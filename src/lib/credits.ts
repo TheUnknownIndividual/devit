@@ -130,7 +130,7 @@ export function outOfCredits(p: Payer): Response {
   const error = p.userId
     ? `You're out of AI credits. They come back ${when}. Top up with a credit pack${p.plan === "free" ? ", go Pro" : ""}, or add your own model key in Settings to keep going for free.`
     : `You've used today's free AI credits. Sign in for more, or come back tomorrow.`;
-  return Response.json({ error, limit: true, credits: true, upgrade: p.plan === "free" ? "pro" : undefined, topup: !!p.userId || undefined }, { status: 429 });
+  return Response.json({ error, limit: true, credits: true, upgrade: p.plan === "free" ? "pro" : undefined, topup: !!p.userId || undefined, signedIn: !!p.userId, plan: p.plan, allowance: p.allowance, per: p.per, resetsAt: p.resetsAt }, { status: 429 });
 }
 
 /**
