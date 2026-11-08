@@ -215,6 +215,96 @@ function lint(vw: number): string[] {
     const r = h1?.getBoundingClientRect();
     if (r && r.bottom + sy > 900) out.push(`At ${vw}×900 the hero headline ends ${Math.round(r.bottom + sy)}px down, below the first screen; tighten the hero so headline and action show without scrolling.`);
   }
+  // 7. Text that is hard to read: the text colour (with its alpha and every ancestor's opacity) against the colour
+  // behind it (ancestor background colours and gradient stops, composited from the page down), scored by WCAG:
+  // 4.5:1 for body text, 3:1 for large text. Text over a picture can't be measured this way and is left to the
+  // screenshots; decorative text marked aria-hidden doesn't count.
+  if (vw >= 900) {
+    const cv = document.createElement("canvas");
+    cv.width = cv.height = 1;
+    const cx = cv.getContext("2d", { willReadFrequently: true });
+    type C = [number, number, number, number];
+    const memo = new Map<string, C | null>();
+    const rgba = (s: string): C | null => {
+      if (memo.has(s)) return memo.get(s)!;
+      let v: C | null = null;
+      if (cx) {
+        cx.clearRect(0, 0, 1, 1);
+        cx.fillStyle = "#000";
+        cx.fillStyle = s;
+        cx.fillRect(0, 0, 1, 1);
+        const d = cx.getImageData(0, 0, 1, 1).data;
+        v = [d[0], d[1], d[2], d[3] / 255];
+      }
+      memo.set(s, v);
+      return v;
+    };
+    const over = (top: C, under: C): C => [0, 1, 2].map((i) => top[i] * top[3] + under[i] * (1 - top[3])).concat(1) as C;
+    const lum = (c: C) => {
+      const f = (x: number) => { const s = x / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
+      return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+    };
+    const ratio = (a: C, b: C) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    const hex = (c: C) => `#${c.slice(0, 3).map((x) => Math.round(x).toString(16).padStart(2, "0")).join("")}`;
+    const COLOR = /(?:rgba?|hsla?|oklch|oklab|lab|lch|color)\([^()]*\)|#[0-9a-f]{3,8}\b/gi;
+    const bgMemo = new Map<Element, C | null>();
+    // The colour behind an element's content, or null when a picture is part of it.
+    const behind = (el: Element | null): C | null => {
+      if (!el) return [255, 255, 255, 1];
+      if (bgMemo.has(el)) return bgMemo.get(el)!;
+      const under = behind(el.parentElement);
+      let c: C | null = under;
+      if (c) {
+        const cs = getComputedStyle(el);
+        const own = rgba(cs.backgroundColor);
+        if (own && own[3] > 0) c = over(own, c);
+        const img = cs.backgroundImage;
+        if (img && img !== "none") {
+          if (/url\(/.test(img)) c = null;
+          else {
+            const stops = (img.match(COLOR) ?? []).map(rgba).filter((x): x is C => !!x);
+            if (stops.length) {
+              const avg = [0, 1, 2, 3].map((i) => stops.reduce((s, x) => s + x[i], 0) / stops.length) as C;
+              c = over(avg, c);
+            }
+          }
+        }
+      }
+      bgMemo.set(el, c);
+      return c;
+    };
+    const fails: Array<{ el: Element; r: number; need: number; fg: C; bg: C }> = [];
+    const texts = [...document.querySelectorAll(".ss-code-body *")].filter((el) =>
+      [...el.childNodes].some((n) => n.nodeType === 3 && /\S{2,}/.test(n.textContent ?? "")) && !el.closest("[aria-hidden=true]") && visible(el)).slice(0, 700);
+    for (const el of texts) {
+      const cs = getComputedStyle(el);
+      if (/text/.test(cs.backgroundClip + ((cs as unknown as Record<string, string>).webkitBackgroundClip ?? ""))) continue;
+      const fill = rgba((cs as unknown as Record<string, string>).webkitTextFillColor || cs.color);
+      if (!fill || fill[3] === 0) continue;
+      const bg = behind(el);
+      if (!bg) continue;
+      let alpha = fill[3];
+      for (let a: Element | null = el; a && a !== document.body; a = a.parentElement) alpha *= Number(getComputedStyle(a).opacity);
+      const fg = over([fill[0], fill[1], fill[2], alpha], bg);
+      const size = parseFloat(cs.fontSize);
+      const need = size >= 24 || (size >= 18.6 && Number(cs.fontWeight) >= 700) ? 3 : 4.5;
+      const r = ratio(fg, bg);
+      // A near miss (4.2:1) still reads fine; flag what a person would struggle with.
+      if (r < need * 0.9) fails.push({ el, r, need, fg, bg });
+    }
+    // One line per section, worst first, so a whole low-contrast band reads as one fault with examples.
+    const bySec = new Map<string, typeof fails>();
+    for (const f of fails) {
+      const id = f.el.closest("section")?.getAttribute("data-block-id") ?? "page";
+      bySec.set(id, [...(bySec.get(id) ?? []), f]);
+    }
+    for (const [id, fs] of [...bySec].sort((a, b) => Math.min(...a[1].map((f) => f.r)) - Math.min(...b[1].map((f) => f.r))).slice(0, 4)) {
+      fs.sort((a, b) => a.r - b.r);
+      const ex = fs.slice(0, 3).map((f) => `${name(f.el)} is ${hex(f.fg)} on ${hex(f.bg)} (${f.r.toFixed(1)}:1, needs ${f.need}:1)`).join("; ");
+      out.push(`In #${id}, ${fs.length} text ${fs.length === 1 ? "element is" : "elements are"} hard to read: ${ex}. Change the text colour (or that background) so every pair reaches at least 4.5:1 for body text and 3:1 for large headings; use a dark text colour on a bright or light background, and don't fade text with opacity.`);
+    }
+  }
+
   const tiny = [...document.querySelectorAll(".ss-code-body *")].filter((el) => el.childNodes.length && [...el.childNodes].some((n) => n.nodeType === 3 && (n.textContent ?? "").trim().length > 2) && parseFloat(getComputedStyle(el).fontSize) < 10.5 && visible(el)).length;
   if (tiny > 3) out.push(`At ${vw}px, ${tiny} text elements are smaller than 11px; raise them to at least 11px.`);
   return out;
