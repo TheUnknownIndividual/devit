@@ -9,6 +9,7 @@ import { Treasury } from "./client/treasury";
 import { SignupForm } from "./client/signup";
 import { BuyToasts, Leaderboard, Milestones, RAID_POSTS, Raid, WhatIf } from "./client/fomo";
 import { fxOf } from "@/lib/themes";
+import { CodeSite } from "./CodeSite";
 import type { TreasuryData } from "@/lib/treasury";
 
 // Renders a SiteSpec. Each block carries data-block-id so the builder's select tool maps a click to one block,
@@ -511,6 +512,7 @@ function BlockView({ b, spec, mode, walletconnect, privy, credit }: { b: Block; 
  * credit: where the free plan's "Built with devit" line links (lib/credit.ts), or null for none.
  */
 export function Site({ spec, mode, walletconnect = null, privy = null, credit = null }: { spec: SiteSpec; mode: Mode; walletconnect?: string | null; privy?: string | null; credit?: string | null }) {
+  if (spec.code) return <CodeSite spec={spec} mode={mode} walletconnect={walletconnect} privy={privy} credit={credit} />;
   const t = spec.theme;
   const fx = fxOf(t);
   return (

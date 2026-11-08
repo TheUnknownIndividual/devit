@@ -170,7 +170,7 @@ async function chat(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const target = p.spec.blocks.find((b) => b.type === "hero") ?? p.spec.blocks[0];
   const context = docs?.length ? `\n\nFrom the files they added:\n${docs.map((d) => `--- ${d.name}\n${d.text}`).join("\n")}` : "";
   const cx = await connectorContext(p, text);
-  const res = await applyComments(p, [{ id: newId(), blockId: target.id, blockLabel: "Whole page", text: text + context, assets, ...(cx.text ? { context: cx.text } : {}) }]);
+  const res = await applyComments(p, [{ id: newId(), blockId: target.id, blockLabel: "Whole page", text: text + context, assets, ...(cx.text ? { context: cx.text } : {}) }], true);
   if (cx.used.length) res.via = `${res.via} · read ${cx.used.join(", ")}`;
   const out = await updateProject(id, (q) => {
     if (!q.spec) return;

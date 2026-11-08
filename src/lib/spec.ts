@@ -131,7 +131,9 @@ export interface TokenVenue {
 export type BlockType =
   | "nav" | "hero" | "stats" | "buy" | "chart" | "trades" | "how"
   | "tokenomics" | "holders" | "roadmap" | "treasury" | "socials" | "faq" | "footer" | "story" | "posts" | "signup"
-  | "toasts" | "leaderboard" | "pnl" | "raid" | "milestones";
+  | "toasts" | "leaderboard" | "pnl" | "raid" | "milestones"
+  /** A section the model wrote as HTML (generated-code sites): props.html, props.label. */
+  | "html";
 
 export const BLOCK_LABELS: Record<BlockType, string> = {
   nav: "Navigation", hero: "Hero", stats: "Live stats", buy: "Buy box", chart: "Chart",
@@ -139,6 +141,7 @@ export const BLOCK_LABELS: Record<BlockType, string> = {
   roadmap: "Roadmap", treasury: "Treasury", socials: "Socials", faq: "FAQ", footer: "Footer",
   story: "Story", posts: "From X", signup: "Signup form",
   toasts: "Buy toasts", leaderboard: "Top buyers", pnl: "What if you bought", raid: "Raid posts", milestones: "Milestones",
+  html: "Section",
 };
 
 export interface Block {
@@ -173,6 +176,68 @@ export interface SiteSpec {
   x?: { profile: XProfile; posts: XPost[] } | null;
   /** A logo the team uploaded; wins over the token's and the X picture. */
   logo?: string | null;
+  /** Generated-code sites: the model's own stylesheet and art direction. Its sections are "html" blocks. */
+  code?: SiteCode | null;
+}
+
+/**
+ * What the build understood about the project before designing anything (lib/design/brief.ts `understand`): the
+ * facts it may state (each with where it came from), the story, the subject in the artwork, the voice, what content
+ * really exists and which sections that content can carry. The art director and the code writer only work from this.
+ */
+export interface Dossier {
+  oneLiner: string;
+  whatItIs: string;
+  story: string;
+  subject: { kind: string; description: string };
+  imagery: { logo: string; banner: string; artStyle: string; motifs: string[] };
+  audience: string;
+  tone: { adjectives: string[]; phrases: string[]; avoid: string[] };
+  facts: Array<{ claim: string; source: string }>;
+  utility: string[];
+  community: string[];
+  inventory: { roadmap: string[]; tokenomics: string[]; team: string[]; partners: string[]; milestones: string[] };
+  gaps: string[];
+  sectionIdeas: Array<{ id: string; title: string; why: string; content: string }>;
+  via?: string;
+}
+
+/** One section of the plan: what it is for, exactly what goes in, how it is composed, which live widgets it holds. */
+export interface BriefSection { id: string; label: string; purpose: string; content: string; composition: string; widgets: string[] }
+
+/** The art direction a generated-code site was written from (lib/design/brief.ts `direct`). */
+export interface DesignBrief {
+  concept: string;
+  archetype: string;
+  /** Id from lib/design/fonts.ts. */
+  fontPair: string;
+  light: boolean;
+  mood: string[];
+  motifs: string[];
+  /** Named colours, all hex: bg, surface, text, muted, border, accent, accentText, plus extras the direction uses. */
+  palette: Record<string, string>;
+  radius: number;
+  heroIdea: string;
+  signature: string;
+  motion: string;
+  texture: string;
+  layoutRules: string[];
+  avoid: string[];
+  sections: BriefSection[];
+  via?: string;
+}
+
+export interface SiteCode {
+  /** Sanitised CSS (lib/sanitize.ts); defines the --bg/--text/--accent… tokens the live widgets read. */
+  css: string;
+  /** Google Fonts css2 family params ("family=Bricolage+Grotesque:wght@400..800"), one <link> each. */
+  fonts: string[];
+  brief: DesignBrief | null;
+  dossier?: Dossier | null;
+  /** Images the site may show: the token's logo, banner, post pictures and uploads. */
+  images: string[];
+  /** Who wrote the code. */
+  via?: string;
 }
 
 /** An image the team uploaded in the builder: re-encoded in the browser, checked and stored by us (/api/assets). */

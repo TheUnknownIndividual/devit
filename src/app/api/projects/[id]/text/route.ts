@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { sanitizeSection } from "@/lib/sanitize";
 import { updateProject } from "@/lib/store";
 import { publicProject } from "@/lib/public";
 import { editable } from "@/lib/access";
@@ -29,9 +30,20 @@ function swap(v: unknown, before: string, after: string, set: (x: unknown) => vo
   return false;
 }
 
+const escHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
 function edit(spec: SiteSpec, blockId: string, before: string, after: string): boolean {
   const b = spec.blocks.find((x) => x.id === blockId);
   if (!b) return false;
+  // A generated-code section: the words are swapped in its HTML text (escaped), never in tags.
+  if (b.type === "html") {
+    const html = String(b.props.html ?? "");
+    const from = escHtml(before);
+    const i = html.indexOf(from);
+    if (i < 0 || html.lastIndexOf("<", i) > html.lastIndexOf(">", i)) return false;
+    b.props = { ...b.props, html: sanitizeSection(html.slice(0, i) + escHtml(after) + html.slice(i + from.length), { images: spec.code?.images }) };
+    return true;
+  }
   if (swap(b.props, before, after, () => undefined, false) || swap(b.props, before, after, () => undefined, true)) return true;
   // The hero and nav show the site's own name and tagline when their copy doesn't set one.
   if (squash(spec.tagline) === before) { spec.tagline = after; return true; }

@@ -54,6 +54,8 @@ export async function exportFiles(p: Project, origin: string, credit: string | n
   for (const name of [...packages].sort()) if (ours.dependencies[name]) deps[name] = ours.dependencies[name];
   const dev: Record<string, string> = {};
   for (const name of ["typescript", "@types/react", "@types/react-dom", "@types/node"]) if (ours.devDependencies?.[name]) dev[name] = ours.devDependencies[name];
+  // Types for the packages the renderer uses (sanitize-html ships none of its own), so the exported project type-checks.
+  for (const name of packages) { const t = `@types/${name.replace(/^@/, "").replace("/", "__")}`; if (ours.devDependencies?.[t]) dev[t] = ours.devDependencies[t]; }
 
   const name = repoNameFor(p);
   const out: ExportFile[] = [];

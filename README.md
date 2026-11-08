@@ -15,7 +15,7 @@ Each step says what to do and what you should see.
 
 1. **Build from one sentence.** On https://devit.lol type
    `A dark degen site for Black Dragon on NEAR blackdragon.tkn.near` and press **Build now**.
-   You land in the builder. The step log shows each step as it runs (contract found, DexScreener and the NEAR RPC read, copy written). The preview shows a site with the BLACKDRAGON logo, live price, market cap, chart and recent trades.
+   You land in the builder. The step log shows each step as it runs: contract found, DexScreener and the NEAR RPC read, then **Understanding the project** (facts with sources), **Art direction** (archetype, fonts, light or dark, the section plan) and **Designing the site**. While the last step runs, the preview fills in section by section. The finished site is designed around Black Dragon's own artwork and story, with live price, market cap, chart, trades and the buy box mounted where the design placed them. Build the same token again and you get a different design.
 2. **Edit by clicking.** With **Select** on, click the headline in the preview and type `Make the headline shorter and louder`, press Enter. Click the buy box and type `make it bigger`.
    Both comments queue above the chat and a numbered pin marks each block. Press **Apply 2**: only those two blocks change. **Undo** in the top bar puts them back.
 3. **Buy from another chain (NEAR Intents).** Open the live site (the arrow icon in the top bar), scroll to **Buy** and pick **Other chains**.
@@ -76,13 +76,29 @@ DexScreener (pairs, logos, socials), GeckoTerminal (trades, candles), Jupiter (S
 - `src/blocks`: the renderer that turns a site spec into the published page, plus the client parts (wallet, swap, chart, trades).
 - `edge/`: an optional Cloudflare Worker that serves published sites on subdomains.
 
-The agent writes a JSON site spec (theme plus ordered blocks with stable ids), not free-form HTML. That is why clicking an element maps to exactly one block and an edit only regenerates the blocks you commented on.
+### How a site is designed (no templates)
+
+Every site is designed for its own project and written as code. A build runs four stages, each shown live in the step log:
+
+1. **Derive.** Chain data, the token's launchpad and DexScreener metadata, its website, its X profile and posts, and the user's sentence. The artwork's colours are measured from the logo and banner pixels by k-means clustering (`src/lib/palette.ts`).
+2. **Understand** (`src/lib/design/brief.ts`, `understand`). A model looks at the logo, banner and post pictures and reads everything found. It writes a dossier: what the project is, its story, the subject in its artwork, its voice and catchphrases, each fact it may state with its source, what content really exists (roadmap, tokenomics, team, milestones), and which sections that content can carry.
+3. **Direct** (`direct`). An art director turns the dossier into a concept and a section plan:
+   - an archetype (a seeded pick from 20, never repeating the recent sites);
+   - a palette built from the artwork's own colours, contrast-checked to 7:1;
+   - a font pairing from 50 curated Google Fonts pairs (`src/lib/design/fonts.ts`);
+   - a hero idea, one signature element and one motion moment;
+   - sections planned only from content that exists.
+4. **Create** (`src/lib/design/codegen.ts`). The code writer writes the whole site in HTML and CSS. It streams, and each section is saved the moment it closes, so the preview fills in section by section, in the same way bolt.new streams files. Live parts (buy box, chart, trades, stats, contract address, wallet, signup) are our own React widgets. The writer places them with `data-ss-widget` slots, and they take on the site's design tokens.
+
+Everything the model writes passes a sanitiser on save and again on render (`src/lib/sanitize.ts`). It removes scripts, event handlers, frames, forms and `javascript:` links, allows images only from the token's own sources, and strips imports and foreign `url()`s from CSS. Each section keeps `data-block-id` and `data-el`, so clicking an element still maps to exactly one section. A comment rewrites only that section (`src/lib/design/edit.ts`), a whole-page request in chat can change the stylesheet, and double-clicking text edits it in place. If any stage fails, the build falls back to the block renderer: a JSON spec of themed blocks with stable ids.
+
+The design rules (`src/lib/design/principles.ts`) are devit's own, informed by Anthropic's Apache-2.0 frontend-design skill.
 
 ## Hackathon notes
 
 - Timeline: work started on 2026-10-26, after the hackathon announcement on 2026-10-19, which the rules count as inside the window (HACKATHON.md Q-001). Nothing was committed until 2026-11-04, so the first commit holds the work from Oct 26 onward and later commits are day by day. No code was brought in from an earlier project.
 - One dependency comes from an earlier project by the same author: NEAR swap quotes in the buy box use the public developer API of neartrade (`dev.neartrade.lol`, routing on Rhea pools). It is called over HTTP like any other service; its code is not in this repo and is not part of this submission.
-- Written with AI coding help (Claude Code). Libraries: Next.js 16, React 19, Tailwind CSS 3, zod, `@hot-labs/near-connect`, `@solana/kit`, `@noble/curves` and `@noble/hashes`, `@simplewebauthn`, `@walletconnect/universal-provider`, `@privy-io/react-auth`, `lucide-react`, `simple-icons`, `glimm` (the WebGL sweep from the home page into the builder), `uqr`, `playwright-core` (style-reference screenshots).
+- Written with AI coding help (Claude Code). Libraries: Next.js 16, React 19, Tailwind CSS 3, zod, `@hot-labs/near-connect`, `@solana/kit`, `@noble/curves` and `@noble/hashes`, `@simplewebauthn`, `@walletconnect/universal-provider`, `@privy-io/react-auth`, `lucide-react`, `simple-icons`, `glimm` (the WebGL sweep from the home page into the builder), `uqr`, `playwright-core` (style-reference screenshots), `sanitize-html` (generated-site sanitiser).
 - Swaps and payments were tested with quotes only. devit never holds user funds; buyers sign in their own wallet or send to a 1-Click deposit address.
 
 ## License

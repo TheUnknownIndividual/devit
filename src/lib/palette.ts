@@ -7,10 +7,10 @@ import { isPublicHttps } from "./net";
 
 const MAX_BYTES = 2_000_000;
 
-function pngUrl(logo: string): string {
+function pngUrl(logo: string, size = 64): string {
   if (/^https:\/\/cdn\.dexscreener\.com\/cms\/images\//.test(logo)) {
     const u = new URL(logo);
-    u.search = "?width=64&height=64&quality=90&format=png";
+    u.search = `?width=${size}&quality=90&format=png`;
     return u.toString();
   }
   if (/^https:\/\/dd\.dexscreener\.com\//.test(logo)) {
@@ -210,12 +210,12 @@ function finish(px: number[]) {
   return { w: px.length / 4, h: 1, px: Uint8Array.from(px) };
 }
 
-/** The logo's brand colour, or null when it can't be read. Never throws. */
-export async function logoAccent(logo: string | null | undefined): Promise<string | null> {
-  if (!logo || !isPublicHttps(logo)) return null;
+/** RGBA pixels of a public PNG/JPEG (DexScreener images asked for at `size` px), or null. Never throws. */
+async function pixelsOf(src: string | null | undefined, size = 64): Promise<Uint8Array | null> {
+  if (!src || !isPublicHttps(src)) return null;
   try {
     // Redirects are followed by hand so each hop gets the same public-host check.
-    let url = pngUrl(logo), r: Response | null = null;
+    let url = pngUrl(src, size), r: Response | null = null;
     for (let hop = 0; hop < 4; hop++) {
       if (!isPublicHttps(url)) return null;
       r = await fetch(url, { signal: AbortSignal.timeout(6000), redirect: "manual", headers: { accept: "image/png,image/*;q=0.8" } });
@@ -229,11 +229,82 @@ export async function logoAccent(logo: string | null | undefined): Promise<strin
     if (len > MAX_BYTES) return null;
     const buf = Buffer.from(await r.arrayBuffer());
     if (buf.length > MAX_BYTES) return null;
-    const img = decodePng(buf) ?? decodeJpegBlocks(buf);
-    return img ? dominantColor(img.px) : null;
+    return (decodePng(buf) ?? decodeJpegBlocks(buf))?.px ?? null;
   } catch {
     return null;
   }
+}
+
+/** The logo's brand colour, or null when it can't be read. Never throws. */
+export async function logoAccent(logo: string | null | undefined): Promise<string | null> {
+  const px = await pixelsOf(logo);
+  return px ? dominantColor(px) : null;
+}
+
+export interface Swatch { hex: string; share: number; s: number; v: number; lum: number }
+export interface Palette {
+  /** Biggest first; at most 6. */
+  swatches: Swatch[];
+  /** The most present vivid colour (the brand accent), if there is one. */
+  vivid: string | null;
+  /** Whether the artwork itself reads dark or light overall. */
+  lean: "dark" | "light";
+  from: Array<"logo" | "banner">;
+}
+
+const lumOf = (r: number, g: number, b: number) => {
+  const c = [r, g, b].map((v) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+};
+
+/** k-means over opaque pixels (deterministic farthest-point start), merged when two clusters are near-identical. */
+function clusters(px: Uint8Array, k = 6): Swatch[] {
+  const pts: number[][] = [];
+  const step = Math.max(1, Math.floor(px.length / 4 / 6000));
+  for (let i = 0; i < px.length; i += 4 * step) if (px[i + 3] >= 128) pts.push([px[i], px[i + 1], px[i + 2]]);
+  if (pts.length < 8) return [];
+  const d2 = (a: number[], b: number[]) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2;
+  const cent: number[][] = [pts[0]];
+  while (cent.length < k) {
+    let best = pts[0], far = -1;
+    for (const p of pts) { const m = Math.min(...cent.map((c) => d2(p, c))); if (m > far) { far = m; best = p; } }
+    if (far < 400) break;
+    cent.push(best);
+  }
+  let assign = new Array<number>(pts.length).fill(0);
+  for (let it = 0; it < 10; it++) {
+    assign = pts.map((p) => { let bi = 0, bd = Infinity; cent.forEach((c, i) => { const d = d2(p, c); if (d < bd) { bd = d; bi = i; } }); return bi; });
+    const sum = cent.map(() => [0, 0, 0, 0]);
+    pts.forEach((p, i) => { const s = sum[assign[i]]; s[0] += p[0]; s[1] += p[1]; s[2] += p[2]; s[3]++; });
+    sum.forEach((s, i) => { if (s[3]) cent[i] = [s[0] / s[3], s[1] / s[3], s[2] / s[3]]; });
+  }
+  const n = cent.map((_, i) => assign.filter((a) => a === i).length);
+  const out: Swatch[] = cent.map((c, i) => { const [, sat, val] = hsv(c[0], c[1], c[2]); return { hex: hex(c[0], c[1], c[2]), share: n[i] / pts.length, s: sat, v: val, lum: lumOf(c[0], c[1], c[2]) }; });
+  return out.filter((x) => x.share >= 0.02).sort((a, b) => b.share - a.share);
+}
+
+/**
+ * The artwork's colours: logo and banner (DexScreener header or X banner) quantised together, the banner counted
+ * a little less. What the art director and the code writer pick roles from, so the site wears the token's own colours.
+ */
+export async function paletteOf(logo: string | null | undefined, banner: string | null | undefined): Promise<Palette | null> {
+  const [lp, bp] = await Promise.all([pixelsOf(logo, 64), pixelsOf(banner, 128)]);
+  if (!lp && !bp) return null;
+  const merged = new Uint8Array((lp?.length ?? 0) + (bp?.length ?? 0));
+  if (lp) merged.set(lp, 0);
+  if (bp) merged.set(bp, lp?.length ?? 0);
+  const swatches = clusters(merged);
+  if (!swatches.length) return null;
+  const vividOf = (px: Uint8Array | null) => (px ? dominantColor(px) : null);
+  const lum = swatches.reduce((a, s) => a + s.lum * s.share, 0) / swatches.reduce((a, s) => a + s.share, 0);
+  return { swatches: swatches.slice(0, 6), vivid: vividOf(lp) ?? vividOf(bp), lean: lum < 0.28 ? "dark" : "light", from: [...(lp ? ["logo" as const] : []), ...(bp ? ["banner" as const] : [])] };
+}
+
+/** WCAG contrast ratio between two hex colours. */
+export function contrast(a: string, b: string): number {
+  const l = (h: string) => { const n = parseInt(h.replace("#", "").slice(0, 6), 16); return lumOf((n >> 16) & 255, (n >> 8) & 255, n & 255); };
+  const [x, y] = [l(a), l(b)].sort((p, q) => q - p);
+  return (x + 0.05) / (y + 0.05);
 }
 
 /** A page's own <meta name="theme-color">, when it's a real colour and not white/black. */

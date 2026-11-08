@@ -10,8 +10,13 @@ import { orderLike, refBlockOrder, refLine, themeFromRef, themeForRef } from "./
 import { nudgeTheme, pickStyleRefs, themeOfPicks, type StyleRef } from "./style-library";
 import { HERO_OF, THEMES, THEME_LABELS, THEME_NOTES, colorFromText, withHeroOf, fitAccent, fxOf, readableOn, referenceIn, restyle, themeNamed } from "./themes";
 import { updateProject } from "./store";
+import { paletteOf } from "./palette";
+import { direct, imagesOf, remember, themeOfBrief, understand, type DesignInput } from "./design/brief";
+import { writeSite } from "./design/codegen";
+import { editCode } from "./design/edit";
+import { fontPair } from "./design/fonts";
 import { readTreasury, treasuryAccountsIn, validAccount, type TreasuryData } from "./treasury";
-import { BLOCK_LABELS, CHAINS, THEME_IDS, newId, type Asset, type Block, type BlockType, type Chain, type PendingComment, type Project, type RefRead, type Research, type SiteSpec, type ThemeFx, type Theme, type ThemeId, type TokenInfo, type TokenLink } from "./spec";
+import { BLOCK_LABELS, CHAINS, THEME_IDS, newId, type Asset, type Block, type BlockType, type Chain, type PendingComment, type Project, type RefRead, type Research, type SiteSpec, type Dossier, type DesignBrief, type ThemeFx, type Theme, type ThemeId, type TokenInfo, type TokenLink } from "./spec";
 
 // The build pipeline: prompt → intent → chain data → style → copy → blocks.
 // Each step is written to the project as it runs so the builder can animate it.
@@ -419,6 +424,15 @@ export async function runBuild(id: string): Promise<void> {
     return `@${r.x.profile.handle}${r.x.profile.followers != null ? ` · ${r.x.profile.followers.toLocaleString("en-US")} followers` : ""} · ${r.x.posts.length ? `${r.x.posts.length} posts, ${notes}` : "profile only"}`;
   });
 
+  // The generated-code pass starts reading now, alongside the copywriter: artwork colours, then the analyst's dossier.
+  const designing = llmAvailable();
+  const designBase = (): DesignInput => {
+    const t = token as TokenInfo | null;
+    return { prompt, token: t, chain, research: found as Research | null, palette: null, style: start.style ?? null, name: t?.name ?? intent.ticker ?? "", ticker: t?.symbol ?? intent.ticker ?? "", tagline: "" };
+  };
+  const paletteP = designing ? (() => { const r = found as Research | null; const t = token as TokenInfo | null; return paletteOf(t?.logo ?? r?.x?.profile.avatar, t?.header ?? r?.x?.profile.banner).catch(() => null); })() : Promise.resolve(null);
+  const dossierP: Promise<Dossier | null> = designing ? paletteP.then((palette) => understand({ ...designBase(), palette })).catch(() => null) : Promise.resolve(null);
+
   // Reference sites: their look and motion, read in a browser. Their sections join the ones the site shows.
   const refs: RefRead[] = [];
   let libRefs: StyleRef[] = [];
@@ -505,6 +519,54 @@ export async function runBuild(id: string): Promise<void> {
     return `${wallets} · ${route} · any-chain buys through NEAR Intents`;
   });
 
+  // Generated-code site: understand → direct → write, each pass shown as a step. Any pass failing keeps the block site.
+  let brief: DesignBrief | null = null;
+  let dossier: Dossier | null = null;
+  if (designing && spec) {
+    const blockSpec: SiteSpec = spec;
+    const input: DesignInput = { ...designBase(), palette: await paletteP, name: blockSpec.name, ticker: blockSpec.ticker, tagline: blockSpec.tagline ?? "" };
+    await step(id, "understand", "Understanding the project", async () => {
+      dossier = await dossierP;
+      if (!dossier) throw new Error("Couldn't analyse it this time, so I kept the standard layout");
+      const d: Dossier = dossier;
+      const inv = Object.entries(d.inventory).filter(([, v]) => v.length).map(([k]) => k);
+      return `${d.oneLiner || d.whatItIs} · ${d.facts.length} facts with sources${inv.length ? ` · has ${inv.join(", ")}` : ""}${input.palette ? ` · ${input.palette.swatches.length} colours from the ${input.palette.from.join(" and ")}` : ""}`;
+    });
+    if (dossier) await step(id, "direction", "Art direction", async () => {
+      brief = await direct(input, dossier!);
+      if (!brief) throw new Error("Couldn't settle a direction, so I kept the standard layout");
+      const b: DesignBrief = brief;
+      const fp = fontPair(b.fontPair);
+      return `${b.archetype.replace(/-/g, " ")} · ${fp ? `${fp.display} + ${fp.body}` : b.fontPair} · ${b.light ? "light" : "dark"} · ${b.sections.map((x) => x.label.toLowerCase()).join(", ")}`;
+    });
+    if (dossier && brief) await step(id, "design", "Designing the site", async () => {
+      const b: DesignBrief = brief!;
+      const theme = themeOfBrief(blockSpec.theme, b);
+      const t = blockSpec.token;
+      const links = [...(blockSpec.links ?? []), ...(t?.pairUrl ? [{ type: "chart", label: "Chart", url: t.pairUrl }] : []), ...(t?.venue?.buyUrl ? [{ type: "buy", label: "Trade page", url: t.venue.buyUrl }] : [])].filter((l) => /^https:\/\//.test(l.url));
+      // Saves run one after another, so a slow write can't land after a newer one.
+      let saving = Promise.resolve();
+      const out = await writeSite(
+        { dossier: dossier!, brief: b, token: t, name: blockSpec.name, ticker: blockSpec.ticker, links, images: imagesOf(input, [blockSpec.logo]) },
+        (soFar, label) => {
+          saving = saving.then(() => updateProject(id, (p) => {
+            p.spec = { ...blockSpec, theme, code: soFar.code, blocks: soFar.blocks };
+            const s = p.steps.find((x) => x.id === "design");
+            if (s) s.detail = `Wrote ${label.toLowerCase()} (${soFar.blocks.length} of ${b.sections.length})`;
+          })).then(() => undefined, () => undefined);
+        },
+      );
+      await saving;
+      if (!out) {
+        await updateProject(id, (p) => { p.spec = null; });
+        throw new Error("The designer didn't finish, so I kept the standard layout");
+      }
+      spec = { ...blockSpec, theme, code: out.code, blocks: out.blocks };
+      void remember(b);
+      return `${out.blocks.length} sections, written by ${out.via}`;
+    });
+  }
+
   await updateProject(id, (p) => {
     if (!spec) {
       p.status = "error";
@@ -524,7 +586,10 @@ export async function runBuild(id: string): Promise<void> {
     const t = (spec as SiteSpec).token;
     const style = THEME_LABELS[(spec as SiteSpec).theme.id].toLowerCase().replace("defi", "DeFi");
     const r = found as Research | null;
-    const built = t
+    const code = (spec as SiteSpec).code;
+    const built = code?.brief
+      ? `Designed a one-off site for $${(spec as SiteSpec).ticker}: ${code.brief.concept.replace(/\.$/, "")}.${t ? " Price, holders and trades are live." : ""}`
+      : t
       ? `Built ${article(style)} site for $${(spec as SiteSpec).ticker} on ${CHAINS[t.chain].name}. Price, holders and trades are live.`
       : `Built ${article(style)} site. Paste your contract address here to pull in the live price, logo and socials.`;
     p.messages.push({
@@ -853,7 +918,12 @@ function treasuryComment(spec: SiteSpec, c: PendingComment): boolean {
   return true;
 }
 
-export async function applyComments(project: Project, comments: PendingComment[]): Promise<{ spec: SiteSpec; message: string; via: string }> {
+export async function applyComments(project: Project, comments: PendingComment[], wholePage = false): Promise<{ spec: SiteSpec; message: string; via: string }> {
+  // A generated-code site is edited as code: the editor rewrites the sections and CSS, widgets included.
+  if (project.spec?.code) {
+    const res = llmAvailable() ? await editCode(project, comments, wholePage) : null;
+    return res ?? { spec: project.spec, message: "I couldn't make that change this time. Try again, or double-click any text in the preview to edit it directly.", via: "offline editor" };
+  }
   const next: SiteSpec = structuredClone(project.spec!);
   const treasury = comments.filter((c) => treasuryComment(next, c));
   const forms = comments.filter((c) => !treasury.includes(c) && signupComment(next, c));

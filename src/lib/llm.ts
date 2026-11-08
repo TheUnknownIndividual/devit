@@ -198,3 +198,166 @@ export async function askJson<T>(system: string, user: string, validate: (v: unk
   }
   return null;
 }
+
+// ---------- Long calls with pictures (art direction, generated-code sites) ----------
+//
+// The site designer's calls differ from askJson: they look at the token's pictures (Claude reads image URLs; the
+// others get the URLs listed as text), they can run for minutes, and codegen streams so finished sections save as
+// they arrive. Same provider order, same meter.
+
+export interface RichAsk {
+  system: string;
+  user: string;
+  /** Public https image URLs (logo, banner, post pictures). Claude sees them; other providers get them as text. */
+  images?: string[];
+  maxOut: number;
+  timeoutMs: number;
+  /** Streamed text as it arrives (accumulated so far). */
+  onText?: (soFar: string) => void;
+  temperature?: number;
+  /**
+   * Claude's thinking before it answers: "off" for calls that only execute a plan (codegen streams at once), an
+   * effort level for calls that analyse. Thinking counts toward maxOut, so analysing calls get room for both.
+   */
+  think?: "off" | "low" | "medium" | "high";
+}
+
+type AnthropicUsage = { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
+const anthUsage = (u?: AnthropicUsage) => (u ? { in: (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0), out: u.output_tokens ?? 0 } : undefined);
+
+/** Reads an SSE body, handing each `data:` payload to `on`. */
+async function sse(body: ReadableStream<Uint8Array>, on: (data: string) => void): Promise<void> {
+  const reader = body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i: number;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      if (line.startsWith("data:")) on(line.slice(5).trim());
+    }
+  }
+}
+
+/** Pictures Anthropic will be able to fetch: one dead URL fails the whole request, so each is checked first. */
+async function reachable(urls: string[]): Promise<string[]> {
+  const ok = await Promise.all(urls.filter((u) => /^https:\/\//.test(u)).slice(0, 6).map(async (u) => {
+    try {
+      const r = await fetch(u, { method: "GET", headers: { range: "bytes=0-1023" }, signal: AbortSignal.timeout(4000) });
+      void r.body?.cancel();
+      return r.ok && /^image\/(png|jpe?g|gif|webp)/i.test(r.headers.get("content-type") ?? "") ? u : null;
+    } catch {
+      return null;
+    }
+  }));
+  return ok.filter((u): u is string => !!u);
+}
+
+async function richClaude(a: RichAsk, key: string, model: string, withImages: boolean): Promise<LlmResult | null> {
+  const imgs = withImages ? await reachable(a.images ?? []) : [];
+  const content = [...imgs.map((url) => ({ type: "image", source: { type: "url", url } })), { type: "text", text: a.user }];
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+    // No temperature: current Claude models reject it. "between_tools" is how this model turns thinking off.
+    body: JSON.stringify({
+      model, max_tokens: a.maxOut, stream: true, system: a.system, messages: [{ role: "user", content }],
+      ...(a.think === "off" ? { thinking: { type: "between_tools" } } : { thinking: { type: "adaptive" }, output_config: { effort: a.think ?? "medium" } }),
+    }),
+    signal: AbortSignal.timeout(a.timeoutMs),
+  });
+  if (!r.ok || !r.body) {
+    // Status and the API's own error message only (never prompt text), so a failing provider is visible in the logs.
+    console.warn(`[llm] anthropic ${model} ${r.status} ${(await r.text().catch(() => "")).slice(0, 200)}`);
+    return null;
+  }
+  let text = "";
+  const usage: AnthropicUsage = {};
+  await sse(r.body, (d) => {
+    try {
+      const j = JSON.parse(d) as { type: string; delta?: { type?: string; text?: string; stop_reason?: string }; message?: { usage?: AnthropicUsage }; usage?: AnthropicUsage };
+      if (j.type === "message_delta" && j.delta?.stop_reason === "max_tokens") console.warn(`[llm] anthropic ${model} hit max_tokens (${a.maxOut})`);
+      if (j.type === "content_block_delta" && j.delta?.type === "text_delta" && j.delta.text) { text += j.delta.text; a.onText?.(text); }
+      else if (j.type === "message_start" && j.message?.usage) Object.assign(usage, j.message.usage);
+      else if (j.type === "message_delta" && j.usage) Object.assign(usage, j.usage);
+    } catch { /* keep-alive or partial line */ }
+  });
+  return text ? { text, via: `Claude · ${model}`, model, usage: anthUsage(usage) } : null;
+}
+
+async function richOpenAiShape(a: RichAsk, url: string, key: string, model: string, label: string, opts: { images: boolean; reasoning?: boolean }): Promise<LlmResult | null> {
+  const listed = (a.images ?? []).length ? `\n\nPictures of the token (URLs, you can't open them; use them as <img src> where the brief says):\n${a.images!.join("\n")}` : "";
+  const user = opts.images && a.images?.length
+    ? [{ type: "text", text: a.user }, ...a.images.slice(0, 6).map((u) => ({ type: "image_url", image_url: { url: u } }))]
+    : a.user + listed;
+  const r = await fetch(`${url}/chat/completions`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${key}`, "x-title": "devit" },
+    body: JSON.stringify({
+      model, stream: true, stream_options: { include_usage: true },
+      messages: [{ role: "system", content: a.system }, { role: "user", content: user }],
+      ...(opts.reasoning ? { max_completion_tokens: a.maxOut * 2 } : { max_tokens: a.maxOut, temperature: a.temperature ?? 0.8 }),
+    }),
+    signal: AbortSignal.timeout(a.timeoutMs),
+  });
+  if (!r.ok || !r.body) {
+    console.warn(`[llm] ${label} ${model} ${r.status} ${(await r.text().catch(() => "")).slice(0, 200)}`);
+    return null;
+  }
+  let text = "";
+  let usage: { in: number; out: number } | undefined;
+  await sse(r.body, (d) => {
+    if (d === "[DONE]") return;
+    try {
+      const j = JSON.parse(d) as { choices?: { delta?: { content?: string } }[]; usage?: OaiUsage };
+      const piece = j.choices?.[0]?.delta?.content;
+      if (piece) { text += piece; a.onText?.(text); }
+      if (j.usage) usage = oaiUsage(j.usage);
+    } catch { /* partial */ }
+  });
+  return text ? { text, via: `${label} · ${model.split("/").pop()}`, model, usage } : null;
+}
+
+/**
+ * One long call with pictures, streamed, best provider first: Claude (sees the pictures), then NEAR AI GLM, then
+ * OpenAI (pictures inline), then OpenRouter. `accept` decides whether a reply is usable (else the next provider is
+ * asked). Returns the text and who answered, or null.
+ */
+export async function askRich(a: RichAsk, accept: (text: string) => boolean = (t) => t.length > 0): Promise<{ text: string; via: string } | null> {
+  const order = (p: Provider) => (p.model ? -1 : ({ anthropic: 0, nearai: 1, openai: 2, openrouter: 3 } as const)[p.id]);
+  const list = providers().sort((x, y) => order(x) - order(y) || Number(y.own) - Number(x.own));
+  const seen = new Set<string>();
+  for (const p of list) {
+    const id = `${p.id}:${p.own}:${p.model ?? ""}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    let res: LlmResult | null = null;
+    try {
+      if (p.id === "anthropic") {
+        const model = p.model ?? CLAUDE_MODEL;
+        res = (await richClaude(a, p.key, model, true)) ?? (a.images?.length ? await richClaude(a, p.key, model, false) : null);
+      } else if (p.id === "nearai") res = await richOpenAiShape(a, NEAR_AI_URL, p.key, p.model ?? NEAR_AI_MODEL, "NEAR AI Cloud", { images: false });
+      else if (p.id === "openai") res = await richOpenAiShape(a, OPENAI_URL, p.key, p.model ?? OPENAI_MODEL, "OpenAI", { images: true, reasoning: true });
+      else res = await richOpenAiShape(a, "https://openrouter.ai/api/v1", p.key, p.model ?? OPENROUTER_MODEL, "OpenRouter", { images: false });
+    } catch (e) {
+      console.warn(`[llm] ${p.id} failed: ${e instanceof Error ? e.name + " " + e.message : "error"}`);
+      res = null;
+    }
+    if (!res) continue;
+    if (!p.own) addCost(res.usage ? costOf(res.model, res.usage.in, res.usage.out) : costOf(res.model, (a.system.length + a.user.length) / 3.5, a.maxOut));
+    if (accept(res.text)) return { text: res.text, via: p.own ? `${res.via} · your key` : res.via };
+    console.warn(`[llm] ${p.id} reply rejected (${res.text.length} chars)`);
+  }
+  return null;
+}
+
+/** askRich for one JSON object, validated. */
+export async function askRichJson<T>(a: RichAsk, validate: (v: unknown) => T | null): Promise<{ value: T; via: string } | null> {
+  let value: T | null = null;
+  const res = await askRich({ ...a, system: a.system + "\nReply with one JSON object only, no prose, no code fences." }, (t) => (value = parse(t, validate)) != null);
+  return res && value ? { value, via: res.via } : null;
+}

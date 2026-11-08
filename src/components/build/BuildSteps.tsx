@@ -1,13 +1,13 @@
 "use client";
 
-import { AlertTriangle, AtSign, Blocks, BookOpen, Check, Coins, FileText, Link2, Loader2, Minus, Palette, Search, Wallet } from "lucide-react";
+import { AlertTriangle, AtSign, Blocks, BookOpen, Check, Coins, Compass, FileText, Link2, Loader2, Microscope, Minus, Palette, PenTool, Search, Wallet } from "lucide-react";
 import type { BuildStep } from "@/lib/spec";
 
 // The live log of a build: each step slides in as it starts, spins while running and settles with what it found.
 
-const ICON: Record<string, typeof Search> = { intent: Search, chain: Link2, research: BookOpen, voice: AtSign, copy: FileText, style: Palette, blocks: Blocks, wallet: Wallet };
-const PLANNED = ["intent", "chain", "research", "voice", "copy", "style", "blocks", "wallet"];
-const PLANNED_TITLE: Record<string, string> = { intent: "Reading your request", chain: "Reading the chain", research: "Finding socials and the story", voice: "Reading their X", copy: "Writing the copy", style: "Picking a style", blocks: "Laying out blocks", wallet: "Wiring wallet and buy box" };
+const ICON: Record<string, typeof Search> = { intent: Search, chain: Link2, research: BookOpen, voice: AtSign, copy: FileText, style: Palette, blocks: Blocks, wallet: Wallet, understand: Microscope, direction: Compass, design: PenTool };
+const PLANNED = ["intent", "chain", "research", "voice", "copy", "style", "blocks", "wallet", "understand", "direction", "design"];
+const PLANNED_TITLE: Record<string, string> = { intent: "Reading your request", chain: "Reading the chain", research: "Finding socials and the story", voice: "Reading their X", copy: "Writing the copy", style: "Picking a style", blocks: "Laying out blocks", wallet: "Wiring wallet and buy box", understand: "Understanding the project", direction: "Art direction", design: "Designing the site" };
 
 export function BuildSteps({ steps, building }: { steps: BuildStep[]; building: boolean }) {
   const done = steps.filter((s) => s.state === "done" || s.state === "skipped").length;
