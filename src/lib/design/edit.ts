@@ -222,6 +222,7 @@ export async function editCode(project: Project, comments: PendingComment[], who
   // Measured before the edit (while the editor works), so the check afterwards can tell what the edit itself broke.
   const beforeP = inspect(staticPage(spec.code!, spec.blocks), { shots: false }).catch(() => null);
   const hasPics = comments.some((c) => c.assets?.length);
+  const t0 = Date.now();
   let done: Attempt | null = null;
   let lane = "";
 
@@ -246,6 +247,7 @@ export async function editCode(project: Project, comments: PendingComment[], who
     if (!done.changed) return null;
   }
 
+  const tModel = Date.now() - t0;
   // The check: measure the edited page; if the edit added layout faults, one fix pass with screenshots.
   const [before, after] = await Promise.all([beforeP, inspect(staticPage(done.spec.code!, done.spec.blocks), { shots: false }).catch(() => null)]);
   if (before && after && after.issues.length > before.issues.length) {
@@ -265,5 +267,6 @@ export async function editCode(project: Project, comments: PendingComment[], who
       }
     }
   }
+  console.log(`[edit] ${lane ? "quick" : "full"} lane: model ${tModel}ms, check+fix ${Date.now() - t0 - tModel}ms, faults ${before?.issues.length ?? "?"}→${after?.issues.length ?? "?"}`);
   return { spec: done.spec, message: done.message, via: `${done.via}${lane}` };
 }
