@@ -83,6 +83,15 @@ DESIGN RULES (what separates a designed site from a generated one):
 - Details: custom list markers, rules and dividers in the archetype's language, hover states on links/buttons, focus-visible outlines, ::selection colour, a considered footer.
 - Banned: purple-to-blue gradient heroes, glassmorphism everywhere, generic "Feature 1/2/3" cards, centred-everything layouts, emoji as icons, Inter/Roboto/Arial look, lorem ipsum, stock-photo descriptions.
 
+LAYOUT DISCIPLINE (a reviewer measures the rendered page for these; get them right first time):
+- One container for every section: .ss-code{--wrap:min(1200px, 100% - 2*clamp(16px,4vw,48px));--space:clamp(64px,9vw,128px)} and each section's content sits in a wrapper with width:var(--wrap);margin-inline:auto, so left edges line up from section to section. Full-bleed backgrounds go on the section; the content still uses the wrapper.
+- One vertical rhythm: every section uses padding-block:var(--space) (the hero and footer may differ, deliberately). Never more than ~160px of empty space above or below a section's content at desktop; no fixed heights on text blocks.
+- Each section owns its space: give sections position:relative and overflow:clip when they hold decoration near their edges. Background shapes, glows, circles, art and big faded type stay inside their own section; nothing creeps up behind the nav or down into the next section. An overlap is only allowed when the brief calls for it, done as a deliberate negative margin with z-index on the whole element.
+- Split heroes: display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) (or the ratio the brief wants); align-items:center; gap:clamp(32px,5vw,80px). Both columns share one vertical centre. The art sits in a frame inside its column (an element with aspect-ratio and position:relative); the shape behind the art (circle, blob, halo, spotlight) is a ::before of that frame, centred on it and sized from it (inset:-8% or similar), never positioned against the section, the page or the viewport. On mobile the columns stack: text first, art after, art max-width ~420px and centred.
+- The first screen works: at 1280×900 the hero's headline, subhead and main action are fully visible; hero min-height at most min(100svh, 920px).
+- Side-by-side panels (chart beside trades, card rows, stat tiles) line up: same top, and equal heights when they are siblings of a row (align-items:stretch with the inner box height:100%). Never wrap a widget in a box with a fixed height.
+- Picture frames use aspect-ratio + object-fit:cover so they never jump or distort; galleries keep one aspect ratio per row (vary rotation, not size, for a collage feel).
+
 RESPONSIVE (it must never be wider than the screen):
 - Mobile first. Test mentally at 360px: grid-template-columns uses minmax(0,1fr); flex/grid children get min-width:0; long words use overflow-wrap:anywhere; images max-width:100%; no fixed widths above 100%; big type uses clamp() with vw so it fits at 360px.
 - Desktop gets the ambitious layout via @media (min-width: 900px).

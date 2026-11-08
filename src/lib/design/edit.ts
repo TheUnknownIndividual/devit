@@ -1,4 +1,4 @@
-import { askRich } from "../llm";
+import { askRich, type LocalImage } from "../llm";
 import { sanitizeCss, sanitizeSection } from "../sanitize";
 import type { Asset, Block, PendingComment, Project, SiteSpec } from "../spec";
 import { WIDGET_DOC } from "./principles";
@@ -34,12 +34,15 @@ ${knowledge?.trim() ? `The team's standing instructions (always follow): ${knowl
 
 export interface CodeEditResult { spec: SiteSpec; message: string; via: string }
 
-/** Applies comments to a code site. Null when no model answered usably. */
-export async function editCode(project: Project, comments: PendingComment[], wholePage = false): Promise<CodeEditResult | null> {
+/**
+ * Applies comments to a code site. Null when no model answered usably (or it changed nothing). `review` is the
+ * post-build design review: a whole-page request with screenshots instead of a person's comments.
+ */
+export async function editCode(project: Project, comments: PendingComment[], wholePage = false, review?: { request: string; shots: LocalImage[] }): Promise<CodeEditResult | null> {
   const spec = project.spec!;
   const code = spec.code!;
   const assets = new Map((project.assets ?? []).map((a) => [a.id, a]));
-  const whole = wholePage || comments.some((c) => WHOLE.test(c.text) && c.text.split(/\s+/).length <= 40 && /\b(make|change|turn|use|more|less|redo|switch)\b/i.test(c.text));
+  const whole = wholePage || !!review || comments.some((c) => WHOLE.test(c.text) && c.text.split(/\s+/).length <= 40 && /\b(make|change|turn|use|more|less|redo|switch)\b/i.test(c.text));
   const ids = new Set(comments.map((c) => c.blockId));
   const shown = spec.blocks.filter((b) => b.type === "html" && (whole || ids.has(b.id)));
   const pics = comments.flatMap((c) => (c.assets ?? []).map((id) => assets.get(id)).filter((a): a is Asset => !!a));
@@ -56,8 +59,8 @@ ${shown.map((b) => String(b.props.html)).join("\n\n")}
 ALLOWED IMAGES: ${images.join(" ") || "none"}${pics.length ? `\nNEW UPLOADED IMAGES (use where asked): ${pics.map((a) => `${a.url} (${a.w}x${a.h})`).join(", ")}` : ""}
 
 REQUESTS:
-${comments.map((c) => `- on "${c.blockLabel}" (${c.blockId})${c.element ? `, element ${c.element}` : ""}: ${c.text}${c.context ? `\n  context from their connectors: ${c.context}` : ""}`).join("\n")}`;
-  const res = await askRich({ system: system(spec, project.knowledge), user, images: pics.map((a) => a.url), maxOut: 16000, timeoutMs: 180_000, think: "low" }, (t) => /<\/edit>/i.test(t) || (/<section\b/i.test(t) && /<\/section>/i.test(t)) || /<css\b[\s\S]*<\/css>/i.test(t));
+${review ? review.request : ""}${comments.map((c) => `- on "${c.blockLabel}" (${c.blockId})${c.element ? `, element ${c.element}` : ""}: ${c.text}${c.context ? `\n  context from their connectors: ${c.context}` : ""}`).join("\n")}`;
+  const res = await askRich({ system: system(spec, project.knowledge), user, images: pics.map((a) => a.url), files: review?.shots, maxOut: review ? 24000 : 16000, timeoutMs: review ? 240_000 : 180_000, think: review ? "medium" : "low" }, (t) => /<\/edit>/i.test(t) || (/<section\b/i.test(t) && /<\/section>/i.test(t)) || /<css\b[\s\S]*<\/css>/i.test(t));
   if (!res) return null;
   const text = res.text;
   const next: SiteSpec = structuredClone(spec);

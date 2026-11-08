@@ -9,11 +9,12 @@ import { withoutRefs as withoutRefsText } from "./reference-urls";
 import { orderLike, refBlockOrder, refLine, themeFromRef, themeForRef } from "./ref-style";
 import { nudgeTheme, pickStyleRefs, themeOfPicks, type StyleRef } from "./style-library";
 import { HERO_OF, THEMES, THEME_LABELS, THEME_NOTES, colorFromText, withHeroOf, fitAccent, fxOf, readableOn, referenceIn, restyle, themeNamed } from "./themes";
-import { updateProject } from "./store";
+import { getProject, updateProject } from "./store";
 import { paletteOf } from "./palette";
 import { direct, imagesOf, remember, themeOfBrief, understand, type DesignInput } from "./design/brief";
 import { writeSite } from "./design/codegen";
 import { editCode } from "./design/edit";
+import { inspect, reviewRequest, staticPage } from "./design/review";
 import { fontPair } from "./design/fonts";
 import { readTreasury, treasuryAccountsIn, validAccount, type TreasuryData } from "./treasury";
 import { BLOCK_LABELS, CHAINS, THEME_IDS, newId, type Asset, type Block, type BlockType, type Chain, type PendingComment, type Project, type RefRead, type Research, type SiteSpec, type Dossier, type DesignBrief, type ThemeFx, type Theme, type ThemeId, type TokenInfo, type TokenLink } from "./spec";
@@ -564,6 +565,23 @@ export async function runBuild(id: string): Promise<void> {
       spec = { ...blockSpec, theme, code: out.code, blocks: out.blocks };
       void remember(b);
       return `${out.blocks.length} sections, written by ${out.via}`;
+    });
+    // Look at the result: render it at desktop and phone width, measure layout faults, and let the editor fix what
+    // is wrong from the screenshots. A fix that measures worse than the original is thrown away.
+    if ((spec as SiteSpec | null)?.code) await step(id, "review", "Reviewing the design", async () => {
+      const built = spec as SiteSpec;
+      const before = await inspect(staticPage(built.code!, built.blocks));
+      if (!before) return { skipped: "No browser here to look at the page" };
+      const proj = await getProject(id);
+      if (!proj) return null;
+      const fixed = await editCode({ ...proj, spec: built }, [], true, { request: reviewRequest(before.issues), shots: before.shots });
+      const found = before.issues.length ? `${before.issues.length} layout ${before.issues.length === 1 ? "issue" : "issues"} measured` : "no layout faults measured";
+      if (!fixed) return `Checked at desktop and phone width: ${found}${before.issues.length ? ", couldn't fix them this time" : ", nothing to change"}`;
+      const after = await inspect(staticPage(fixed.spec.code!, fixed.spec.blocks));
+      if (after && after.issues.length > before.issues.length) return `Checked at desktop and phone width: ${found}; the fix measured worse, so I kept the original`;
+      spec = fixed.spec;
+      await updateProject(id, (p) => { p.spec = fixed.spec; });
+      return `Checked at desktop and phone width: ${found}${after ? `, ${after.issues.length} left` : ""}. ${fixed.message}`.slice(0, 400);
     });
   }
 

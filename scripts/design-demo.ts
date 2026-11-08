@@ -1,6 +1,7 @@
 // `node --env-file=.env.local --import ./scripts/ts-loader.mjs --experimental-strip-types scripts/design-demo.ts <ca> [out-dir]`
 // Runs the generated-code pipeline (research → palette → dossier → brief → code) for one token outside the app and
-// writes the dossier, brief and a static preview (widgets show as labelled boxes) for a quick look.
+// writes the dossier, brief and a static preview (widgets show as labelled boxes) for a quick look, then runs the
+// design review (render, measure, fix) and writes the reviewed page next to it as reviewed.html.
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { tokenContext } from "../src/lib/chain.ts";
@@ -8,6 +9,9 @@ import { research } from "../src/lib/research.ts";
 import { paletteOf } from "../src/lib/palette.ts";
 import { direct, imagesOf, remember, understand, type DesignInput } from "../src/lib/design/brief.ts";
 import { writeSite } from "../src/lib/design/codegen.ts";
+import { editCode } from "../src/lib/design/edit.ts";
+import { inspect, reviewRequest, staticPage } from "../src/lib/design/review.ts";
+import type { Project } from "../src/lib/spec.ts";
 
 const ca = process.argv[2];
 const dir = process.argv[3] ?? "/tmp/devit-demo";
@@ -36,9 +40,17 @@ const links = (found.links ?? []).map((l) => ({ label: l.label, url: l.url }));
 const out = await writeSite({ dossier, brief, token, name: token?.name ?? "", ticker: token?.symbol ?? "", links, images: imagesOf(input) }, (s, label) => lap(`  section ${s.blocks.length}: ${label}`));
 if (!out) throw new Error("no site");
 lap(`site via ${out.via}: ${out.blocks.length} sections, css ${out.code.css.length} chars`);
-const fonts = out.code.fonts.map((p) => `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?${p}&display=swap">`).join("");
-const stub = `[data-ss-widget]{min-height:120px;border:1px dashed var(--accent);border-radius:var(--radius);display:grid;place-items:center;color:var(--muted);font:12px var(--font-mono)}[data-ss-widget]::before{content:"widget: " attr(data-ss-widget)}[data-ss-widget=chart]{min-height:380px}`;
-const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${fonts}<style>body{margin:0}${out.code.css}${stub}</style></head><body><div class="ss ss-code" style="background:var(--bg)"><div class="ss-code-body">${out.blocks.map((b) => b.props.html).join("\n")}</div></div></body></html>`;
-await fs.writeFile(path.join(dir, "index.html"), html);
+lap(`inspiration: ${(brief.inspiration ?? []).map((x) => `${x.ref}: ${x.borrow}`).join(" | ") || "none"}`);
+await fs.writeFile(path.join(dir, "index.html"), staticPage(out.code, out.blocks));
 await fs.writeFile(path.join(dir, "spec.json"), JSON.stringify(out, null, 2));
 lap(`wrote ${dir}/index.html`);
+const before = await inspect(staticPage(out.code, out.blocks));
+if (!before) throw new Error("no browser");
+lap(`review found ${before.issues.length}:\n  ${before.issues.join("\n  ")}`);
+const spec = { name: token?.name ?? "", ticker: token?.symbol ?? "", token, code: out.code, blocks: out.blocks } as unknown as NonNullable<Project["spec"]>;
+const fixed = await editCode({ spec, assets: [], knowledge: "" } as unknown as Project, [], true, { request: reviewRequest(before.issues), shots: before.shots });
+if (!fixed) { lap("review: no changes"); process.exit(0); }
+const after = await inspect(staticPage(fixed.spec.code!, fixed.spec.blocks));
+lap(`review fixed via ${fixed.via}: ${fixed.message}\n  after ${after?.issues.length}:\n  ${after?.issues.join("\n  ")}`);
+await fs.writeFile(path.join(dir, "reviewed.html"), staticPage(fixed.spec.code!, fixed.spec.blocks));
+lap(`wrote ${dir}/reviewed.html`);

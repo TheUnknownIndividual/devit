@@ -2,6 +2,7 @@ import { askRich } from "../llm";
 import { sanitizeCss, sanitizeSection } from "../sanitize";
 import type { Block, DesignBrief, Dossier, SiteCode, TokenInfo } from "../spec";
 import { fontPair, fontStacks, FONT_PAIRS } from "./fonts";
+import { INSPIRATIONS, INSPIRATION_RULES, inspirationShots, inspirationText } from "./inspiration";
 import { codegenSystem } from "./principles";
 import { normalizeSection, openAttr, parseSite } from "./stream";
 
@@ -21,6 +22,8 @@ export interface CodegenInput {
 }
 
 export interface CodegenOut { code: SiteCode; blocks: Block[] }
+
+const cited = (b: DesignBrief) => INSPIRATIONS.filter((r) => (b.inspiration ?? []).some((x) => x.ref === r.id));
 
 function userMessage(i: CodegenInput): string {
   const fp = fontPair(i.brief.fontPair) ?? FONT_PAIRS[0];
@@ -42,7 +45,7 @@ ${i.brief.sections.map((s, n) => `${n + 1}. id="${s.id}" label="${s.label}" widg
 LINKS (only these URLs):
 ${i.links.map((l) => `${l.label}: ${l.url}`).join("\n") || "none"}
 
-IMAGES (only these URLs):
+${cited(i.brief).length ? `REFERENCES THE ART DIRECTOR DREW ON (screenshots attached; the brief's "inspiration" says what to borrow):\n${inspirationText(cited(i.brief))}\n${INSPIRATION_RULES}\n\n` : ""}IMAGES (only these URLs):
 ${i.images.map((u, n) => `${n === 0 ? "logo" : `image ${n + 1}`}: ${u}`).join("\n") || "none (draw everything in SVG/CSS)"}
 
 Write the site now.`;
@@ -110,6 +113,7 @@ export async function writeSite(i: CodegenInput, onSection?: (soFar: CodegenOut,
       system: codegenSystem(),
       user: userMessage(i),
       images: i.images.slice(0, 3),
+      files: await inspirationShots(cited(i.brief)),
       maxOut: 24000,
       timeoutMs: 300_000,
       temperature: 0.8,

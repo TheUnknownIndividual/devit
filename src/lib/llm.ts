@@ -205,11 +205,15 @@ export async function askJson<T>(system: string, user: string, validate: (v: unk
 // others get the URLs listed as text), they can run for minutes, and codegen streams so finished sections save as
 // they arrive. Same provider order, same meter.
 
+export interface LocalImage { media: string; data: string; label: string }
+
 export interface RichAsk {
   system: string;
   user: string;
   /** Public https image URLs (logo, banner, post pictures). Claude sees them; other providers get them as text. */
   images?: string[];
+  /** Pictures we hold locally (reference screenshots, review shots): base64, sent after the URL images with a label. */
+  files?: LocalImage[];
   maxOut: number;
   timeoutMs: number;
   /** Streamed text as it arrives (accumulated so far). */
@@ -259,7 +263,12 @@ async function reachable(urls: string[]): Promise<string[]> {
 
 async function richClaude(a: RichAsk, key: string, model: string, withImages: boolean): Promise<LlmResult | null> {
   const imgs = withImages ? await reachable(a.images ?? []) : [];
-  const content = [...imgs.map((url) => ({ type: "image", source: { type: "url", url } })), { type: "text", text: a.user }];
+  const files = withImages ? (a.files ?? []).slice(0, 6) : [];
+  const content = [
+    ...imgs.map((url) => ({ type: "image", source: { type: "url", url } })),
+    ...files.flatMap((f) => [{ type: "text", text: f.label }, { type: "image", source: { type: "base64", media_type: f.media, data: f.data } }]),
+    { type: "text", text: a.user },
+  ];
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
@@ -291,8 +300,12 @@ async function richClaude(a: RichAsk, key: string, model: string, withImages: bo
 
 async function richOpenAiShape(a: RichAsk, url: string, key: string, model: string, label: string, opts: { images: boolean; reasoning?: boolean }): Promise<LlmResult | null> {
   const listed = (a.images ?? []).length ? `\n\nPictures of the token (URLs, you can't open them; use them as <img src> where the brief says):\n${a.images!.join("\n")}` : "";
-  const user = opts.images && a.images?.length
-    ? [{ type: "text", text: a.user }, ...a.images.slice(0, 6).map((u) => ({ type: "image_url", image_url: { url: u } }))]
+  const user = opts.images && (a.images?.length || a.files?.length)
+    ? [
+        { type: "text", text: a.user },
+        ...(a.images ?? []).slice(0, 6).map((u) => ({ type: "image_url", image_url: { url: u } })),
+        ...(a.files ?? []).slice(0, 6).flatMap((f) => [{ type: "text", text: f.label }, { type: "image_url", image_url: { url: `data:${f.media};base64,${f.data}` } }]),
+      ]
     : a.user + listed;
   const r = await fetch(`${url}/chat/completions`, {
     method: "POST",
@@ -339,7 +352,7 @@ export async function askRich(a: RichAsk, accept: (text: string) => boolean = (t
     try {
       if (p.id === "anthropic") {
         const model = p.model ?? CLAUDE_MODEL;
-        res = (await richClaude(a, p.key, model, true)) ?? (a.images?.length ? await richClaude(a, p.key, model, false) : null);
+        res = (await richClaude(a, p.key, model, true)) ?? (a.images?.length || a.files?.length ? await richClaude(a, p.key, model, false) : null);
       } else if (p.id === "nearai") res = await richOpenAiShape(a, NEAR_AI_URL, p.key, p.model ?? NEAR_AI_MODEL, "NEAR AI Cloud", { images: false });
       else if (p.id === "openai") res = await richOpenAiShape(a, OPENAI_URL, p.key, p.model ?? OPENAI_MODEL, "OpenAI", { images: true, reasoning: true });
       else res = await richOpenAiShape(a, "https://openrouter.ai/api/v1", p.key, p.model ?? OPENROUTER_MODEL, "OpenRouter", { images: false });

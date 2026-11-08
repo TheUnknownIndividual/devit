@@ -223,6 +223,8 @@ export interface DesignBrief {
   texture: string;
   layoutRules: string[];
   avoid: string[];
+  /** References from the team's library the director drew on (lib/design/inspiration.ts) and what it borrowed. */
+  inspiration?: Array<{ ref: string; borrow: string }>;
   sections: BriefSection[];
   via?: string;
 }

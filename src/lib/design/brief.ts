@@ -5,6 +5,7 @@ import { askRichJson } from "../llm";
 import { contrast, type Palette } from "../palette";
 import { CHAINS, type BriefSection, type Chain, type DesignBrief, type Dossier, type Research, type Theme, type TokenInfo } from "../spec";
 import { ARCHETYPES, analystSystem, directorSystem, WIDGET_DOC } from "./principles";
+import { INSPIRATION_RULES, inspirationShots, inspirationText, pickInspiration } from "./inspiration";
 import { BANNED_DISPLAY, fontMenu, fontPair, fontStacks, FONT_PAIRS, pairForMoods } from "./fonts";
 
 // Two thinking passes before any code: the analyst reads everything research found (and looks at the pictures) and
@@ -54,6 +55,7 @@ const BriefSchema = z.object({
   texture: str(),
   layoutRules: strs(),
   avoid: strs(),
+  inspiration: z.array(z.object({ ref: z.string(), borrow: z.string() })).catch([]),
   sections: z.array(SectionSchema).min(3),
 });
 
@@ -125,7 +127,7 @@ export async function understand(i: DesignInput): Promise<Dossier | null> {
 // ---------- variety: what recent sites looked like ----------
 
 const HISTORY = path.join(process.cwd(), "data", "briefs.json");
-interface Past { archetype: string; fontPair: string; light: boolean; accent: string; at: number }
+interface Past { archetype: string; fontPair: string; light: boolean; accent: string; refs?: string[]; at: number }
 
 async function recent(): Promise<Past[]> {
   try {
@@ -138,7 +140,7 @@ async function recent(): Promise<Past[]> {
 
 export async function remember(b: DesignBrief): Promise<void> {
   try {
-    const list = [...(await recent()), { archetype: b.archetype, fontPair: b.fontPair, light: b.light, accent: b.palette.accent ?? "", at: Date.now() }].slice(-12);
+    const list = [...(await recent()), { archetype: b.archetype, fontPair: b.fontPair, light: b.light, accent: b.palette.accent ?? "", refs: (b.inspiration ?? []).map((x) => x.ref), at: Date.now() }].slice(-12);
     await fs.mkdir(path.dirname(HISTORY), { recursive: true });
     await fs.writeFile(HISTORY, JSON.stringify(list));
   } catch { /* variety is best-effort */ }
@@ -210,6 +212,9 @@ export async function direct(i: DesignInput, d: Dossier): Promise<DesignBrief | 
   const avoidFonts = past.slice(-6).map((p) => p.fontPair);
   const lights = past.slice(-4).map((p) => (p.light ? "light" : "dark"));
   const images = imagesOf(i).slice(0, 3);
+  // A few references from the team's library that suit this project, shown with their screenshots.
+  const refs = pickInspiration(d, seed.id, i.palette ? i.palette.lean === "light" : null, past.flatMap((p) => p.refs ?? []).slice(-9));
+  const shots = await inspirationShots(refs);
   const user = `DOSSIER:\n${JSON.stringify(d)}\n
 ARTWORK COLOURS: ${i.palette ? i.palette.swatches.map((s) => `${s.hex} (${(s.share * 100).toFixed(0)}%, sat ${s.s.toFixed(2)})`).join(", ") + `; vivid ${i.palette.vivid ?? "none"}; artwork reads ${i.palette.lean}` : "not readable; derive from the imagery description"}
 SEED ARCHETYPE: ${seed.id}: ${seed.hint}
@@ -220,8 +225,13 @@ ${i.style ? `THE PERSON PICKED THE STYLE "${i.style}" ON THE LANDING PAGE: honou
 HAS TOKEN: ${i.token ? `yes, trades ${i.token.pairAddress || i.token.marketCap ? "live (use chart + stats)" : "not yet / on curve"}` : "no (no buy/ca widgets; use signup)"}
 ${WIDGET_DOC}
 
-Return JSON: {concept, archetype, fontPair, light, mood[], motifs[], palette{bg,surface,text,muted,border,accent,accentText,...extras}, radius (px number), heroIdea, signature, motion, texture, layoutRules[], avoid[], sections[{id,label,purpose,content,composition,widgets[]}]}.`;
-  const res = await askRichJson({ system: directorSystem(), user, images, maxOut: 16000, timeoutMs: 180_000, temperature: 0.9, think: "medium" }, (v) => {
+REFERENCE SITES FROM THE TEAM'S LIBRARY (screenshots attached after the project's own pictures):
+${inspirationText(refs)}
+${INSPIRATION_RULES}
+In "inspiration", name each reference you draw on (its id) and exactly which principle you borrow and how it becomes this project's own (e.g. "mascot bleeding off the frame edge, here the cowl silhouette cut by the right edge"). One to three entries.
+
+Return JSON: {concept, archetype, fontPair, light, mood[], motifs[], palette{bg,surface,text,muted,border,accent,accentText,...extras}, radius (px number), heroIdea, signature, motion, texture, layoutRules[], avoid[], inspiration[{ref,borrow}], sections[{id,label,purpose,content,composition,widgets[]}]}.`;
+  const res = await askRichJson({ system: directorSystem(), user, images, files: shots, maxOut: 16000, timeoutMs: 180_000, temperature: 0.9, think: "medium" }, (v) => {
     const p = BriefSchema.safeParse(v);
     return p.success ? p.data : null;
   });
@@ -235,6 +245,7 @@ Return JSON: {concept, archetype, fontPair, light, mood[], motifs[], palette{bg,
     ...b,
     fontPair: fp.id,
     palette: fixPalette(b.palette, b.light, i.palette),
+    inspiration: b.inspiration.map((x) => ({ ref: x.ref.trim(), borrow: x.borrow })).filter((x) => refs.some((r) => r.id === x.ref)).slice(0, 3),
     sections,
     via: res.via,
   };
