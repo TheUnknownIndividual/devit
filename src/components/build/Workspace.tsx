@@ -19,6 +19,8 @@ import { CHAINS, newId, type Chain, type PendingComment, type ThemeId } from "@/
 import type { PublicProject } from "@/lib/public";
 import type { FromBuilder, FromPreview } from "@/app/preview/[id]/PreviewClient";
 import { BuildSteps } from "./BuildSteps";
+import { BuildBoard, BuildStrip } from "./BuildBoard";
+import { useBuildProgress } from "./eta";
 import { IntegrationsDialog } from "./Integrations";
 import { RpcDialog } from "./RpcDialog";
 import { ModelPicker, modelHeader } from "./ModelPicker";
@@ -87,6 +89,48 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
   const input = useRef<HTMLTextAreaElement>(null);
 
   const building = p.status === "building";
+  const progress = useBuildProgress(p);
+
+  // Opt-in notice when the build finishes while the tab is in the background (asked only from the button).
+  const [notify, setNotify] = useState<"unsupported" | "off" | "on" | "blocked">("off");
+  useEffect(() => {
+    if (typeof Notification === "undefined") setNotify("unsupported");
+    else if (Notification.permission === "denied") setNotify("blocked");
+  }, []);
+  const askNotify = useCallback(() => {
+    if (typeof Notification === "undefined") return;
+    if (Notification.permission === "granted") { setNotify("on"); return; }
+    void Notification.requestPermission().then((r) => setNotify(r === "granted" ? "on" : r === "denied" ? "blocked" : "off")).catch(() => undefined);
+  }, []);
+  // The tab shows the countdown while building, so it can be watched from another tab.
+  const base = useRef("");
+  useEffect(() => { if (!base.current) base.current = document.title; }, []);
+  const wasBuilding = useRef(building);
+  const siteName = p.board?.token ? `$${p.board.token.symbol}` : p.spec?.ticker ? `$${p.spec.ticker}` : p.title;
+  useEffect(() => {
+    const was = wasBuilding.current;
+    wasBuilding.current = building;
+    if (!was || building) return;
+    const ok = p.status === "ready";
+    if (!document.hidden) return;
+    document.title = ok ? `Ready: ${siteName} · devit` : "Build stopped · devit";
+    const back = () => { if (!document.hidden) { document.title = base.current; document.removeEventListener("visibilitychange", back); } };
+    document.addEventListener("visibilitychange", back);
+    if (notify === "on") {
+      try {
+        const n = new Notification(ok ? `Your ${siteName} site is ready` : "Your build stopped", { body: ok ? "Open devit to look it over, edit and publish." : "Open devit to see what happened.", icon: p.board?.token?.logo ?? undefined, tag: `devit-${p.id}` });
+        n.onclick = () => { window.focus(); n.close(); };
+      } catch { /* some browsers only notify from a service worker */ }
+    }
+  }, [building, p.status, p.id, p.board?.token?.logo, siteName, notify]);
+  const pctShown = progress ? Math.floor(progress.pct) : null;
+  useEffect(() => {
+    if (pctShown == null) { if (base.current && document.title.includes("· Building")) document.title = base.current; return; }
+    document.title = `${pctShown}% · Building ${siteName}`;
+  }, [pctShown, siteName]);
+
+  // While sections stream in, the preview follows the newest one unless the viewer turns that off.
+  const [follow, setFollow] = useState(true);
 
   // Poll while the build runs; the build writes each step as it goes.
   useEffect(() => {
@@ -144,6 +188,13 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
     fetch(`/api/projects/${p.id}/history${q ? `${q}&` : "?"}i=${viewing}`, { cache: "no-store" }).then((r) => r.json()).then((j) => { if (live && j.spec) send({ type: "ss:spec", spec: j.spec }); }).catch(() => undefined);
     return () => { live = false; };
   }, [frameReady, p.version, p.spec, send, viewing, p.id, q]);
+  const lastBlock = p.spec?.blocks[p.spec.blocks.length - 1]?.id;
+  useEffect(() => {
+    if (!frameReady || !building || !follow || !lastBlock || viewing !== null) return;
+    if (p.steps.find((s) => s.id === "design")?.state !== "running") return;
+    const h = setTimeout(() => send({ type: "ss:focus", blockId: lastBlock, smooth: true }), 250);
+    return () => clearTimeout(h);
+  }, [frameReady, building, follow, lastBlock, viewing, p.steps, send]);
   // A change from anywhere drops the History preview: the numbering moved.
   useEffect(() => { setViewing(null); }, [p.version]);
   useEffect(() => { if (frameReady) send({ type: "ss:select", on: selectOn }); }, [frameReady, selectOn, send]);
@@ -398,7 +449,7 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
                     </div>
                   </div>
                 )}
-                {i === 0 && (p.steps.length > 0 || building) && <div className="mt-4"><BuildSteps steps={p.steps} building={building} /></div>}
+                {i === 0 && (p.steps.length > 0 || building) && <div className="mt-4"><BuildSteps steps={p.steps} building={building} progress={progress} /></div>}
               </div>
             ))}
             {busy === "apply" || busy === "chat" ? (
@@ -540,7 +591,7 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
         {/* Preview */}
         <section className={`min-h-0 min-w-0 flex-col bg-[radial-gradient(rgba(255,255,255,0.05)_1px,transparent_1px)] [background-size:16px_16px] ${mobileTab === "preview" ? "flex" : "hidden"} md:flex`}>
           <div className="flex min-h-0 min-w-0 flex-1 justify-center overflow-hidden p-3">
-            <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-[14px] border border-white/[0.08] bg-ink-900 shadow-[0_12px_40px_rgba(0,0,0,0.4)] transition-[width] duration-300" style={{ width: view === "code" ? "100%" : WIDTH[device], maxWidth: "100%" }}>
+            <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-[14px] border border-white/[0.08] bg-ink-900 shadow-[0_12px_40px_rgba(0,0,0,0.4)] transition-[width] duration-300" style={{ width: view === "code" || !ready ? "100%" : WIDTH[device], maxWidth: "100%" }}>
               <div className="flex h-9 shrink-0 items-center gap-2 border-b border-white/[0.06] px-3">
                 <span className="flex gap-1.5"><span className="h-2 w-2 rounded-full bg-white/15" /><span className="h-2 w-2 rounded-full bg-white/15" /><span className="h-2 w-2 rounded-full bg-white/15" /></span>
                 <span className="mx-auto flex h-6 min-w-0 max-w-[360px] flex-1 items-center justify-center gap-1.5 truncate rounded-md bg-white/[0.04] px-2 font-mono text-[11px] text-zinc-500">
@@ -560,10 +611,11 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
                 </div>
               )}
               {ready && view === "code" && <CodePanel projectId={p.id} version={p.version} onAsk={canEdit ? (t) => { setMode("ask"); setText(t); setMobileTab("chat"); setTimeout(() => input.current?.focus(), 0); } : undefined} />}
+              {ready && building && progress && view === "preview" && <BuildStrip progress={progress} follow={follow} onFollow={() => setFollow((f) => !f)} />}
               {ready ? (
                 <iframe ref={frame} key={p.id} src={`/preview/${p.id}${q}`} title="Site preview" data-tour="preview" className={`min-h-0 w-full flex-1 bg-white ${view === "code" ? "hidden" : ""}`} />
               ) : (
-                <Skeleton failed={p.status === "error"} />
+                building && progress ? <BuildBoard board={p.board ?? {}} steps={p.steps} progress={progress} name={p.title} notify={notify} onNotify={askNotify} /> : <Skeleton failed={p.status === "error"} />
               )}
             </div>
           </div>

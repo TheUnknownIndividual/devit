@@ -16,8 +16,9 @@ import { writeSite } from "./design/codegen";
 import { editCode } from "./design/edit";
 import { inspect, reviewRequest, staticPage } from "./design/review";
 import { fontPair } from "./design/fonts";
+import { etaPlan, recordBuild, type BuildMode } from "./build-times";
 import { readTreasury, treasuryAccountsIn, validAccount, type TreasuryData } from "./treasury";
-import { BLOCK_LABELS, CHAINS, THEME_IDS, newId, type Asset, type Block, type BlockType, type Chain, type PendingComment, type Project, type RefRead, type Research, type SiteSpec, type Dossier, type DesignBrief, type ThemeFx, type Theme, type ThemeId, type TokenInfo, type TokenLink } from "./spec";
+import { BLOCK_LABELS, CHAINS, THEME_IDS, newId, type Asset, type Block, type BlockType, type Chain, type PendingComment, type Project, type RefRead, type BuildBoard, type Research, type SiteSpec, type Dossier, type DesignBrief, type ThemeFx, type Theme, type ThemeId, type TokenInfo, type TokenLink } from "./spec";
 
 // The build pipeline: prompt → intent → chain data → style → copy → blocks.
 // Each step is written to the project as it runs so the builder can animate it.
@@ -30,7 +31,7 @@ type StepOut = string | null | { skipped: string };
 async function step(id: string, stepId: string, title: string, run: () => Promise<StepOut>): Promise<void> {
   const started = Date.now();
   await updateProject(id, (p) => {
-    p.steps.push({ id: stepId, title, detail: "", state: "running", at: started });
+    p.steps.push({ id: stepId, title, detail: "", state: "running", at: started, began: started });
   });
   let detail: string | null = null;
   let state: "done" | "skipped" | "error" = "done";
@@ -49,6 +50,16 @@ async function step(id: string, stepId: string, title: string, run: () => Promis
     const s = p.steps.find((x) => x.id === stepId);
     if (s) { s.state = state; s.detail = detail ?? "Skipped"; s.at = Date.now(); }
   });
+}
+
+/** A step of the standard block site while a designed site is the goal: it runs quietly as the fallback, unshown. */
+async function quiet(_id: string, stepId: string, _title: string, run: () => Promise<StepOut>): Promise<void> {
+  try { await run(); } catch (e) { console.warn(`[build] fallback ${stepId}: ${e instanceof Error ? e.message : "failed"}`); }
+}
+
+/** Adds what the build just found or decided to the builder's board. */
+function onBoard(id: string, part: BuildBoard): Promise<unknown> {
+  return updateProject(id, (p) => { p.board = { ...(p.board ?? {}), ...part }; }).catch(() => null);
 }
 
 // ---------- copy ----------
@@ -392,6 +403,11 @@ export async function runBuild(id: string): Promise<void> {
   let found: Research | null = null;
   let copyRes: Awaited<ReturnType<typeof writeCopy>> | null = null;
   const given = start.socials ?? {};
+  // A designed site when a model is available (understand, direct, write, review), else the block site.
+  const designing = llmAvailable();
+  const mode: BuildMode = designing ? "design" : "blocks";
+  const plan = await etaPlan(mode);
+  await updateProject(id, (p) => { p.eta = { startedAt: Date.now(), plan }; p.board = {}; });
 
   await step(id, "intent", "Reading your request", async () => {
     const bits = [intent.ticker ? `$${intent.ticker}` : null, intent.address ? "contract address found" : null, intent.chain ? CHAINS[intent.chain].name : null, venue(intent.venue) ? `${venue(intent.venue)!.name} ${venuesNamed(prompt).includes(intent.venue!) || readToken(prompt)?.link?.venue === intent.venue ? "named" : "address"}` : null, given.x ? `@${given.x.replace(/^@/, "").split("/").pop()}` : null].filter(Boolean);
@@ -405,6 +421,7 @@ export async function runBuild(id: string): Promise<void> {
     const t: TokenInfo = token;
     chain = t.chain;
     const facts = [t.name, `$${t.symbol}`, CHAINS[t.chain].name, t.holders != null ? `${t.holders.toLocaleString("en-US")} holders` : null, venueLine(t)].filter(Boolean);
+    void onBoard(id, { token: { name: t.name, symbol: t.symbol, chain: t.chain, logo: t.logo, header: t.header, priceUsd: t.priceUsd, marketCap: t.marketCap, holders: t.holders, change24h: t.change24h, launchpad: venue(t.venue?.launchpad)?.name ?? null, stage: t.venue?.stage ?? null } });
     return `${facts.join(" · ")} (via ${t.sources.join(", ") || "chain"})`;
   });
 
@@ -425,19 +442,34 @@ export async function runBuild(id: string): Promise<void> {
     return `@${r.x.profile.handle}${r.x.profile.followers != null ? ` · ${r.x.profile.followers.toLocaleString("en-US")} followers` : ""} · ${r.x.posts.length ? `${r.x.posts.length} posts, ${notes}` : "profile only"}`;
   });
 
+  {
+    const r = found as Research | null;
+    if (r) void onBoard(id, { found: {
+      links: r.links.filter((l) => ["x", "telegram", "website", "discord"].includes(l.type)).map((l) => ({ type: l.type, label: l.label, url: l.url })).slice(0, 6),
+      x: r.x ? { handle: r.x.profile.handle, name: r.x.profile.name, avatar: r.x.profile.avatar, followers: r.x.profile.followers } : null,
+      posts: (r.x?.posts ?? []).filter((x) => x.text || x.image).slice(0, 4).map((x) => ({ text: x.text.slice(0, 200), image: x.image })),
+      lore: r.lore ? r.lore.slice(0, 400) : null,
+    } });
+  }
+
   // The generated-code pass starts reading now, alongside the copywriter: artwork colours, then the analyst's dossier.
-  const designing = llmAvailable();
   const designBase = (): DesignInput => {
     const t = token as TokenInfo | null;
     return { prompt, token: t, chain, research: found as Research | null, palette: null, style: start.style ?? null, name: t?.name ?? intent.ticker ?? "", ticker: t?.symbol ?? intent.ticker ?? "", tagline: "" };
   };
   const paletteP = designing ? (() => { const r = found as Research | null; const t = token as TokenInfo | null; return paletteOf(t?.logo ?? r?.x?.profile.avatar, t?.header ?? r?.x?.profile.banner).catch(() => null); })() : Promise.resolve(null);
+  void paletteP.then((pal) => { if (pal?.swatches.length) void onBoard(id, { colours: pal.swatches.map((x) => x.hex) }); });
   const dossierP: Promise<Dossier | null> = designing ? paletteP.then((palette) => understand({ ...designBase(), palette })).catch(() => null) : Promise.resolve(null);
 
   // Reference sites: their look and motion, read in a browser. Their sections join the ones the site shows.
   const refs: RefRead[] = [];
   let libRefs: StyleRef[] = [];
-  await step(id, "reference", "Studying the reference site", async () => {
+  let spec: SiteSpec | null = null;
+  // The standard block site. For a designed build it is only the fallback, so it runs quietly alongside the design
+  // passes instead of in front of them (its copywriter alone held art direction back by ~40s).
+  const run = designing ? quiet : step;
+  const fallbackP = (async () => {
+  await run(id, "reference", "Studying the reference site", async () => {
     if (!intent.refs.length) {
       libRefs = pickStyleRefs({ vibe: prompt, theme: intent.theme, chain, kind: (found as Research | null)?.meme === false ? "utility" : "meme" });
       return libRefs.length ? `Matched ${libRefs.length} live token sites: ${libRefs.map((x) => x.host).join(", ")}` : { skipped: "No reference site given (add one with ref: https://…)" };
@@ -461,13 +493,13 @@ export async function runBuild(id: string): Promise<void> {
 
   if (libRefs.length && !start.style && !themeNamed(prompt) && !themeFromResearch(found)) intent = { ...intent, theme: themeOfPicks(libRefs, intent.theme) };
 
-  await step(id, "copy", "Writing the copy", async () => {
+  await run(id, "copy", "Writing the copy", async () => {
     copyRes = await writeCopy(prompt, intent, token, chain, found, refs);
     if (start.style) copyRes = { ...copyRes, theme: start.style };
     return `${copyRes.copy.headline} (${copyRes.via})`;
   });
 
-  await step(id, "style", "Picking a style", async () => {
+  await run(id, "style", "Picking a style", async () => {
     const themeId = copyRes!.theme;
     intent = { ...intent, theme: themeId };
     // Their own colour beats a guessed one, unless the sentence named a colour. Cozy keeps its ink accent.
@@ -481,8 +513,7 @@ export async function runBuild(id: string): Promise<void> {
     return `${THEME_LABELS[themeId]}${copyRes!.accent ? ` · accent ${copyRes!.accent}${from}` : ""}`;
   });
 
-  let spec: SiteSpec | null = null;
-  await step(id, "blocks", "Laying out blocks", async () => {
+  await run(id, "blocks", "Laying out blocks", async () => {
     const c = copyRes!;
     const r = found as Research | null;
     const base = THEMES[c.theme];
@@ -508,6 +539,8 @@ export async function runBuild(id: string): Promise<void> {
     await hydrateTreasury(spec);
     return blocks.filter((b) => b.type !== "nav" && b.type !== "footer").map((b) => BLOCK_LABELS[b.type].toLowerCase()).join(", ");
   });
+  })();
+  if (!designing) await fallbackP;
 
   await step(id, "wallet", "Wiring wallet and buy box", async () => {
     const t = token as TokenInfo | null;
@@ -523,14 +556,19 @@ export async function runBuild(id: string): Promise<void> {
   // Generated-code site: understand → direct → write, each pass shown as a step. Any pass failing keeps the block site.
   let brief: DesignBrief | null = null;
   let dossier: Dossier | null = null;
-  if (designing && spec) {
-    const blockSpec: SiteSpec = spec;
-    const input: DesignInput = { ...designBase(), palette: await paletteP, name: blockSpec.name, ticker: blockSpec.ticker, tagline: blockSpec.tagline ?? "" };
+  if (designing) {
+    // Named from the token when there is one, so art direction never waits for the fallback copywriter.
+    const tk = token as TokenInfo | null;
+    const named = tk
+      ? { name: tk.name, ticker: tk.symbol, tagline: "" }
+      : await fallbackP.then(() => { const b = spec as SiteSpec | null; return { name: b?.name ?? intent.ticker ?? "", ticker: b?.ticker ?? intent.ticker ?? "", tagline: b?.tagline ?? "" }; });
+    const input: DesignInput = { ...designBase(), palette: await paletteP, ...named };
     await step(id, "understand", "Understanding the project", async () => {
       dossier = await dossierP;
       if (!dossier) throw new Error("Couldn't analyse it this time, so I kept the standard layout");
       const d: Dossier = dossier;
       const inv = Object.entries(d.inventory).filter(([, v]) => v.length).map(([k]) => k);
+      void onBoard(id, { story: { oneLiner: d.oneLiner || d.whatItIs, facts: d.facts.slice(0, 5).map((f) => ({ claim: f.claim.slice(0, 220), source: f.source.slice(0, 80) })), tone: d.tone.adjectives.slice(0, 5) } });
       return `${d.oneLiner || d.whatItIs} · ${d.facts.length} facts with sources${inv.length ? ` · has ${inv.join(", ")}` : ""}${input.palette ? ` · ${input.palette.swatches.length} colours from the ${input.palette.from.join(" and ")}` : ""}`;
     });
     if (dossier) await step(id, "direction", "Art direction", async () => {
@@ -538,9 +576,21 @@ export async function runBuild(id: string): Promise<void> {
       if (!brief) throw new Error("Couldn't settle a direction, so I kept the standard layout");
       const b: DesignBrief = brief;
       const fp = fontPair(b.fontPair);
+      const pal = b.palette as Record<string, string>;
+      void onBoard(id, { direction: {
+        concept: b.concept, archetype: b.archetype, display: fp?.display ?? "", body: fp?.body ?? "",
+        fontsHref: fp ? `https://fonts.googleapis.com/css2?${fp.params.join("&")}&display=swap` : "",
+        light: b.light, palette: [...new Set(Object.values(pal).filter((v) => typeof v === "string" && /^#[0-9a-f]{3,8}$/i.test(v)))].slice(0, 7),
+        bg: pal.bg, text: pal.text, accent: pal.accent, heroIdea: b.heroIdea, signature: b.signature,
+        sections: b.sections.map((x) => ({ id: x.id, label: x.label, purpose: x.purpose.slice(0, 160) })),
+        inspiration: (b.inspiration ?? []).map((x) => ({ ref: x.ref, borrow: x.borrow.slice(0, 260) })),
+      } });
       return `${b.archetype.replace(/-/g, " ")} · ${fp ? `${fp.display} + ${fp.body}` : b.fontPair} · ${b.light ? "light" : "dark"} · ${b.sections.map((x) => x.label.toLowerCase()).join(", ")}`;
     });
-    if (dossier && brief) await step(id, "design", "Designing the site", async () => {
+    // The fallback site's name, links and theme frame the design; it has long finished by now.
+    if (dossier && brief) await fallbackP;
+    const blockSpec = spec as SiteSpec | null;
+    if (dossier && brief && blockSpec) await step(id, "design", "Designing the site", async () => {
       const b: DesignBrief = brief!;
       const theme = themeOfBrief(blockSpec.theme, b);
       const t = blockSpec.token;
@@ -594,7 +644,8 @@ export async function runBuild(id: string): Promise<void> {
     });
   }
 
-  await updateProject(id, (p) => {
+  await fallbackP;
+  const finished = await updateProject(id, (p) => {
     if (!spec) {
       p.status = "error";
       p.messages.push({ id: newId(), role: "agent", text: "I couldn't build this one. Try adding the token name or contract address.", at: Date.now() });
@@ -624,6 +675,7 @@ export async function runBuild(id: string): Promise<void> {
       text: `${built}${refs.length ? ` ${refLine(refs[0], (spec as SiteSpec).theme, refBlockOrder(refs[0]).length > 1)}` : ""}${r ? ` ${foundLine(r)}` : " Paste your X handle and I'll match the copy to how you post."} Click any block in the preview to comment on it.`,
     });
   });
+  if (finished?.status === "ready") void recordBuild(mode, finished.steps);
 }
 
 // ---------- edits from comments ----------

@@ -1,4 +1,4 @@
-// Reads the code writer's <site><style>…</style><section>…</section>…</site> as it streams (after bolt.new's
+// Reads the code writer's <site><style>…</style>[<style>…</style>]<section>…</section>…</site> as it streams (after bolt.new's
 // StreamingMessageParser): the stylesheet once its tag closes, and each top-level section as soon as its closing tag
 // arrives, so the builder's preview fills in section by section.
 
@@ -6,8 +6,10 @@ export interface Parsed { css: string | null; sections: string[]; done: boolean 
 
 /** Parses whatever has arrived so far. Unclosed tags are left for the next call. */
 export function parseSite(text: string): Parsed {
+  // The writer puts a short base stylesheet first and then each section's own CSS just before that section, so the
+  // preview can show a section the moment it closes; every closed top-level <style> joins the stylesheet in order.
   const style = /<style\b[^>]*>([\s\S]*?)<\/style>/i.exec(text);
-  const css = style ? style[1] : null;
+  const css = style ? [...text.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n") : null;
   const from = style ? style.index + style[0].length : 0;
   const sections: string[] = [];
   // Depth-count <section> so a stray nested one can't cut a section short.

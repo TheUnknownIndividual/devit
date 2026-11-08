@@ -50,12 +50,15 @@ export function codegenSystem(): string {
 OUTPUT FORMAT (exactly this, nothing before or after):
 <site>
 <style>
-…all CSS…
+…the base: design tokens, page background and texture, type scale, and the shared pieces several sections use (buttons, frames, labels, reveal motion). Keep it to what is truly shared.
 </style>
+<style>…CSS for the first section only…</style>
 <section …>…</section>
+<style>…CSS for the next section only…</style>
 <section …>…</section>
 …
 </site>
+Each section's own CSS goes in its own <style> right before that section (never inside it), so the page can be shown section by section while you write. Responsive rules for a section go in that section's <style> too.
 
 THE CODE CONTRACT (a sanitiser enforces it; anything else is deleted):
 - Plain HTML and CSS only. No <script>, no inline event handlers, no <form>/<input>/<iframe>, no javascript: links. Live parts are widgets (below).

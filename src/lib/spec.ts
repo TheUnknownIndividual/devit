@@ -310,8 +310,24 @@ export interface BuildStep {
   title: string;
   detail: string;
   state: StepState;
+  /** When it started; when it settled, once done. */
   at: number;
+  /** When it started (kept after it settles), for the countdown and the timing history. */
+  began?: number;
 }
+
+/** What a build has found and decided so far, shown on the builder's board while it runs (and kept as notes). */
+export interface BuildBoard {
+  token?: { name: string; symbol: string; chain: Chain; logo: string | null; header: string | null; priceUsd: number | null; marketCap: number | null; holders: number | null; change24h: number | null; launchpad: string | null; stage: string | null };
+  found?: { links: Array<{ type: string; label: string; url: string }>; x: { handle: string; name: string; avatar: string | null; followers: number | null } | null; posts: Array<{ text: string; image: string | null }>; lore: string | null };
+  /** Colours read from the logo and banner. */
+  colours?: string[];
+  story?: { oneLiner: string; facts: Array<{ claim: string; source: string }>; tone: string[] };
+  direction?: { concept: string; archetype: string; display: string; body: string; fontsHref: string; light: boolean; palette: string[]; bg: string; text: string; accent: string; heroIdea: string; signature: string; sections: Array<{ id: string; label: string; purpose: string }>; inspiration: Array<{ ref: string; borrow: string }> };
+}
+
+/** The countdown: when the build started and how long each visible step usually takes (ms), from recent builds. */
+export interface BuildEta { startedAt: number; plan: Record<string, number> }
 
 export interface ChatMessage {
   id: string;
@@ -365,6 +381,8 @@ export interface Project {
   updatedAt: number;
   status: "building" | "ready" | "error";
   steps: BuildStep[];
+  board?: BuildBoard;
+  eta?: BuildEta;
   messages: ChatMessage[];
   spec: SiteSpec | null;
   history: SiteSpec[];

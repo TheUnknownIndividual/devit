@@ -14,7 +14,7 @@ export type FromBuilder =
   | { type: "ss:select"; on: boolean }
   | { type: "ss:markers"; items: Array<{ blockId: string; n: number }> }
   | { type: "ss:selected"; items: Sel[] }
-  | { type: "ss:focus"; blockId: string };
+  | { type: "ss:focus"; blockId: string; smooth?: boolean };
 
 export type FromPreview =
   | { type: "ss:ready" }
@@ -138,7 +138,7 @@ export function PreviewClient({ initial, walletconnect, credit }: { initial: Sit
       else if (m?.type === "ss:select") { setSelectOn(m.on); if (!m.on) setHover(null); }
       else if (m?.type === "ss:markers") setMarkers(m.items);
       else if (m?.type === "ss:selected") setSel(m.items ?? []);
-      else if (m?.type === "ss:focus") document.querySelector(`[data-block-id="${CSS.escape(m.blockId)}"]`)?.scrollIntoView({ block: "start" });
+      else if (m?.type === "ss:focus") document.querySelector(`[data-block-id="${CSS.escape(m.blockId)}"]`)?.scrollIntoView({ block: "start", behavior: m.smooth ? "smooth" : "auto" });
     };
     window.addEventListener("message", on);
     post({ type: "ss:ready" });
