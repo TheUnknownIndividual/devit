@@ -12,8 +12,8 @@ import { snapshot } from "@/lib/history";
 import { connectorContext } from "@/lib/connector-context";
 import { askAbout, planChange } from "@/lib/assist";
 import { THEMES, fitAccent, readableOn } from "@/lib/themes";
-import { clientIp, overLimit } from "@/lib/net";
-import { metered, payerForProject } from "@/lib/credits";
+import { clientIp, isOperator, overLimit } from "@/lib/net";
+import { metered, operatorPayer, payerForProject } from "@/lib/credits";
 import { ownerKeysFor } from "@/lib/accounts";
 import { editable } from "@/lib/access";
 import { hasOwnLlm, runWithKeys } from "@/lib/keyscope";
@@ -53,7 +53,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   // the owner's AI credits at what it really cost.
   const keys = await ownerKeysFor(g.p.ownerId);
   const priority = await projectEntitled(g.p, "priorityModels");
-  const r = await metered(await payerForProject(g.p.ownerId, clientIp(req)), "edit", hasOwnLlm(keys), () => runWithKeys(keys, () => chat(req, ctx), priority, modelFrom(req)));
+  const r = await metered(isOperator(req) ? operatorPayer() : await payerForProject(g.p.ownerId, clientIp(req)), "edit", hasOwnLlm(keys), () => runWithKeys(keys, () => chat(req, ctx), priority, modelFrom(req)));
   return "refused" in r ? r.refused : r.value;
 }
 

@@ -59,6 +59,11 @@ export async function payerFor(u: User | null, ip: string): Promise<Payer> {
   return payerFromUser(u, "free");
 }
 
+/** The developer's test requests (lib/net.ts isOperator): their own ledger, effectively unlimited. */
+export function operatorPayer(): Payer {
+  return { who: "ops:operator", plan: "free", allowance: 1_000_000, per: "day", ...periodOf("day", undefined) };
+}
+
 /** Edits are paid by the project's owner (their plan also picks the models); signed-out projects by the visitor. */
 export async function payerForProject(ownerId: string | undefined, ip: string): Promise<Payer> {
   return payerFor(ownerId ? await getUser(ownerId) : null, ip);

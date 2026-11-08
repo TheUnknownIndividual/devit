@@ -6,8 +6,8 @@ import { updateProject } from "@/lib/store";
 import { newId } from "@/lib/spec";
 import { publicProject } from "@/lib/public";
 import { snapshot } from "@/lib/history";
-import { clientIp, overLimit } from "@/lib/net";
-import { metered, payerForProject } from "@/lib/credits";
+import { clientIp, isOperator, overLimit } from "@/lib/net";
+import { metered, operatorPayer, payerForProject } from "@/lib/credits";
 import { ownerKeysFor } from "@/lib/accounts";
 import { editable } from "@/lib/access";
 import { hasOwnLlm, runWithKeys } from "@/lib/keyscope";
@@ -43,7 +43,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const urls = (p.assets ?? []).filter((a) => comments.some((c) => c.assets?.includes(a.id))).map((a) => a.url);
   const keys = await ownerKeysFor(p.ownerId);
   const priority = await projectEntitled(p, "priorityModels");
-  const m = await metered(await payerForProject(p.ownerId, clientIp(req)), "edit", hasOwnLlm(keys), () => runWithKeys(keys, () => applyComments(p, comments), priority, modelFrom(req)));
+  const m = await metered(isOperator(req) ? operatorPayer() : await payerForProject(p.ownerId, clientIp(req)), "edit", hasOwnLlm(keys), () => runWithKeys(keys, () => applyComments(p, comments), priority, modelFrom(req)));
   if ("refused" in m) return m.refused;
   const res = m.value;
   const out = await updateProject(id, (q) => {
