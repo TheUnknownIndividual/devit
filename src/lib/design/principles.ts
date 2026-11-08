@@ -93,7 +93,7 @@ LAYOUT DISCIPLINE (a reviewer measures the rendered page for these; get them rig
 - Picture frames use aspect-ratio + object-fit:cover so they never jump or distort; galleries keep one aspect ratio per row (vary rotation, not size, for a collage feel).
 
 RESPONSIVE (it must never be wider than the screen):
-- Mobile first. Test mentally at 360px: grid-template-columns uses minmax(0,1fr); flex/grid children get min-width:0; long words use overflow-wrap:anywhere; images max-width:100%; no fixed widths above 100%; big type uses clamp() with vw so it fits at 360px.
+- Mobile first. Test mentally at 360px: grid-template-columns uses minmax(0,1fr); flex/grid children get min-width:0; addresses, URLs and long body words use overflow-wrap:anywhere, but never display headlines (a name must never break mid-word: size it so its longest word fits, e.g. font-size:min(clamp(…), calc(100cqi / N)) on a container with container-type:inline-size, or plain vw maths for the word length); images max-width:100%; no fixed widths above 100%; big type uses clamp() with vw so it fits at 360px.
 - Desktop gets the ambitious layout via @media (min-width: 900px).
 
 Write the whole site in one go. CSS first (complete), then every section in the plan's order.`;

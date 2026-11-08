@@ -1,4 +1,5 @@
 import type { LocalImage } from "../llm";
+import { SITE_CSS } from "../../blocks/css";
 import { cleanFontParam } from "../sanitize";
 import type { Block, SiteCode } from "../spec";
 
@@ -19,10 +20,10 @@ const WIDGET_STUB = `[data-ss-widget]{display:grid;place-items:center;min-height
 [data-ss-reveal]{opacity:1!important;transform:none!important}
 *,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition:none!important;scroll-behavior:auto!important}`;
 
-/** A standalone page of the site (fonts, CSS, sections, widget boxes). Also used by the demo script. */
+/** A standalone page of the site: the renderer's own base CSS (so it measures like the live page), fonts, the site's CSS, sections and widget boxes. Also used by the demo script. */
 export function staticPage(code: SiteCode, blocks: Block[]): string {
   const fonts = code.fonts.map(cleanFontParam).filter((p): p is string => !!p).map((p) => `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?${p}&display=swap">`).join("");
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${fonts}<style>html,body{margin:0}${code.css}\n${WIDGET_STUB}</style></head><body><div class="ss ss-code" style="background:var(--bg);min-height:100vh"><div class="ss-code-body">${blocks.map((b) => String(b.props.html ?? "")).join("\n")}</div></div></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${fonts}<style>html,body{margin:0}${SITE_CSS}\n${code.css}\n${WIDGET_STUB}</style></head><body><div class="ss ss-code" style="background:var(--bg);min-height:100vh"><div class="ss-code-body">${blocks.map((b) => String(b.props.html ?? "")).join("\n")}</div></div></body></html>`;
 }
 
 export interface Inspection {
@@ -173,6 +174,23 @@ function lint(vw: number): string[] {
     if (cut) out.push(`At ${vw}px in #${id}, text is cut off: ${name(cut)}.`);
   }
 
+  // 5b. Headline words broken in the middle (a name split across lines reads as a bug).
+  for (const hd of [...document.querySelectorAll(".ss-code-body h1, .ss-code-body h2, .ss-code-body [data-el=headline]")].filter(visible).slice(0, 30)) {
+    const walker = document.createTreeWalker(hd, NodeFilter.SHOW_TEXT);
+    let broken: string | null = null;
+    for (let n = walker.nextNode(); n && !broken; n = walker.nextNode()) {
+      const text = n.textContent ?? "";
+      for (const m of text.matchAll(/\S{3,}/g)) {
+        const range = document.createRange();
+        range.setStart(n, m.index ?? 0);
+        range.setEnd(n, (m.index ?? 0) + m[0].length);
+        const tops = new Set([...range.getClientRects()].filter((r) => r.width > 1).map((r) => Math.round(r.top)));
+        if (tops.size > 1) { broken = m[0]; break; }
+      }
+    }
+    if (broken) out.push(`At ${vw}px in #${hd.closest("section")?.getAttribute("data-block-id")}, the headline word "${broken}" breaks in the middle across two lines. Size the headline so its longest word fits the column (no overflow-wrap/word-break on display type).`);
+  }
+
   // 6. Hero fits the first screen at desktop.
   const hero = sections.find((s) => /hero/i.test(s.getAttribute("data-block-id") ?? "")) ?? sections[1];
   if (hero && vw >= 900) {
@@ -185,7 +203,7 @@ function lint(vw: number): string[] {
   return out;
 }
 
-/** Renders and measures the page. Null when no browser is available. */
+/** Renders and measures the page (HTML, or a URL to load). Null when no browser is available. */
 export async function inspect(html: string): Promise<Inspection | null> {
   let chromium: typeof import("playwright-core").chromium;
   try { ({ chromium } = await import("playwright-core")); } catch { return null; }
@@ -197,8 +215,18 @@ export async function inspect(html: string): Promise<Inspection | null> {
     for (const [w, h] of [[1280, 900], [390, 844]] as const) {
       const page = await browser.newPage({ viewport: { width: w, height: h } });
       try {
-        await page.setContent(html, { waitUntil: "load", timeout: 20_000 }).catch(() => {});
-        await page.evaluate(() => document.fonts.ready).catch(() => {});
+        if (/^https?:\/\//.test(html)) await page.goto(html, { waitUntil: "networkidle", timeout: 30_000 }).catch(() => {});
+        else await page.setContent(html, { waitUntil: "load", timeout: 20_000 }).catch(() => {});
+        // Web fonts load lazily; measuring with a fallback font hides real overflow, so load every face in use first.
+        await page.evaluate(async () => {
+          const faces = new Set<string>();
+          for (const el of document.querySelectorAll(".ss-code-body h1, .ss-code-body h2, .ss-code-body h3, .ss-code-body p, .ss-code-body [data-el], .ss-code-body a")) {
+            const cs = getComputedStyle(el);
+            faces.add(`${cs.fontStyle} ${cs.fontWeight} 32px ${cs.fontFamily}`);
+          }
+          await Promise.all([...faces].slice(0, 24).map((f) => document.fonts.load(f).catch(() => null)));
+          await document.fonts.ready;
+        }).catch(() => {});
         await page.waitForTimeout(400);
         issues.push(...(await page.evaluate(lint, w)));
         const first = await page.screenshot({ type: "jpeg", quality: 70 });
