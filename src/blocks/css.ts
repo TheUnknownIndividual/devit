@@ -567,6 +567,7 @@ export const SITE_CSS = `
 @media (prefers-reduced-motion:reduce){[data-ss-mode=live] *{animation:none!important;transition:none!important}.ss-progress{display:none}[data-ss-mode=live] .ss-sec.ss-wait{opacity:1;transform:none}}
 [data-ss-mode=preview]:not(.ss-code) *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 .ss-code[data-ss-mode=preview] *{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition:none!important;scroll-behavior:auto!important}
+.ss-code:not([data-ss-mode=live]) [data-ss-reveal]{opacity:1!important;transform:none!important}
 /* treasury */
 .ss-tr{display:grid;gap:36px}.ss-tr>*{min-width:0}
 .ss-tr-acc{display:grid;gap:16px}.ss-tr-acc>*{min-width:0}

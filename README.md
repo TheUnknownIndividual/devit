@@ -97,7 +97,18 @@ Everything the model writes passes a sanitiser on save and again on render (`src
 - **A fast lane for small changes**, like v0's quick edits. A short text, colour or size change on one or two elements goes to the small model (Claude Haiku) with thinking off, patches only. A one-line text change takes about 3 seconds. Anything it can't apply cleanly goes to the full editor, so the fast lane only ever saves time.
 - **Every edit is checked in the browser.** The page is measured before and after the change; if the change added a layout fault, one fix pass runs with screenshots before the result is shown.
 
-Double-clicking text still edits it in place without a model. If any stage fails, the build falls back to the block renderer: a JSON spec of themed blocks with stable ids.
+Double-clicking text still edits it in place without a model. If any stage fails, the build falls back to the block renderer: a JSON spec of themed blocks with stable ids. That fallback is built quietly alongside the design stages rather than ahead of them, so it adds no wait.
+
+**While it builds** (`src/components/build/BuildBoard.tsx`, `eta.ts`). A designed site takes about two minutes, and an unexplained wait feels longer than one you can watch. Before the first section exists, the preview shows a board with what the build has found and decided so far, newest on top:
+- the token read from the chain;
+- the links and posts found online;
+- the colours taken from the artwork;
+- what the project is, with each fact's source;
+- the art direction, with a small preview in the chosen fonts and colours;
+- the reference sites it borrows from, with what it borrows;
+- the section plan, ticking off as sections are written.
+
+The countdown counts time, not steps. It is based on how long each step took in recent builds (`src/lib/build-times.ts`). Once a few sections are written it switches to their actual pace, and it is smoothed so it rarely jumps backwards. When sections start streaming, a thin bar over the preview names the one being written, and the preview scrolls to follow it unless you switch that off. The tab title shows the percentage, so the build can be watched from another tab. **Notify me when ready** sends a browser notification if the tab is in the background when the site finishes; it is only offered, never asked for unprompted. Each section brings its own styles, so it can show the moment it is written instead of after the whole stylesheet.
 
 The design rules (`src/lib/design/principles.ts`) are devit's own, informed by Anthropic's Apache-2.0 frontend-design skill.
 

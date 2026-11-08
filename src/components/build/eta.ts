@@ -49,7 +49,13 @@ function sectionsOf(s: BuildStep | undefined): { done: number; of: number } | nu
   return m ? { done: Number(m[1]), of: Number(m[2]) } : null;
 }
 
-function rawLeft(steps: BuildStep[], plan: Record<string, number>, now: number): number {
+/** ms per section from the gaps between sections seen so far (median; the first section also carries the base styles, so it is left out). */
+function paceOf(seen: number[]): number | null {
+  const gaps = seen.slice(1).map((t, i) => t - seen[i]).filter((g) => g > 0).sort((a, b) => a - b);
+  return gaps.length >= 2 ? gaps[Math.floor(gaps.length / 2)] : null;
+}
+
+function rawLeft(steps: BuildStep[], plan: Record<string, number>, now: number, pace: number | null): number {
   let left = 0;
   for (const [id, ms] of Object.entries(plan)) {
     const s = steps.find((x) => x.id === id);
@@ -57,13 +63,14 @@ function rawLeft(steps: BuildStep[], plan: Record<string, number>, now: number):
     if (s.state !== "running") continue;
     const ran = now - (s.began ?? s.at);
     let rem = ms - ran;
+    const floor = Math.min(ms * 0.15, 8000);
     const sec = id === "design" ? sectionsOf(s) : null;
-    if (sec && sec.done >= 2 && sec.of > sec.done) {
-      // The pace of the sections written so far says more than the history once a couple are in.
-      const byPace = (ran / sec.done) * (sec.of - sec.done);
-      rem = sec.done >= 4 ? byPace : (rem + byPace) / 2;
+    if (sec && pace && sec.of > sec.done) {
+      // Once a few sections are in, their pace joins the history; past the estimate it is all there is.
+      const byPace = pace * (sec.of - sec.done);
+      rem = rem > floor ? (rem + byPace) / 2 : byPace;
     }
-    left += Math.max(rem, Math.min(ms * 0.15, 8000));
+    left += Math.max(rem, floor);
   }
   return left;
 }
@@ -80,9 +87,10 @@ export function useBuildProgress(p: { status: string; steps: BuildStep[]; eta?: 
   const building = p.status === "building";
   const [now, setNow] = useState(() => Date.now());
   const shown = useRef<{ left: number; at: number; pct: number } | null>(null);
+  const seen = useRef<number[]>([]);
 
   useEffect(() => {
-    if (!building) { shown.current = null; return; }
+    if (!building) { shown.current = null; seen.current = []; return; }
     const h = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(h);
   }, [building]);
@@ -92,7 +100,10 @@ export function useBuildProgress(p: { status: string; steps: BuildStep[]; eta?: 
   const planned = Object.keys(plan);
   const started = p.eta?.startedAt ?? p.steps[0]?.began ?? p.steps[0]?.at ?? now;
   const elapsed = Math.max(0, now - started);
-  const raw = rawLeft(p.steps, plan, now);
+  const sec = sectionsOf(p.steps.find((s) => s.id === "design" && s.state === "running"));
+  // When each section was first seen written (the builder polls every 600ms, close enough).
+  if (sec) while (seen.current.length < sec.done) seen.current.push(now);
+  const raw = rawLeft(p.steps, plan, now, paceOf(seen.current));
 
   // Smooth: good news shows at once; bad news creeps in, so the countdown doesn't lurch backwards on one slow step.
   const prev = shown.current;

@@ -627,7 +627,7 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
       <PublishDialog open={dialog === "publish"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
       <ExportDialog open={dialog === "export"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
       <KnowledgeDialog open={dialog === "knowledge"} onClose={() => setDialog(null)} project={p} onSaved={setP} />
-      {canEdit && ready && <Tour id="builder" steps={BUILDER_TOUR} />}
+      {canEdit && ready && !building && <Tour id="builder" steps={BUILDER_TOUR} />}
       <DatabaseDialog open={dialog === "database"} onClose={() => setDialog(null)} project={p} hasForm={!!p.spec?.blocks.some((b) => b.type === "signup")} />
     </div>
   );
