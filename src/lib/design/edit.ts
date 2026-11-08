@@ -48,6 +48,8 @@ ${quick ? "" : `<css mode="append">…only new or overriding rules…</css>     
 <remove id="EXISTING_ID"/>   (removes a section)
 `}</edit>
 
+Change only what the request asks for. Never remove, reword or move other text or elements, even when they seem redundant after the change; if you think something else should change too, say so in the summary instead.
+
 How to change things, smallest first:
 - Text, a link, an attribute, one element, a class: a <patch> on that section.
 - A colour, size, spacing or one rule: a <patch target="css"> on the rule${quick ? "" : `, or <css mode="append"> with an overriding rule`}. Site-wide colour changes go through the tokens (.ss-code{--bg:…;--text:…;--accent:…}) so the widgets follow.
