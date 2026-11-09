@@ -120,7 +120,7 @@ function asksToRemove(comments: PendingComment[], kind: string): boolean {
 }
 
 function requestsText(comments: PendingComment[]): string {
-  return comments.map((c) => `- on "${c.blockLabel}" (${c.blockId})${c.element ? `, element ${c.element}${WIDGET_EL.test(c.element) ? " (a live widget: see what it already does)" : ""}` : ""}: ${c.text}${c.context ? `\n  context from their connectors: ${c.context}` : ""}`).join("\n");
+  return comments.map((c) => `- on "${c.blockLabel}" (${c.blockId})${c.element ? `, element ${c.element}${WIDGET_EL.test(c.element) ? " (a live widget: see what it already does)" : ""}` : ""}: ${c.text}${c.context ? `\n  context from their connectors: ${c.context}` : ""}${c.reply ? `\n  this is a follow-up to an earlier change; build on it rather than starting over: ${c.reply}` : ""}`).join("\n");
 }
 
 async function attempt(project: Project, spec: SiteSpec, comments: PendingComment[], o: AttemptOpts): Promise<Attempt | null> {

@@ -15,7 +15,8 @@ export type FromBuilder =
   | { type: "ss:select"; on: boolean }
   | { type: "ss:markers"; items: Array<{ blockId: string; n: number }> }
   | { type: "ss:selected"; items: Sel[] }
-  | { type: "ss:focus"; blockId: string; smooth?: boolean };
+  /** Scroll to a block (or one element in it); flash: outline it for a moment so the person sees what they asked about. */
+  | { type: "ss:focus"; blockId: string; element?: string; smooth?: boolean; flash?: boolean };
 
 export type FromPreview =
   | { type: "ss:ready" }
@@ -40,6 +41,21 @@ function typeable(t: EventTarget | null): HTMLElement | null {
 }
 
 export interface Sel { blockId: string; element: string | null }
+
+/** Outlines an element for a moment (after the scroll settles): what a chat chip points at, so it's easy to spot. */
+function flash(el: HTMLElement) {
+  const ring = document.createElement("div");
+  ring.setAttribute("aria-hidden", "true");
+  Object.assign(ring.style, { position: "fixed", pointerEvents: "none", zIndex: "2147483646", borderRadius: "10px", border: "2px solid #8b9cff", background: "rgba(139,156,255,0.12)", boxShadow: "0 0 0 4px rgba(139,156,255,0.18)", opacity: "0" });
+  document.body.appendChild(ring);
+  const place = () => { const r = el.getBoundingClientRect(); Object.assign(ring.style, { left: `${r.left - 6}px`, top: `${r.top - 6}px`, width: `${r.width + 12}px`, height: `${r.height + 12}px` }); };
+  let raf = 0;
+  const follow = () => { place(); raf = requestAnimationFrame(follow); };
+  follow();
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const a = ring.animate([{ opacity: 0 }, { opacity: 1, offset: 0.12 }, { opacity: 1, offset: 0.7 }, { opacity: 0 }], { duration: reduce ? 1200 : 2000, delay: 350, easing: "ease-out", fill: "both" });
+  a.onfinish = () => { cancelAnimationFrame(raf); ring.remove(); };
+}
 const same = (a: Sel, b: Sel) => a.blockId === b.blockId && (a.element ?? null) === (b.element ?? null);
 
 interface Box { top: number; left: number; width: number; height: number }
@@ -142,7 +158,13 @@ export function PreviewClient({ initial, walletconnect, credit }: { initial: Sit
       else if (m?.type === "ss:select") { setSelectOn(m.on); if (!m.on) setHover(null); }
       else if (m?.type === "ss:markers") setMarkers(m.items);
       else if (m?.type === "ss:selected") setSel(m.items ?? []);
-      else if (m?.type === "ss:focus") document.querySelector(`[data-block-id="${CSS.escape(m.blockId)}"]`)?.scrollIntoView({ block: "start", behavior: m.smooth ? "smooth" : "auto" });
+      else if (m?.type === "ss:focus") {
+        const block = document.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(m.blockId)}"]`);
+        const el = (m.element && block?.querySelector<HTMLElement>(`[data-el="${CSS.escape(m.element)}"]`)) || block;
+        if (!el) return;
+        el.scrollIntoView({ block: el === block ? "start" : "center", behavior: m.smooth ? "smooth" : "auto" });
+        if (m.flash) flash(el);
+      }
     };
     // The builder may not be listening yet when this mounts (its ref or listener attaches later), so keep saying ready
     // until it answers; the builder also asks with ss:hello on the iframe's load.

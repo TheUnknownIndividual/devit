@@ -23,6 +23,8 @@ const Body = z.object({
     text: z.string().trim().min(1).max(500),
     assets: z.array(z.string().max(24)).max(6).optional(),
   })).min(1).max(30),
+  /** A reply to an earlier agent message: that message and what it answered, as context for the model. */
+  replyTo: z.object({ id: z.string().max(40), text: z.string().max(200), context: z.string().max(1500) }).optional(),
 });
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -39,7 +41,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { p } = g;
   if (!p.spec) return NextResponse.json({ error: "not ready" }, { status: 409 });
   const own = new Set((p.assets ?? []).map((a) => a.id));
-  const comments = parsed.data.comments.map((c) => ({ ...c, assets: c.assets?.filter((a) => own.has(a)) }));
+  const replyTo = parsed.data.replyTo;
+  const comments = parsed.data.comments.map((c) => ({ ...c, assets: c.assets?.filter((a) => own.has(a)), ...(replyTo ? { reply: replyTo.context } : {}) }));
   const urls = (p.assets ?? []).filter((a) => comments.some((c) => c.assets?.includes(a.id))).map((a) => a.url);
   const keys = await ownerKeysFor(p.ownerId);
   const priority = await projectEntitled(p, "priorityModels");
@@ -55,7 +58,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // The selection travels with the message so the chat shows it as chips, not "label · element: text".
     const targets = comments.map((c) => ({ blockId: c.blockId, label: c.blockLabel.split(" · ")[0], ...(c.element ? { element: c.element } : {}), text: c.text }));
     const same = targets.every((t) => t.text === targets[0].text);
-    q.messages.push({ id: newId(), role: "user", text: same ? targets[0].text : list, targets, at: Date.now(), ...(urls.length ? { assets: urls } : {}) });
+    q.messages.push({ id: newId(), role: "user", text: same ? targets[0].text : list, targets, at: Date.now(), ...(urls.length ? { assets: urls } : {}), ...(replyTo ? { replyTo: { id: replyTo.id, text: replyTo.text } } : {}) });
     q.messages.push({ id: newId(), role: "agent", text: res.message, at: Date.now(), via: res.via });
   });
   return NextResponse.json(out ? publicProject(out) : { error: "not found" });

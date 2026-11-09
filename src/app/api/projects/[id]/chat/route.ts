@@ -29,6 +29,8 @@ const Body = z.object({
   docs: z.array(z.object({ name: z.string().max(80), text: z.string().max(6000) })).max(3).optional(),
   /** plan: say what would change and wait; ask: answer without changing anything. */
   mode: z.enum(["edit", "plan", "ask"]).optional(),
+  /** A reply to an earlier agent message: that message and what it answered, as context for the model. */
+  replyTo: z.object({ id: z.string().max(40), text: z.string().max(200), context: z.string().max(1500) }).optional(),
 });
 
 /** A posts block goes in above the socials once there are posts to show. */
@@ -63,7 +65,10 @@ async function chat(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "empty" }, { status: 400 });
-  const { text, docs } = parsed.data;
+  const { text, docs, replyTo } = parsed.data;
+  // A reply carries the earlier exchange, so "make it bigger" knows what "it" was.
+  const withReply = (t: string) => (replyTo ? `${t}\n\n(This follows up on an earlier exchange. ${replyTo.context})` : t);
+  const replied = replyTo ? { replyTo: { id: replyTo.id, text: replyTo.text } } : {};
   const p = await getProject(id);
   if (!p?.spec) return NextResponse.json({ error: "not ready" }, { status: 409 });
 
@@ -87,10 +92,10 @@ async function chat(req: Request, ctx: { params: Promise<{ id: string }> }) {
   if (parsed.data.mode === "plan" || parsed.data.mode === "ask") {
     const mode = parsed.data.mode;
     const plan = mode === "plan";
-    const res = plan ? await planChange(p, text) : await askAbout(p, text);
+    const res = plan ? await planChange(p, withReply(text)) : await askAbout(p, withReply(text));
     const steps: string[] = "steps" in res ? (res.steps as string[]) : [];
     const out = await updateProject(id, (q) => {
-      q.messages.push({ id: newId(), role: "user", text, at: Date.now(), mode });
+      q.messages.push({ id: newId(), role: "user", text, at: Date.now(), mode, ...replied });
       q.messages.push({ id: newId(), role: "agent", text: res.reply, at: Date.now(), via: res.via, ...(plan && steps.length ? { plan: { request: text, steps } } : {}) });
     });
     return NextResponse.json(out ? publicProject(out) : { error: "not found" });
@@ -170,14 +175,14 @@ async function chat(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const target = p.spec.blocks.find((b) => b.type === "hero") ?? p.spec.blocks[0];
   const context = docs?.length ? `\n\nFrom the files they added:\n${docs.map((d) => `--- ${d.name}\n${d.text}`).join("\n")}` : "";
   const cx = await connectorContext(p, text);
-  const res = await applyComments(p, [{ id: newId(), blockId: target.id, blockLabel: "Whole page", text: text + context, assets, ...(cx.text ? { context: cx.text } : {}) }], true);
+  const res = await applyComments(p, [{ id: newId(), blockId: target.id, blockLabel: "Whole page", text: text + context, assets, ...(cx.text ? { context: cx.text } : {}), ...(replyTo ? { reply: replyTo.context } : {}) }], true);
   if (cx.used.length) res.via = `${res.via} · read ${cx.used.join(", ")}`;
   const out = await updateProject(id, (q) => {
     if (!q.spec) return;
     snapshot(q, text);
     q.spec = res.spec;
     q.version += 1;
-    q.messages.push({ id: newId(), role: "user", text: docs?.length ? `${text} (with ${docs.map((d) => d.name).join(", ")})` : text, at: Date.now(), ...(assetUrls.length ? { assets: assetUrls } : {}) });
+    q.messages.push({ id: newId(), role: "user", text: docs?.length ? `${text} (with ${docs.map((d) => d.name).join(", ")})` : text, at: Date.now(), ...(assetUrls.length ? { assets: assetUrls } : {}), ...replied });
     q.messages.push({ id: newId(), role: "agent", text: res.message, at: Date.now(), via: res.via });
   });
   return NextResponse.json(out ? publicProject(out) : { error: "not found" });

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowUp, BookOpen, Check, HelpCircle, ChevronDown, Code2, Crosshair, Eye, ExternalLink, Globe, History, Lightbulb, Link2, Loader2, MessageCircleQuestion, MessageSquare, Mic, MicOff, Monitor, MousePointer2, Palette, Pencil, Plug, Server, FileText, ImagePlus, Smartphone, Tablet, Trash2, Undo2, X, Database, Hammer, Wand2,
+  ArrowUp, BookOpen, Check, HelpCircle, ChevronDown, Code2, Crosshair, Eye, ExternalLink, Globe, History, Lightbulb, Link2, Loader2, MessageCircleQuestion, MessageSquare, Mic, Reply, MicOff, Monitor, MousePointer2, Palette, Pencil, Plug, Server, FileText, ImagePlus, Smartphone, Tablet, Trash2, Undo2, X, Database, Hammer, Wand2,
 } from "lucide-react";
 import { HistoryPanel, KnowledgeDialog, useDictation } from "./BuilderExtras";
 import { CodePanel } from "./CodePanel";
@@ -46,7 +46,7 @@ const MODES: Array<{ id: Mode; label: string; hint: string }> = [
 ];
 
 /** A message sent from the composer that isn't in the saved chat yet. */
-interface Outgoing { id: string; kind: "chat" | "apply"; text: string; images: string[]; mode?: Mode; body?: unknown; comments?: PendingComment[]; targets?: Array<{ blockId: string; label: string; element?: string; text: string }> }
+interface Outgoing { id: string; kind: "chat" | "apply"; text: string; images: string[]; mode?: Mode; body?: unknown; comments?: PendingComment[]; targets?: Array<{ blockId: string; label: string; element?: string; text: string }>; replyTo?: { id: string; text: string; context: string } }
 
 export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, canEdit = true, viewNote, share }: { initial: PublicProject; heliusOnServer: boolean; alchemyOnServer?: boolean; canEdit?: boolean; viewNote?: string; share?: string }) {
   const [p, setP] = useState(initial);
@@ -73,6 +73,8 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
   // Sent messages show in the chat at once; one sent while the agent is still working waits here and goes next.
   const [outbox, setOutbox] = useState<Outgoing[]>([]);
   const running = useRef<string | null>(null);
+  // Replying to an agent message: the follow-up goes with what that change was (and to the same selection).
+  const [reply, setReply] = useState<{ id: string; text: string; context: string; targets?: Array<{ blockId: string; label: string; element?: string; text: string }> } | null>(null);
   const [uploading, setUploading] = useState(0);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -153,7 +155,7 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
     return () => clearInterval(h);
   }, [building, p.id, q]);
 
-  useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight, behavior: "smooth" }); }, [p.messages.length, p.steps.length, comments.length, outbox.length]);
+  useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight, behavior: "smooth" }); }, [p.messages.length, p.steps.length, comments.length, outbox.length, busy]);
 
   const send = useCallback((m: FromBuilder) => frame.current?.contentWindow?.postMessage(m, window.location.origin), []);
 
@@ -317,16 +319,19 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
     if (!t || building || uploading || !canEdit) return;
     const assets = attached.map((a) => a.id);
     const images = attached.map((a) => a.url);
-    setText(""); setAttached([]); setDocs([]); setAttachError(null); setBeforeEnhance(null);
-    if (picks.length) {
-      const fresh = picks.map((s) => ({ id: newId(), blockId: s.blockId, blockLabel: s.element ? `${s.label} · ${s.element}` : s.label, element: s.element ?? undefined, text: t, ...(assets.length ? { assets } : {}) }));
+    const replyTo = reply ? { id: reply.id, text: reply.text.slice(0, 200), context: reply.context } : undefined;
+    setText(""); setAttached([]); setDocs([]); setAttachError(null); setBeforeEnhance(null); setReply(null);
+    // A reply to a change made on a selection goes to that same selection unless something else is picked now.
+    const on = picks.length ? picks.map((s) => ({ blockId: s.blockId, label: s.label, element: s.element ?? undefined })) : mode === "edit" && reply?.targets?.length ? reply.targets : [];
+    if (on.length) {
+      const fresh = on.map((s) => ({ id: newId(), blockId: s.blockId, blockLabel: s.element ? `${s.label} · ${s.element}` : s.label, element: s.element, text: t, ...(assets.length ? { assets } : {}) }));
       // Sent: the selection clears at once (a change that fails comes back in the "didn't apply" tray to retry).
       setPicks([]);
-      setOutbox((o) => [...o, { id: newId(), kind: "apply", text: t, images, comments: fresh, targets: picks.map((s) => ({ blockId: s.blockId, label: s.label, element: s.element ?? undefined, text: t })) }]);
+      setOutbox((o) => [...o, { id: newId(), kind: "apply", text: t, images, comments: fresh, replyTo, targets: on.map((s) => ({ ...s, text: t })) }]);
       return;
     }
     const m = mode !== "edit" ? mode : undefined;
-    setOutbox((o) => [...o, { id: newId(), kind: "chat", text: t, images, mode: m, body: { text: t, ...(assets.length ? { assets } : {}), ...(docs.length ? { docs } : {}), ...(m ? { mode: m } : {}) } }]);
+    setOutbox((o) => [...o, { id: newId(), kind: "chat", text: t, images, mode: m, replyTo, body: { text: t, ...(assets.length ? { assets } : {}), ...(docs.length ? { docs } : {}), ...(m ? { mode: m } : {}), ...(replyTo ? { replyTo } : {}) } }]);
   }
 
   // Sends the oldest waiting message whenever the agent is free.
@@ -338,7 +343,7 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
     if (next.kind === "apply") {
       const all = [...comments, ...(next.comments ?? [])];
       setApplying(all.length);
-      void call("/apply", { comments: all }, "apply", "POST", (ok) => { drop(); setComments(ok ? [] : all); });
+      void call("/apply", { comments: all, ...(next.replyTo ? { replyTo: next.replyTo } : {}) }, "apply", "POST", (ok) => { drop(); setComments(ok ? [] : all); });
     } else {
       void call("/chat", next.body, "chat", "POST", (ok) => { drop(); if (!ok) setText((cur) => cur || next.text); });
     }
@@ -369,21 +374,43 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
     if (ok) setComments([]); else setComments(all);
   }
 
+  // Reply: what the earlier request was and what was done for it, so a follow-up like "bigger" knows what "it" is.
+  function startReply(i: number) {
+    const m = p.messages[i];
+    const asked = p.messages.slice(0, i).reverse().find((x) => x.role === "user");
+    const on = asked?.targets?.length ? ` (on ${asked.targets.map((t) => (t.element ? `${t.label} · ${elName(t.element)}` : t.label)).join(", ")})` : "";
+    const context = `${asked ? `The earlier request was "${asked.text.slice(0, 500)}"${on}. ` : ""}What was done for it: "${m.text.slice(0, 800)}".`;
+    setReply({ id: m.id, text: m.text, context, targets: asked && !asked.mode ? asked.targets : undefined });
+    input.current?.focus();
+  }
+  // Scrolls the chat to a message and flashes it, so a reply shows what it answered.
+  function jumpTo(id: string) {
+    const el = list.current?.querySelector<HTMLElement>(`[data-msg="${CSS.escape(id)}"]`);
+    if (!el) return;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    el.animate([{ backgroundColor: "rgba(139,156,255,0.16)" }, { backgroundColor: "rgba(139,156,255,0)" }], { duration: 1800, delay: 250, easing: "ease-out" });
+  }
+
   // One look for a sent message, whether it's saved or still on its way (`note` says it's waiting its turn).
-  const userBubble = (m: { text: string; mode?: string; targets?: Array<{ blockId: string; label: string; element?: string; text: string }>; assets?: string[] }, note?: string) => (
+  const userBubble = (m: { text: string; mode?: string; targets?: Array<{ blockId: string; label: string; element?: string; text: string }>; assets?: string[]; replyTo?: { id: string; text: string } }, note?: string) => (
                   <div className="ml-8 whitespace-pre-line break-words [overflow-wrap:anywhere] rounded-[14px] rounded-tr-md border border-white/[0.07] bg-ink-850 px-3.5 py-2.5 text-[13.5px] leading-relaxed text-zinc-100">
                     {note && <span className="mb-1 block text-[11px] font-medium text-zinc-500">{note}</span>}
+                    {m.replyTo && (
+                      <button type="button" onClick={() => jumpTo(m.replyTo!.id)} title="Show the message this replies to" className="mb-1.5 flex w-full min-w-0 items-center gap-1 text-left text-[11px] text-zinc-500 hover:text-zinc-300">
+                        <Reply size={11} className="shrink-0" /> <span className="truncate">{m.replyTo.text}</span>
+                      </button>
+                    )}
                     {m.mode && <span className="mb-1 flex items-center gap-1 text-[11px] font-medium text-zinc-500">{m.mode === "plan" ? <Lightbulb size={11} /> : <MessageCircleQuestion size={11} />} {m.mode === "plan" ? "Plan" : "Ask"}</span>}
                     {m.targets?.length ? (
                       m.targets.every((t) => t.text === m.targets![0].text) ? (
                         <>
-                          <TargetChips targets={m.targets} onFocus={(id) => send({ type: "ss:focus", blockId: id })} />
+                          <TargetChips targets={m.targets} onFocus={(id, el) => send({ type: "ss:focus", blockId: id, element: el, smooth: true, flash: true })} />
                           <span className="mt-1.5 block">{m.targets[0].text}</span>
                         </>
                       ) : (
                         <ul className="space-y-2">
                           {m.targets.map((t, k) => (
-                            <li key={k}><TargetChips targets={[t]} onFocus={(id) => send({ type: "ss:focus", blockId: id })} /><span className="mt-1 block">{t.text}</span></li>
+                            <li key={k}><TargetChips targets={[t]} onFocus={(id, el) => send({ type: "ss:focus", blockId: id, element: el, smooth: true, flash: true })} /><span className="mt-1 block">{t.text}</span></li>
                           ))}
                         </ul>
                       )
@@ -491,7 +518,7 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
           )}
           <div ref={list} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
             {p.messages.map((m, i) => (
-              <div key={m.id} className="animate-rise">
+              <div key={m.id} data-msg={m.id} className="animate-rise -mx-2 rounded-xl px-2">
                 {m.role === "user" ? (
                   userBubble(m)
                 ) : (
@@ -512,18 +539,27 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
                           )}
                         </div>
                       )}
-                      {m.via && <span className="mt-1.5 inline-flex h-5 items-center rounded-md bg-white/[0.05] px-1.5 text-[10.5px] text-zinc-500">{VIA[m.via] ?? m.via}</span>}
+                      {(m.via || (canEdit && p.messages[i - 1]?.role === "user")) && (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          {m.via && <span className="inline-flex h-5 items-center rounded-md bg-white/[0.05] px-1.5 text-[11px] text-zinc-500">{VIA[m.via] ?? m.via}</span>}
+                          {canEdit && p.messages[i - 1]?.role === "user" && (
+                            <button type="button" onClick={() => startReply(i)} title="Follow up on this change; the agent gets what it did" className={`inline-flex h-5 items-center gap-1 rounded-md px-1.5 text-[11px] hover:bg-white/[0.06] hover:text-zinc-200 ${reply?.id === m.id ? "bg-white/[0.08] text-zinc-200" : "text-zinc-500"}`}>
+                              <Reply size={12} /> Reply
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
                 {i === 0 && (p.steps.length > 0 || building) && <div className="mt-4"><BuildSteps steps={p.steps} building={building} progress={progress} /></div>}
               </div>
             ))}
-            {outbox.map((o, k) => (k === 0 && busy ? <div key={o.id} className="animate-rise">{userBubble({ text: o.text, mode: o.mode, targets: o.targets, assets: o.images })}</div> : null))}
+            {outbox.map((o, k) => (k === 0 && busy ? <div key={o.id} className="animate-rise">{userBubble({ text: o.text, mode: o.mode, targets: o.targets, assets: o.images, replyTo: o.replyTo })}</div> : null))}
             {busy === "apply" || busy === "chat" ? (
               <div className="flex items-center gap-2.5 text-[13px] text-zinc-400"><Loader2 size={14} className="animate-spin text-sel" /> {busy === "apply" ? `Applying ${applying} change${applying === 1 ? "" : "s"}…` : mode === "plan" ? "Drafting a plan…" : mode === "ask" ? "Thinking…" : "Working on it…"}</div>
             ) : null}
-            {outbox.map((o, k) => (k === 0 && busy ? null : <div key={o.id} className="animate-rise">{userBubble({ text: o.text, mode: o.mode, targets: o.targets, assets: o.images }, busy ? "Queued, goes when this one's done" : undefined)}</div>))}
+            {outbox.map((o, k) => (k === 0 && busy ? null : <div key={o.id} className="animate-rise">{userBubble({ text: o.text, mode: o.mode, targets: o.targets, assets: o.images, replyTo: o.replyTo }, busy ? "Queued, goes when this one's done" : undefined)}</div>))}
             {canEdit && p.published && p.publishedIsCurrent === false && !busy && !building && p.messages[p.messages.length - 1]?.role === "agent" && (
               <div className="flex animate-rise flex-wrap items-center gap-x-3 gap-y-2 rounded-[12px] border border-sel/30 bg-sel/[0.06] px-3 py-2.5">
                 <Globe size={14} className="shrink-0 text-sel" />
@@ -548,7 +584,7 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
               <ul className="max-h-44 space-y-1 overflow-y-auto px-2 pb-2">
                 {comments.map((c) => (
                   <li key={c.id} className="group flex items-start gap-2 rounded-[10px] bg-ink-900/80 px-2.5 py-2">
-                    <button type="button" className="mt-px shrink-0 rounded-md bg-sel/15 px-1.5 py-0.5 text-[11px] font-medium text-sel" onClick={() => send({ type: "ss:focus", blockId: c.blockId })}>{c.blockLabel}</button>
+                    <button type="button" className="mt-px shrink-0 rounded-md bg-sel/15 px-1.5 py-0.5 text-[11px] font-medium text-sel" onClick={() => send({ type: "ss:focus", blockId: c.blockId, element: c.element, smooth: true, flash: true })}>{c.blockLabel}</button>
                     <span className="min-w-0 flex-1 text-[12.5px] text-zinc-200">{c.text}</span>
                     <button type="button" aria-label="Remove change" className="btn btn-ghost btn-icon h-6 w-6 opacity-60 group-hover:opacity-100" onClick={() => setComments((all) => all.filter((x) => x.id !== c.id))}><Trash2 size={13} /></button>
                   </li>
@@ -598,6 +634,14 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
                     </span>
                   ))}
                   {attachError && <span className="text-[11.5px] text-red-300">{attachError}</span>}
+                </div>
+              )}
+              {reply && (
+                <div className="flex min-w-0 items-center gap-1.5 px-3 pt-2.5 text-[12px] text-zinc-400">
+                  <Reply size={13} className="shrink-0" />
+                  <button type="button" onClick={() => jumpTo(reply.id)} className="min-w-0 truncate text-left hover:text-zinc-200" title="Show that message">Replying to “{reply.text}”</button>
+                  {!picks.length && mode === "edit" && reply.targets?.length ? <span className="shrink-0 text-[11px] text-zinc-500">· same selection</span> : null}
+                  <button type="button" aria-label="Cancel the reply" className="ml-auto shrink-0 text-zinc-500 hover:text-white" onClick={() => setReply(null)}><X size={13} /></button>
                 </div>
               )}
               {picks.length > 0 && (
@@ -765,11 +809,11 @@ function Skeleton({ failed }: { failed: boolean }) {
 }
 
 /** The elements a message was about, as chips; clicking one shows it in the preview. */
-function TargetChips({ targets, onFocus }: { targets: Array<{ blockId: string; label: string; element?: string }>; onFocus: (blockId: string) => void }) {
+function TargetChips({ targets, onFocus }: { targets: Array<{ blockId: string; label: string; element?: string }>; onFocus: (blockId: string, element?: string) => void }) {
   return (
     <span className="flex flex-wrap gap-1.5">
       {targets.map((t, k) => (
-        <button key={k} type="button" onClick={() => onFocus(t.blockId)} title="Show it in the preview"
+        <button key={k} type="button" onClick={() => onFocus(t.blockId, t.element)} title="Show it in the preview"
           className="inline-flex h-6 max-w-full items-center gap-1 rounded-md border border-sel/25 bg-sel/[0.1] px-1.5 text-[11.5px] font-medium text-sel hover:bg-sel/[0.16]">
           <Crosshair size={12} className="shrink-0" />
           <span className="truncate">{t.label}</span>

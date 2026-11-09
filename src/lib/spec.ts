@@ -344,6 +344,8 @@ export interface ChatMessage {
   plan?: { request: string; steps: string[] };
   /** What the user had selected in the preview when they sent it, each with its own request (shown as chips). */
   targets?: Array<{ blockId: string; label: string; element?: string; text: string }>;
+  /** Sent as a reply to this agent message (its id and the start of its text, shown above the message). */
+  replyTo?: { id: string; text: string };
 }
 
 export interface PendingComment {
@@ -356,6 +358,8 @@ export interface PendingComment {
   assets?: string[];
   /** Read-only results from the owner's connectors (lib/connector-context.ts), for the model only. */
   context?: string;
+  /** A reply: the earlier request and what was changed for it, so the follow-up builds on that change. */
+  reply?: string;
 }
 
 export interface Project {
