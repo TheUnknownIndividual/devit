@@ -43,7 +43,7 @@ export async function POST(req: Request) {
   const anon = v.user ? undefined : await ensureAnon();
   const keys = await ownerKeysFor(v.user?.id);
   const who = v.user ? `user:${v.user.id}` : `anon:${anon}`;
-  const own = hasOwnLlm(keys);
+  const own = hasOwnLlm(keys, modelFrom(req));
   const payer = isOperator(req) ? operatorPayer() : await payerFor(v.user, clientIp(req));
   const ticket = await reserve(payer, "build");
   if (!ticket && !own) return outOfCredits(payer);

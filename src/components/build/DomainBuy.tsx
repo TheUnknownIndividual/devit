@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, ArrowRight, ArrowUpRight, Check, CheckCircle2, Copy, Loader2, Search, ShoppingCart, Wand2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, ArrowUpRight, Check, ChevronDown, CheckCircle2, Copy, Loader2, Search, ShoppingCart, Wand2 } from "lucide-react";
 import { BRANDS, BrandIcon } from "@/components/brand";
 
 // Buying a domain from the Publish dialog (Spaceship, paid with any token through NEAR Intents), and writing the DNS
@@ -21,9 +21,12 @@ export function DomainBuy({ projectId, suggest, onLive }: { projectId: string; s
   const [s, setS] = useState<Search | null>(null);
   const [busy, setBusy] = useState(false);
   const [buying, setBuying] = useState<Offer | null>(null);
+  // Three results to start; "Show more" adds four at a time, and the search page has every extension and filters.
+  const [shown, setShown] = useState(3);
 
   async function search(term = q) {
     setBusy(true);
+    setShown(3);
     const j = (await fetch(`/api/domains/search?q=${encodeURIComponent(term.trim())}`, { cache: "no-store" }).then((r) => r.json()).catch(() => null)) as Search | null;
     setS(j ?? { enabled: false, buying: false, offers: [], error: "Couldn't search right now." });
     setBusy(false);
@@ -50,7 +53,7 @@ export function DomainBuy({ projectId, suggest, onLive }: { projectId: string; s
       {s?.error && s.enabled && <p className="text-[12px] text-amber-300">{s.error}</p>}
       {s?.enabled && s.offers.length > 0 && (
         <div className="overflow-hidden rounded-[10px] border border-white/[0.07]">
-          {s.offers.map((o) => (
+          {s.offers.slice(0, shown).map((o) => (
             <div key={o.domain} className="flex items-center gap-3 border-t border-white/[0.06] px-3 py-2 first:border-t-0">
               <span className={`min-w-0 flex-1 truncate font-mono text-[12.5px] ${o.available ? "text-zinc-100" : "text-zinc-500 line-through"}`}>{o.domain}</span>
               {o.premium && o.available && <span className="text-[11px] text-amber-300">premium</span>}
@@ -66,7 +69,17 @@ export function DomainBuy({ projectId, suggest, onLive }: { projectId: string; s
               ) : <span className="text-[11.5px] text-zinc-500">taken</span>}
             </div>
           ))}
+          {s.offers.length > shown && (
+            <button type="button" className="flex h-9 w-full items-center justify-center gap-1.5 border-t border-white/[0.06] text-[12.5px] text-zinc-300 hover:bg-white/[0.04] hover:text-white" onClick={() => setShown((n) => n + 4)}>
+              <ChevronDown size={13} /> Show more ({s.offers.length - shown})
+            </button>
+          )}
         </div>
+      )}
+      {s?.enabled && (
+        <a className="flex h-9 w-full items-center justify-center gap-1.5 rounded-[10px] border border-white/[0.08] text-[12.5px] text-zinc-300 hover:bg-white/[0.04] hover:text-white" href={`/domains?q=${encodeURIComponent((q || suggest).trim())}&project=${encodeURIComponent(projectId)}`} target="_blank" rel="noreferrer">
+          <Search size={13} /> Search every extension, with filters <ArrowUpRight size={12} />
+        </a>
       )}
       {s?.enabled && (
         <p className="flex items-center gap-1.5 text-[11px] text-zinc-500">
@@ -77,7 +90,7 @@ export function DomainBuy({ projectId, suggest, onLive }: { projectId: string; s
   );
 }
 
-function BuyPanel({ projectId, offer, onBack, onLive }: { projectId: string; offer: Offer; onBack: () => void; onLive: () => void }) {
+export function BuyPanel({ projectId, offer, onBack, onLive }: { projectId: string; offer: Offer; onBack: () => void; onLive: () => void }) {
   const [coins, setCoins] = useState<Array<{ key: string; label: string; chain: string }>>([]);
   const [pay, setPay] = useState("base:USDC");
   const [refundTo, setRefundTo] = useState("");

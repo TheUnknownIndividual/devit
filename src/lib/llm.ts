@@ -11,7 +11,8 @@
 // comments run on the small one, and builds keep the big one.
 
 import { hasOwnLlm, ownerKeys, pickedModel, priorityModels } from "./keyscope";
-import type { ModelChoice } from "./models";
+import { COMPAT, isCompat, parsePick, type CompatId, type LlmProviderId } from "./llm-providers";
+import type { BuiltInModel } from "./models";
 import { addCost, costOf, oursAllowed } from "./meter";
 
 /** usage: tokens the provider reported, for the meter (our keys only). */
@@ -45,13 +46,13 @@ const MODELS: Record<"nearAi" | "claude" | "openai" | "openrouter", Record<Tier,
 };
 
 export function llmAvailable(): boolean {
-  return (oursAllowed() && !!(process.env.NEAR_AI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY)) || hasOwnLlm(ownerKeys());
+  return (oursAllowed() && !!(process.env.NEAR_AI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY)) || hasOwnLlm(ownerKeys(), pickedModel());
 }
 
 type Call = (system: string, user: string, timeoutMs: number, tier: Tier, key: string, model?: string) => Promise<LlmResult | null>;
 
 /** A picked model: which provider runs it and the exact model id (null: that provider's own default). */
-const PICKS: Record<Exclude<ModelChoice, "auto">, { provider: "nearai" | "anthropic" | "openai" | "openrouter"; model: string }> = {
+const PICKS: Record<Exclude<BuiltInModel, "auto">, { provider: "nearai" | "anthropic" | "openai" | "openrouter"; model: string }> = {
   glm: { provider: "nearai", model: NEAR_AI_MODEL },
   "claude-sonnet": { provider: "anthropic", model: CLAUDE_MODEL },
   "claude-haiku": { provider: "anthropic", model: CLAUDE_MODEL_LIGHT },
@@ -60,10 +61,10 @@ const PICKS: Record<Exclude<ModelChoice, "auto">, { provider: "nearai" | "anthro
 };
 
 /** Which picks can run right now: on the server's keys or the person's own. */
-export function modelAvailability(own: Partial<Record<"nearai" | "anthropic" | "openai" | "openrouter", boolean>>): Record<ModelChoice, boolean> {
+export function modelAvailability(own: Partial<Record<LlmProviderId, boolean>>): Record<BuiltInModel, boolean> {
   const server = { nearai: !!process.env.NEAR_AI_API_KEY, anthropic: !!process.env.ANTHROPIC_API_KEY, openai: !!process.env.OPENAI_API_KEY, openrouter: false };
-  const out = { auto: true } as Record<ModelChoice, boolean>;
-  for (const [id, p] of Object.entries(PICKS)) out[id as ModelChoice] = server[p.provider] || !!own[p.provider];
+  const out = { auto: true } as Record<BuiltInModel, boolean>;
+  for (const [id, p] of Object.entries(PICKS)) out[id as BuiltInModel] = server[p.provider] || !!own[p.provider];
   return out;
 }
 
@@ -154,7 +155,26 @@ const openrouter: Call = async (system, user, timeoutMs, tier, key, picked) => {
   }
 };
 
-type Provider = { call: Call; key: string; own: boolean; id: "nearai" | "anthropic" | "openai" | "openrouter"; model?: string };
+/** Any OpenAI-shaped provider (Gemini, xAI, Groq, Mistral, DeepSeek, Hugging Face); they only run a model picked by id. */
+const compat = (id: CompatId): Call => async (system, user, timeoutMs, tier, key, picked) => {
+  if (!picked) return null;
+  try {
+    const r = await fetch(`${COMPAT[id].base}/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+      body: JSON.stringify({ model: picked, messages: [{ role: "system", content: system }, { role: "user", content: user }], max_tokens: MAX_OUT[tier] * 2 }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!r.ok) { console.warn(`[llm] ${id} ${picked} ${r.status}`); return null; }
+    const j = (await r.json()) as { choices?: { message?: { content?: string } }[]; usage?: OaiUsage };
+    const text = j.choices?.[0]?.message?.content;
+    return text ? { text, via: `${COMPAT[id].name} · ${picked.split("/").pop()}`, model: picked, usage: oaiUsage(j.usage) } : null;
+  } catch {
+    return null;
+  }
+};
+
+type Provider = { call: Call; key: string; own: boolean; id: LlmProviderId; model?: string };
 
 /** Who to ask, in order: the picked model first (own key, then ours), then the owner's own keys, then the server's. */
 function providers(): Provider[] {
@@ -163,7 +183,15 @@ function providers(): Provider[] {
   const ours: Provider[] = !oursAllowed() ? [] : ([[nearAi, process.env.NEAR_AI_API_KEY, "nearai"], [claude, process.env.ANTHROPIC_API_KEY, "anthropic"], [openai, process.env.OPENAI_API_KEY, "openai"]] as const).filter(([, key]) => !!key).map(([call, key, id]) => ({ call, key: key!, own: false, id }));
   const choice = pickedModel();
   if (choice === "auto") return [...own, ...ours];
-  const pick = PICKS[choice];
+  // A model from the catalog runs only on the person's own key for its provider, then the normal order takes over.
+  const x = parsePick(choice);
+  if (x) {
+    const key = k[x.provider];
+    const call = isCompat(x.provider) ? compat(x.provider) : ({ nearai: nearAi, anthropic: claude, openai, openrouter } as const)[x.provider as "nearai" | "anthropic" | "openai" | "openrouter"];
+    return [...(key ? [{ call, key, own: true, id: x.provider, model: x.model }] : []), ...own, ...ours];
+  }
+  const pick = PICKS[choice as Exclude<BuiltInModel, "auto">];
+  if (!pick) return [...own, ...ours];
   const first = [...own, ...ours].filter((x) => x.id === pick.provider).map((x) => ({ ...x, model: pick.model }));
   return [...first, ...own, ...ours];
 }
@@ -366,7 +394,7 @@ async function richOpenAiShape(a: RichAsk, url: string, key: string, model: stri
  * asked). Returns the text and who answered, or null.
  */
 export async function askRich(a: RichAsk, accept: (text: string) => boolean = (t) => t.length > 0): Promise<{ text: string; via: string } | null> {
-  const order = (p: Provider) => (p.model ? -1 : ({ anthropic: 0, nearai: 1, openai: 2, openrouter: 3 } as const)[p.id]);
+  const order = (p: Provider) => (p.model ? -1 : ({ anthropic: 0, nearai: 1, openai: 2, openrouter: 3 } as Record<string, number>)[p.id] ?? 4);
   const list = providers().sort((x, y) => order(x) - order(y) || Number(y.own) - Number(x.own));
   const seen = new Set<string>();
   const t: Tier = a.tier ?? "heavy";
@@ -381,6 +409,7 @@ export async function askRich(a: RichAsk, accept: (text: string) => boolean = (t
         res = (await richClaude(a, p.key, model, true)) ?? (a.images?.length || a.files?.length ? await richClaude(a, p.key, model, false) : null);
       } else if (p.id === "nearai") res = await richOpenAiShape(a, NEAR_AI_URL, p.key, p.model ?? MODELS.nearAi[t], "NEAR AI Cloud", { images: false });
       else if (p.id === "openai") res = await richOpenAiShape(a, OPENAI_URL, p.key, p.model ?? MODELS.openai[t], "OpenAI", { images: true, reasoning: true });
+      else if (isCompat(p.id)) res = p.model ? await richOpenAiShape(a, COMPAT[p.id].base, p.key, p.model, COMPAT[p.id].name, { images: COMPAT[p.id].images }) : null;
       else res = await richOpenAiShape(a, "https://openrouter.ai/api/v1", p.key, p.model ?? MODELS.openrouter[t], "OpenRouter", { images: false });
     } catch (e) {
       console.warn(`[llm] ${p.id} failed: ${e instanceof Error ? e.name + " " + e.message : "error"}`);

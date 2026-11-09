@@ -77,27 +77,86 @@ export function candidates(q: string): string[] {
   return [...TLDS.slice(0, 10).map((t) => `${base}.${t}`), `get${base}.com`, `${base}coin.com`].slice(0, 12);
 }
 
+/** Availability and price for a list of names, in batches of 20 (Spaceship's limit per call), a few at a time. */
+async function lookup(k: SsKey, names: string[]): Promise<{ offers: DomainOffer[] } | { error: string }> {
+  const batches: string[][] = [];
+  for (let i = 0; i < names.length; i += 20) batches.push(names.slice(i, i + 20));
+  const fee = domainFee();
+  const out: DomainOffer[] = [];
+  let firstError: string | null = null;
+  for (let i = 0; i < batches.length; i += 3) {
+    const round = await Promise.all(batches.slice(i, i + 3).map(async (domains) => {
+      const [av, pr] = await Promise.all([
+        ss<{ domains: { domain: string; result: string }[] }>(k, "POST", "/v1/domains/available", { domains }),
+        ss<{ domains: DomainPrice[] }>(k, "POST", "/v1/domains/pricing/query", { domains }),
+      ]);
+      if (!av.ok) { firstError ??= av.error; return []; }
+      const prices = new Map((pr.ok ? pr.data.domains : []).map((d) => [d.domain, d]));
+      return av.data.domains.filter((d) => d.result === "available" || d.result === "taken").map((d): DomainOffer => {
+        const p = prices.get(d.domain);
+        const price = oneYear(p?.prices?.register);
+        const sellable = d.result === "available" && price != null && price <= MAX_PRICE;
+        return { domain: d.domain, available: sellable, premium: p?.priceClass === "premium", price: sellable ? price : null, total: sellable ? Math.ceil((price! + fee) * 100) / 100 : null, renew: oneYear(p?.prices?.renew) };
+      });
+    }));
+    out.push(...round.flat());
+  }
+  if (!out.length && firstError) return { error: firstError };
+  return { offers: out };
+}
+
 /** Availability and price for up to 12 names, available ones first, cheapest first. */
 export async function searchDomains(q: string): Promise<{ offers: DomainOffer[] } | { error: string }> {
   const k = ourKey();
   if (!k) return { error: "Domain search isn't set up on this server yet." };
   const names = candidates(q);
   if (!names.length) return { error: "Type a name, like your ticker." };
-  const [av, pr] = await Promise.all([
-    ss<{ domains: { domain: string; result: string }[] }>(k, "POST", "/v1/domains/available", { domains: names }),
-    ss<{ domains: DomainPrice[] }>(k, "POST", "/v1/domains/pricing/query", { domains: names }),
-  ]);
-  if (!av.ok) return { error: av.error };
-  const prices = new Map((pr.ok ? pr.data.domains : []).map((d) => [d.domain, d]));
-  const fee = domainFee();
-  const offers = av.data.domains.filter((d) => d.result === "available" || d.result === "taken").map((d): DomainOffer => {
-    const p = prices.get(d.domain);
-    const price = oneYear(p?.prices?.register);
-    const sellable = d.result === "available" && price != null && price <= MAX_PRICE;
-    return { domain: d.domain, available: sellable, premium: p?.priceClass === "premium", price: sellable ? price : null, total: sellable ? Math.ceil((price! + fee) * 100) / 100 : null, renew: oneYear(p?.prices?.renew) };
-  });
+  const r = await lookup(k, names);
+  if ("error" in r) return r;
+  const offers = r.offers;
   offers.sort((a, b) => Number(b.available) - Number(a.available) || (a.total ?? 1e9) - (b.total ?? 1e9) || names.indexOf(a.domain) - names.indexOf(b.domain));
   return { offers };
+}
+
+// ---------- the full search page ----------
+
+/** Extensions on the search page, grouped the way registrars group them. */
+export const TLD_GROUPS: Record<string, string[]> = {
+  Popular: ["com", "net", "org", "io", "co", "ai", "app", "xyz", "dev"],
+  "Crypto and money": ["money", "finance", "exchange", "trade", "cash", "markets", "fund", "capital", "gold"],
+  Fun: ["lol", "fun", "wtf", "meme", "gg", "vip", "cool", "rocks", "ninja", "party", "fyi", "club", "wow", "lat"],
+  Tech: ["tech", "site", "online", "cloud", "digital", "network", "systems", "tools", "build"],
+  Community: ["community", "social", "chat", "world", "life", "live", "space", "zone", "one", "today", "team"],
+  Short: ["me", "to", "so", "sh", "cc", "tv", "gg", "ac", "pw"],
+};
+const ALL_TLDS = [...new Set(Object.values(TLD_GROUPS).flat())];
+const IDEAS = [(b: string) => `get${b}`, (b: string) => `${b}hq`, (b: string) => `${b}app`, (b: string) => `try${b}`, (b: string) => `the${b}`, (b: string) => `${b}coin`, (b: string) => `join${b}`, (b: string) => `${b}lab`];
+
+export interface WideOffer extends DomainOffer { tld: string; idea: boolean }
+
+/**
+ * The search page: every extension we list for each name typed (up to 4, comma or space separated), plus name ideas
+ * (get-, -hq, try-…) on the popular extensions. Filtering and sorting happen in the browser.
+ */
+export async function searchWide(q: string, tlds?: string[]): Promise<{ offers: WideOffer[] } | { error: string }> {
+  const k = ourKey();
+  if (!k) return { error: "Domain search isn't set up on this server yet." };
+  const terms = q.toLowerCase().split(/[\s,]+/).map((t) => t.replace(/^https?:\/\//, "").replace(/^\$/, "")).filter(Boolean).slice(0, 4);
+  const exts = (tlds?.length ? tlds.filter((t) => ALL_TLDS.includes(t)) : ALL_TLDS);
+  const names = new Map<string, boolean>();
+  for (const t of terms) {
+    const exact = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(t) ? t : null;
+    const base = (exact ? t.split(".")[0] : t).replace(/[^a-z0-9-]+/g, "").replace(/^-+|-+$/g, "").slice(0, 50);
+    if (base.length < 2) continue;
+    if (exact) names.set(exact, false);
+    for (const x of exts) names.set(`${base}.${x}`, false);
+    if (terms.length === 1) for (const f of IDEAS) for (const x of ["com", "xyz", "io"]) names.set(`${f(base)}.${x}`, true);
+  }
+  if (!names.size) return { error: "Type a name, like your ticker." };
+  const list = [...names.keys()].slice(0, 160);
+  const r = await lookup(k, list);
+  if ("error" in r) return r;
+  return { offers: r.offers.map((o) => ({ ...o, tld: o.domain.slice(o.domain.indexOf(".") + 1), idea: names.get(o.domain) ?? false })) };
 }
 
 /** The current one-year price of one name, or null if it can't be bought now. */

@@ -46,7 +46,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const urls = (p.assets ?? []).filter((a) => comments.some((c) => c.assets?.includes(a.id))).map((a) => a.url);
   const keys = await ownerKeysFor(p.ownerId);
   const priority = await projectEntitled(p, "priorityModels");
-  const m = await metered(isOperator(req) ? operatorPayer() : await payerForProject(p.ownerId, clientIp(req)), "edit", hasOwnLlm(keys), () => runWithKeys(keys, () => applyComments(p, comments), priority, modelFrom(req)));
+  const m = await metered(isOperator(req) ? operatorPayer() : await payerForProject(p.ownerId, clientIp(req)), "edit", hasOwnLlm(keys, modelFrom(req)), () => runWithKeys(keys, () => applyComments(p, comments), priority, modelFrom(req)));
   if ("refused" in m) return m.refused;
   const res = m.value;
   const out = await updateProject(id, (q) => {

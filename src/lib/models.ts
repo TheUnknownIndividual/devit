@@ -1,3 +1,5 @@
+import { parsePick } from "./llm-providers";
+
 // The models a person can pick in the builder's chat box. "auto" keeps the normal order (NEAR AI, then Claude, then
 // OpenAI) and sizes the model to the job; any other choice goes to that model first and falls back to auto if it can't
 // answer, so a pick never breaks a build. Open to every plan.
@@ -11,9 +13,12 @@ export const MODEL_CHOICES = [
   { id: "openrouter", label: "OpenRouter", note: "Any model, on your OpenRouter key", provider: "openrouter" },
 ] as const;
 
-export type ModelChoice = (typeof MODEL_CHOICES)[number]["id"];
+export type BuiltInModel = (typeof MODEL_CHOICES)[number]["id"];
+/** A built-in choice, or a model picked from the catalog ("x:<provider>:<model id>", see llm-providers.ts). */
+export type ModelChoice = BuiltInModel | `x:${string}`;
 export type ModelProvider = Exclude<(typeof MODEL_CHOICES)[number]["provider"], null>;
-export const isModelChoice = (v: unknown): v is ModelChoice => typeof v === "string" && MODEL_CHOICES.some((m) => m.id === v);
+export const isBuiltIn = (v: unknown): v is BuiltInModel => typeof v === "string" && MODEL_CHOICES.some((m) => m.id === v);
+export const isModelChoice = (v: unknown): v is ModelChoice => isBuiltIn(v) || (typeof v === "string" && !!parsePick(v));
 
 /** The chat box sends its pick in an x-model header, so the routes' bodies stay as they were. */
 export const modelFrom = (req: Request): ModelChoice => { const v = req.headers.get("x-model"); return isModelChoice(v) ? v : "auto"; };

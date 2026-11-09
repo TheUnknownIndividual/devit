@@ -55,7 +55,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   // the owner's AI credits at what it really cost.
   const keys = await ownerKeysFor(g.p.ownerId);
   const priority = await projectEntitled(g.p, "priorityModels");
-  const r = await metered(isOperator(req) ? operatorPayer() : await payerForProject(g.p.ownerId, clientIp(req)), "edit", hasOwnLlm(keys), () => runWithKeys(keys, () => chat(req, ctx), priority, modelFrom(req)));
+  const r = await metered(isOperator(req) ? operatorPayer() : await payerForProject(g.p.ownerId, clientIp(req)), "edit", hasOwnLlm(keys, modelFrom(req)), () => runWithKeys(keys, () => chat(req, ctx), priority, modelFrom(req)));
   return "refused" in r ? r.refused : r.value;
 }
 

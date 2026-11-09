@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { keyOf, publicUser, saveKey, updateUser, viewer } from "@/lib/accounts";
 import { KEY_IDS } from "@/lib/keyscope";
-import { normalizeKey, verifyKey } from "@/lib/apikeys";
+import { detectKey, normalizeKey, verifyKey } from "@/lib/apikeys";
+import { forgetOwnModels } from "@/lib/model-catalog";
 import { overLimit } from "@/lib/net";
 
 // Bring your own keys. A key is checked with its provider, sealed (AES-256-GCM) and stored; only its last four
 // characters (and an RPC's host) ever come back.
 
-const Post = z.object({ id: z.enum(KEY_IDS), key: z.string().trim().max(400).optional(), save: z.boolean().optional() });
+const Post = z.object({ id: z.union([z.enum(KEY_IDS), z.literal("auto")]), key: z.string().trim().max(400).optional(), save: z.boolean().optional() });
 const Patch = z.object({ id: z.enum(KEY_IDS), use: z.boolean() });
 
 export async function POST(req: Request) {
@@ -18,7 +19,16 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
   const parsed = Post.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "bad request" }, { status: 400 });
-  const { id, save } = parsed.data;
+  const { save } = parsed.data;
+  let id = parsed.data.id as (typeof KEY_IDS)[number];
+  // "auto": an AI key pasted on its own; find whose it is, then carry on as if it was added under that provider.
+  if (parsed.data.id === "auto") {
+    const pasted = parsed.data.key?.trim() ?? "";
+    if (!pasted) return NextResponse.json({ ok: false, reason: "Paste a key first." }, { status: 400 });
+    const d = await detectKey(pasted);
+    if (!d.ok) return NextResponse.json(d);
+    id = d.id;
+  }
   // No key sent: re-check the saved one.
   const sent = parsed.data.key ? normalizeKey(id, parsed.data.key) : "";
   const key = sent || keyOf(user, id);
@@ -28,7 +38,8 @@ export async function POST(req: Request) {
   let u = user;
   if (save && sent) u = (await saveKey(user.id, id, key, id.startsWith("rpc:") ? new URL(key).host : undefined)) ?? user;
   else if (!sent) u = (await updateUser(user.id, (x) => { const k = x.keys[id]; if (k) k.verifiedAt = Date.now(); })) ?? user;
-  return NextResponse.json({ ok: true, user: publicUser(u) });
+  if (save && sent) forgetOwnModels(user.id);
+  return NextResponse.json({ ok: true, id, user: publicUser(u) });
 }
 
 export async function PATCH(req: Request) {
@@ -46,5 +57,6 @@ export async function DELETE(req: Request) {
   const id = z.enum(KEY_IDS).safeParse(new URL(req.url).searchParams.get("id"));
   if (!id.success) return NextResponse.json({ error: "bad request" }, { status: 400 });
   const u = await updateUser(user.id, (x) => { delete x.keys[id.data]; });
+  forgetOwnModels(user.id);
   return NextResponse.json({ user: u ? publicUser(u) : null });
 }

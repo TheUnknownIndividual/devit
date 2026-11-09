@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { parsePick } from "./llm-providers";
 import type { ModelChoice } from "./models";
 import type { Chain } from "./spec";
 
@@ -6,15 +7,23 @@ import type { Chain } from "./spec";
 // llm.ts / chain.ts / research.ts read it from here, so their signatures stay as they were. The same scope carries
 // whether the owner's plan has priority models (entitlements "priorityModels"), for llm.ts to pick the model size.
 
-export const KEY_IDS = ["nearai", "anthropic", "openai", "openrouter", "helius", "alchemy", "twitterapi", "rpc:near", "rpc:solana", "rpc:ethereum", "rpc:robinhood"] as const;
+export const KEY_IDS = ["nearai", "anthropic", "openai", "openrouter", "gemini", "xai", "groq", "mistral", "deepseek", "huggingface", "helius", "alchemy", "twitterapi", "rpc:near", "rpc:solana", "rpc:ethereum", "rpc:robinhood"] as const;
 export type KeyId = (typeof KEY_IDS)[number];
-export const LLM_KEYS = ["nearai", "anthropic", "openai", "openrouter"] as const satisfies readonly KeyId[];
+export const LLM_KEYS = ["nearai", "anthropic", "openai", "openrouter", "gemini", "xai", "groq", "mistral", "deepseek", "huggingface"] as const satisfies readonly KeyId[];
+/** The keys the "auto" chain can run without a model picked (the others only run a model picked from the catalog). */
+const AUTO_KEYS = ["nearai", "anthropic", "openai", "openrouter"] as const;
 
 export interface OwnerKeys {
   nearai?: string;
   anthropic?: string;
   openai?: string;
   openrouter?: string;
+  gemini?: string;
+  xai?: string;
+  groq?: string;
+  mistral?: string;
+  deepseek?: string;
+  huggingface?: string;
   helius?: string;
   /** Alchemy: EVM reads (Ethereum, Base, BNB Chain) and token logos. */
   alchemy?: string;
@@ -34,4 +43,10 @@ export const ownerKeys = (): OwnerKeys => store.getStore()?.keys ?? {};
 export const priorityModels = (): boolean => store.getStore()?.priority ?? false;
 export const pickedModel = (): ModelChoice => store.getStore()?.model ?? "auto";
 
-export const hasOwnLlm = (k: OwnerKeys | null) => !!k && LLM_KEYS.some((id) => !!k[id]);
+/** Whether this job can run on the person's own key: any auto-chain key, or the key behind a catalog model they picked. */
+export const hasOwnLlm = (k: OwnerKeys | null, model: ModelChoice = "auto") => {
+  if (!k) return false;
+  if (AUTO_KEYS.some((id) => !!k[id])) return true;
+  const p = parsePick(model);
+  return !!p && !!k[p.provider];
+};

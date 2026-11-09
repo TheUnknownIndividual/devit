@@ -17,9 +17,10 @@ import type { Balance } from "@/lib/credits";
 import type { TeamView } from "@/lib/team-view";
 import { TeamPanel } from "./TeamPanel";
 import { KeyRow } from "./KeyRow";
+import { LLM_PROVIDER_IDS } from "@/lib/llm-providers";
 
 const SECTIONS = [["account", "Account"], ["methods", "Sign-in methods"], ["keys", "API keys"], ["plan", "Plan"], ["team", "Team"]] as const;
-const MODEL_KEYS: KeyId[] = ["nearai", "anthropic", "openai", "openrouter"];
+const MODEL_KEYS: KeyId[] = [...LLM_PROVIDER_IDS];
 const CHAIN_KEYS: KeyId[] = ["helius", "alchemy", "twitterapi", "rpc:near", "rpc:solana", "rpc:ethereum", "rpc:robinhood"];
 
 const day = (t: number) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });

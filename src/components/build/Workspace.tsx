@@ -516,7 +516,7 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
               <div><ImagePlus size={20} className="mx-auto text-sel" /><p className="mt-2 text-[13px] text-white">Drop pictures or a .txt / .md file</p><p className="mt-1 text-[11.5px] text-zinc-500">PNG, JPEG, WebP or GIF. Big pictures are shrunk to 400 KB.</p></div>
             </div>
           )}
-          <div ref={list} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+          <div ref={list} className={`min-h-0 flex-1 space-y-4 overflow-y-auto p-4 ${canEdit && ready ? "pb-12" : ""}`}>
             {p.messages.map((m, i) => (
               <div key={m.id} data-msg={m.id} className="animate-rise -mx-2 rounded-xl px-2">
                 {m.role === "user" ? (
@@ -595,14 +595,16 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
 
           <div className="p-3 pt-0" data-tour="composer">
             {canEdit && ready && (
-              <div className="mb-1.5 flex items-center gap-1" role="radiogroup" aria-label="What the agent does with your message">
+              // Floats over the bottom of the chat: only the pills themselves are solid, so messages stay readable
+              // (and clickable) in the gaps between them as the chat scrolls.
+              <div className={`pointer-events-none relative z-10 mb-1.5 flex items-center gap-1 ${comments.length > 0 && busy !== "apply" ? "" : "-mt-9"}`} role="radiogroup" aria-label="What the agent does with your message">
                 {MODES.map((x) => (
                   <button key={x.id} type="button" role="radio" aria-checked={mode === x.id} title={x.hint} onClick={() => setMode(x.id)}
-                    className={`h-7 rounded-[8px] px-2.5 text-[12px] ${mode === x.id ? "bg-white/[0.09] text-white" : "text-zinc-500 hover:text-zinc-200"}`}>
+                    className={`pointer-events-auto h-7 rounded-[8px] border px-2.5 text-[12px] shadow-[0_4px_14px_rgba(0,0,0,0.35)] backdrop-blur ${mode === x.id ? "border-white/15 bg-ink-800/95 text-white" : "border-white/[0.08] bg-ink-900/95 text-zinc-400 hover:text-zinc-200"}`}>
                     {x.label}
                   </button>
                 ))}
-                <span className="ml-auto truncate text-[11px] text-zinc-500">{MODES.find((x) => x.id === mode)!.hint}</span>
+                <span className="pointer-events-auto ml-auto flex h-7 min-w-0 items-center truncate rounded-[8px] border border-white/[0.08] bg-ink-900/95 px-2 text-[11px] text-zinc-500 shadow-[0_4px_14px_rgba(0,0,0,0.35)] backdrop-blur">{MODES.find((x) => x.id === mode)!.hint}</span>
               </div>
             )}
             <div className="relative rounded-[16px] border border-white/10 bg-ink-900 focus-within:border-white/20">
