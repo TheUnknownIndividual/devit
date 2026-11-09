@@ -10,6 +10,7 @@ import type { SiteSpec } from "@/lib/spec";
 // builder by postMessage.
 
 export type FromBuilder =
+  | { type: "ss:hello" }
   | { type: "ss:spec"; spec: SiteSpec }
   | { type: "ss:select"; on: boolean }
   | { type: "ss:markers"; items: Array<{ blockId: string; n: number }> }
@@ -134,15 +135,22 @@ export function PreviewClient({ initial, walletconnect, credit }: { initial: Sit
     const on = (e: MessageEvent) => {
       if (e.origin !== window.location.origin) return;
       const m = e.data as FromBuilder;
-      if (m?.type === "ss:spec") setSpec(m.spec);
+      if (!m?.type?.startsWith?.("ss:")) return;
+      heard = true;
+      if (m.type === "ss:hello") post({ type: "ss:ready" });
+      else if (m.type === "ss:spec") setSpec(m.spec);
       else if (m?.type === "ss:select") { setSelectOn(m.on); if (!m.on) setHover(null); }
       else if (m?.type === "ss:markers") setMarkers(m.items);
       else if (m?.type === "ss:selected") setSel(m.items ?? []);
       else if (m?.type === "ss:focus") document.querySelector(`[data-block-id="${CSS.escape(m.blockId)}"]`)?.scrollIntoView({ block: "start", behavior: m.smooth ? "smooth" : "auto" });
     };
+    // The builder may not be listening yet when this mounts (its ref or listener attaches later), so keep saying ready
+    // until it answers; the builder also asks with ss:hello on the iframe's load.
+    let heard = false;
     window.addEventListener("message", on);
     post({ type: "ss:ready" });
-    return () => window.removeEventListener("message", on);
+    const tries = [150, 400, 900, 1800, 3500, 6000].map((ms) => setTimeout(() => { if (!heard) post({ type: "ss:ready" }); }, ms));
+    return () => { window.removeEventListener("message", on); tries.forEach(clearTimeout); };
   }, [post]);
 
   // Boxes follow the page as it scrolls or reflows.

@@ -72,6 +72,13 @@ function splittable(h: HTMLElement): boolean {
   if (cs.backgroundClip === "text" || cs.getPropertyValue("-webkit-background-clip") === "text") return false;
   // Letter-by-letter markup (one span per character) is already its own effect.
   if (h.querySelectorAll("*").length > 6) return false;
+  // A word that runs across an element ("<span>i</span>MEME") would split into two boxes the line can break between.
+  for (const el of h.querySelectorAll("*")) {
+    const before = el.previousSibling, after = el.nextSibling;
+    if (before?.nodeType === Node.TEXT_NODE && /\S$/.test(before.textContent ?? "") && /^\S/.test(el.textContent ?? "")) return false;
+    if (after?.nodeType === Node.TEXT_NODE && /^\S/.test(after.textContent ?? "") && /\S$/.test(el.textContent ?? "")) return false;
+    if (after instanceof Element && /\S$/.test(el.textContent ?? "") && /^\S/.test(after.textContent ?? "")) return false;
+  }
   return true;
 }
 

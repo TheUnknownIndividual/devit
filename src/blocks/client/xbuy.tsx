@@ -49,26 +49,41 @@ const MARKS: Record<string, [string, string, number]> = {
   LTC: ["#345D9D", "Ł", 17],
 };
 
-export function CoinMark({ symbol, size = 28 }: { symbol: string; size?: number }) {
-  if (symbol === "ETH") {
-    return (
-      <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden style={{ flex: "none" }}>
-        <circle cx="16" cy="16" r="16" fill="#627EEA" />
-        <g fill="#fff"><path fillOpacity=".6" d="M16.5 4v8.87l7.5 3.35z" /><path d="M16.5 4 9 16.22l7.5-3.35z" /><path fillOpacity=".6" d="M16.5 21.97V28L24 17.62z" /><path d="M16.5 28v-6.03L9 17.62z" /><path fillOpacity=".2" d="m16.5 20.57 7.5-4.35-7.5-3.35z" /><path fillOpacity=".6" d="m9 16.22 7.5 4.35v-7.7z" /></g>
-      </svg>
-    );
-  }
-  if (symbol === "NEAR" || symbol === "wNEAR") {
-    return (
-      <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden style={{ flex: "none" }}>
-        <circle cx="16" cy="16" r="16" fill="#00EC97" />
-        <path fill="#111" d="M20.6 8.6 17.4 13.4c-.2.3.2.7.5.4l3.2-2.7c.1-.1.3 0 .3.1v8.6c0 .2-.2.2-.3.1l-9.6-11.5c-.3-.4-.8-.6-1.3-.6h-.3c-.9 0-1.6.7-1.6 1.6v12.2c0 .9.7 1.6 1.6 1.6.6 0 1.1-.3 1.4-.8l3.2-4.8c.2-.3-.2-.7-.5-.4l-3.2 2.7c-.1.1-.3 0-.3-.1v-8.6c0-.2.2-.2.3-.1l9.6 11.5c.3.4.8.6 1.3.6h.3c.9 0 1.6-.7 1.6-1.6V9.4c0-.9-.7-1.6-1.6-1.6-.6 0-1.1.3-1.4.8Z" />
-      </svg>
-    );
-  }
+// Real logos, self-hosted in public/coins (64px, re-encoded): the coin, plus a small badge for the chain it's on when
+// that isn't the coin's own chain (ETH on Base, USDC on Solana), so look-alike rows tell apart at a glance.
+const LOGOS = new Set(["APT", "AVAX", "BERA", "BNB", "BTC", "DOGE", "ETH", "LTC", "MON", "NEAR", "OKB", "POL", "SOL", "SUI", "TON", "TRX", "USDC", "USDT", "USDT0", "XPL", "XRP", "ZEC"]);
+const CHAIN_LOGO: Record<string, [file: string, home: string]> = {
+  ethereum: ["ethereum", "ETH"], base: ["base", ""], arbitrum: ["arbitrum", ""], optimism: ["optimism", ""],
+  polygon: ["polygon", "POL"], avalanche: ["avalanche", "AVAX"], berachain: ["berachain", "BERA"], monad: ["monad", "MON"],
+  "robinhood chain": ["robinhood", ""], robinhood: ["robinhood", ""], scroll: ["scroll", ""], "x layer": ["xlayer", "OKB"],
+  plasma: ["plasma", "XPL"], near: ["near", "NEAR"], "near protocol": ["near", "NEAR"], solana: ["solana", "SOL"],
+  bitcoin: ["bitcoin", "BTC"], dogecoin: ["dogecoin", "DOGE"], zcash: ["zcash", "ZEC"], sui: ["sui", "SUI"],
+  aptos: ["aptos", "APT"], "bnb chain": ["bsc", "BNB"], bsc: ["bsc", "BNB"], tron: ["tron", "TRX"], ton: ["ton", "TON"],
+  xrp: ["ripple", "XRP"], "xrp ledger": ["ripple", "XRP"], litecoin: ["litecoin", "LTC"],
+};
+
+// Ethereum is the blue mark (svg); the rest are 64px png.
+const logo = (name: string) => `/coins/${name}.${name === "eth" || name === "chain-ethereum" ? "svg" : "png"}`;
+
+export function CoinMark({ symbol, chain, size = 28 }: { symbol: string; chain?: string; size?: number }) {
+  const on = chain ? CHAIN_LOGO[chain.toLowerCase()] : undefined;
+  const badge = on && on[1] !== symbol.replace(/^w(?=NEAR$)/, "") ? logo(`chain-${on[0]}`) : null;
+  const sym = symbol === "wNEAR" ? "NEAR" : symbol;
+  // A span with a background image, not an <img>: a site's own img rules (sizes, filters, click-to-zoom) never reach it.
+  const face = LOGOS.has(sym) ? <span className="ss-cm-face" style={{ backgroundImage: `url(${logo(sym.toLowerCase())})` }} /> : <Glyph symbol={sym} />;
+  return (
+    <span className="ss-cm" style={{ width: size, height: size }} aria-hidden>
+      {face}
+      {badge && <span className="ss-cm-chain" style={{ backgroundImage: `url(${badge})` }} />}
+    </span>
+  );
+}
+
+/** A coin with no logo file: its colour and ticker in a circle. */
+function Glyph({ symbol }: { symbol: string }) {
   const [fill, glyph, fs] = MARKS[symbol] ?? ["#555", symbol.slice(0, 4), symbol.length > 3 ? 8.5 : 10];
   return (
-    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden style={{ flex: "none" }}>
+    <svg viewBox="0 0 32 32" width="100%" height="100%" style={{ display: "block" }}>
       <circle cx="16" cy="16" r="16" fill={fill} />
       <text x="16" y={fs > 12 ? 21.5 : 19.5} textAnchor="middle" fontSize={fs} fontWeight="700" fill="#fff" fontFamily="system-ui, sans-serif">{glyph}</text>
     </svg>

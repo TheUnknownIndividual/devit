@@ -78,7 +78,7 @@ export async function proxy(req: NextRequest) {
     return m ? sitePage(req, m[1], null) : NextResponse.next();
   }
   if (path === "/") return sitePage(req, slug, via);
-  if (path.startsWith("/_next/") || path.startsWith("/wallets/") || SITE_API.test(path) || SITE_FILES.test(path) || path === `/og/${slug}`) return NextResponse.next();
+  if (path.startsWith("/_next/") || path.startsWith("/wallets/") || path.startsWith("/coins/") || SITE_API.test(path) || SITE_FILES.test(path) || path === `/og/${slug}`) return NextResponse.next();
   return NOT_FOUND();
 }
 

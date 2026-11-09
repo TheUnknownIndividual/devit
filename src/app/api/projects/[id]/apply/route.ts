@@ -52,7 +52,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     q.spec = res.spec;
     q.version += 1;
     const list = comments.map((c) => `${c.blockLabel}: ${c.text}`).join("\n");
-    q.messages.push({ id: newId(), role: "user", text: list, at: Date.now(), ...(urls.length ? { assets: urls } : {}) });
+    // The selection travels with the message so the chat shows it as chips, not "label · element: text".
+    const targets = comments.map((c) => ({ blockId: c.blockId, label: c.blockLabel.split(" · ")[0], ...(c.element ? { element: c.element } : {}), text: c.text }));
+    const same = targets.every((t) => t.text === targets[0].text);
+    q.messages.push({ id: newId(), role: "user", text: same ? targets[0].text : list, targets, at: Date.now(), ...(urls.length ? { assets: urls } : {}) });
     q.messages.push({ id: newId(), role: "agent", text: res.message, at: Date.now(), via: res.via });
   });
   return NextResponse.json(out ? publicProject(out) : { error: "not found" });

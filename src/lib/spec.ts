@@ -342,6 +342,8 @@ export interface ChatMessage {
   mode?: "plan" | "ask";
   /** A plan waiting for a go-ahead: the request and the changes it would make. */
   plan?: { request: string; steps: string[] };
+  /** What the user had selected in the preview when they sent it, each with its own request (shown as chips). */
+  targets?: Array<{ blockId: string; label: string; element?: string; text: string }>;
 }
 
 export interface PendingComment {

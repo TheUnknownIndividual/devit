@@ -30,7 +30,7 @@ export async function planChange(p: Project, text: string): Promise<{ reply: str
     "You plan edits to a token website made of JSON blocks, before anything changes. Don't change anything now.",
     "Reply with {reply, steps}. reply: one or two plain sentences on the approach. steps: 2-8 short concrete changes, each naming the section (e.g. 'Hero: headline becomes …', 'Add a Roadmap after How to buy').",
     `Sections you can add: ${Object.values(BLOCK_LABELS).join(", ")}. Styles: ${THEME_IDS.join(", ")}.`,
-    "Never invent prices, holder counts, partnerships or tokenomics; say [PLACEHOLDER] where a fact is missing.",
+    "Never invent prices, holder counts, partnerships or tokenomics. Where a fact is missing, say in plain words what you'll need from them (e.g. 'the three phase names you want'), never a [PLACEHOLDER] token.",
     knowledgeLine(p),
   ].filter(Boolean).join("\n");
   const res = await askJson(system, JSON.stringify({ site: siteBrief(p), request: text, ...(cx.text ? { "Context from your connectors": cx.text } : {}) }), (v) => { const r = Reply.safeParse(v); return r.success ? r.data : null; }, "light", "edit");
@@ -44,6 +44,7 @@ export async function askAbout(p: Project, text: string): Promise<{ reply: strin
   const system = [
     "You answer questions about a token website the team is building in devit. Don't change anything; if they want a change, say what to ask for.",
     "Answer in at most 5 short sentences, plainly. Use the site JSON for facts about the page; don't invent token facts.",
+    'Reply with JSON only: {"reply": "<your answer>"}.',
     "Builder facts: Publish puts it at <slug>.<sites domain>; custom domains, private links and passwords are on Pro; Export sends the code to GitHub or a zip; Database keeps signup entries; Integrations sets WalletConnect and Privy; double-click text in the preview to type over it; History restores any earlier version.",
     knowledgeLine(p),
   ].filter(Boolean).join("\n");

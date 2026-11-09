@@ -24,6 +24,11 @@ export const SITE_CSS = `
 .ss-muted{color:var(--muted)}
 .ss-mono{font-family:var(--font-mono)}
 .ss-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+/* Our surfaces carry their own ink: a widget placed in the model's light card (color:#111) keeps light text on its dark surface. */
+.ss-card,.ss-ca,.ss-quote,.ss-coins,.ss-input,.ss-select,.ss-steps{color:var(--text)}
+.ss-code [data-ss-widget] :is(.ss-card,.ss-ca,.ss-quote,.ss-coins){color:var(--text)}
+/* A site element right after a widget (a CTA under the buy box) never touches it, whatever the site's own CSS says. */
+.ss-code [data-ss-widget]:not([data-ss-widget=toasts]):has(+ :not([data-ss-widget],script,style,template)){padding-bottom:20px!important}
 .ss-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:48px;padding:0 22px;border-radius:var(--r-sm);font-weight:700;font-size:15px;border:0;cursor:pointer;background:var(--accent);color:var(--accent-text);font-family:var(--font-body);white-space:nowrap}
 .ss a.ss-btn{color:var(--accent-text)}
 .ss a.ss-btn-ghost{color:var(--text)}
@@ -112,7 +117,8 @@ export const SITE_CSS = `
 .ss-quote{margin-top:14px;padding:14px;border-radius:var(--r-sm);background:var(--bg);border:1px solid var(--border);font-size:14px}
 .ss-quote b{font-family:var(--font-display);font-size:22px}
 .ss-note{font-size:12px;color:var(--muted);margin-top:10px}
-.ss-err{color:#ef4444;font-size:13px;margin-top:10px}
+.ss-buy-acct{display:flex;justify-content:flex-end;margin:-4px 0 6px}.ss-buy-acct:empty{display:none}
+.ss-err{color:#ef4444;color:color-mix(in oklab,#ef4444 72%,var(--text));font-size:13px;margin-top:10px}
 .ss-coin{display:flex;align-items:center;gap:10px;width:100%;min-width:0;height:52px;padding:0 12px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--bg);color:var(--text);cursor:pointer;font-family:var(--font-body);text-align:left}
 .ss-coin:disabled{cursor:default;opacity:.7}
 .ss-coin[aria-selected=true]{border-color:var(--accent)}
@@ -120,7 +126,7 @@ export const SITE_CSS = `
 .ss-coin-name b{font-size:15px}
 .ss-coin-name span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ss-coin-bal{font-family:var(--font-mono);font-size:13px;color:var(--muted);flex:none}
-.ss-coins{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;margin-top:6px;max-height:min(460px,60vh);overflow-y:auto;overscroll-behavior:contain}
+.ss-coins{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;margin-top:6px}.ss-coins[data-all]{max-height:min(460px,60vh);overflow-y:auto;overscroll-behavior:contain;padding:8px 0;-webkit-mask-image:linear-gradient(transparent,#000 14px,#000 calc(100% - 14px),transparent);mask-image:linear-gradient(transparent,#000 14px,#000 calc(100% - 14px),transparent)}.ss-cm{position:relative;flex:none;display:inline-block}.ss-cm-face{display:block;width:100%;height:100%;border-radius:50%;background:center/cover no-repeat var(--border)}.ss-cm-chain{position:absolute;right:-3px;bottom:-3px;width:46%;height:46%;border-radius:50%;background:center/cover no-repeat var(--border);box-shadow:0 0 0 2px var(--bg)}.ss-coin{overflow:visible}
 .ss-coins .ss-coin{height:44px}
 .ss-coin-group{display:grid;gap:4px}
 .ss-coin-group .ss-wsep{margin:10px 0 2px}
@@ -195,8 +201,18 @@ export const SITE_CSS = `
 .ss-credit{display:flex;justify-content:flex-end;padding-top:24px;padding-bottom:32px;border-top:1px solid var(--border)}
 
 /* wallet modal */
-.ss-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:grid;place-items:center;padding:16px}
-.ss-modal{position:relative;width:100%;max-width:380px;max-height:calc(100dvh - 32px);overflow-y:auto;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+.ss-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:flex;align-items:flex-start;justify-content:center;padding:max(16px,min(14vh,120px)) 16px 16px;overscroll-behavior:contain;animation:ssScrimIn .16s ease-out both}
+.ss-modal{position:relative;width:100%;max-width:380px;max-height:calc(100dvh - max(32px,min(14vh,120px) + 16px));overflow-y:auto;overscroll-behavior:contain;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:20px;outline:none;box-shadow:0 24px 64px -16px rgba(0,0,0,.5);animation:ssSheetIn .22s cubic-bezier(.2,.7,.2,1) both}
+.ss-modal-bg.is-out{pointer-events:none;animation:ssScrimOut .15s ease-in both}
+.ss-modal-bg.is-out .ss-modal{animation:ssSheetOut .15s ease-in both}
+.ss-modal .ss-wallet{transition:border-color .15s,background-color .15s}
+.ss-wmore{max-height:min(320px,42dvh);overflow-y:auto;overscroll-behavior:contain;margin:0 -4px;padding:0 4px;animation:ssScrimIn .18s ease-out both}
+@keyframes ssScrimIn{from{opacity:0}}
+@keyframes ssScrimOut{to{opacity:0}}
+@keyframes ssSheetIn{from{opacity:0;translate:0 10px;scale:.985}}
+@keyframes ssSheetOut{to{opacity:0;translate:0 6px;scale:.99}}
+@media (max-width:560px){.ss-modal-bg{align-items:flex-end;padding:0}.ss-modal{max-width:none;max-height:88dvh;border-radius:var(--radius) var(--radius) 0 0;border-bottom:0;padding-bottom:max(20px,env(safe-area-inset-bottom))}@keyframes ssSheetIn{from{translate:0 100%}}@keyframes ssSheetOut{to{translate:0 100%}}.ss-modal{animation-duration:.26s}}
+@media (prefers-reduced-motion:reduce){.ss-modal-bg,.ss-modal,.ss-wmore{animation:none!important}}
 .ss-modal h3{margin:0 0 4px;padding-right:40px;font-size:18px;font-family:var(--font-display)}
 .ss-modal-x{position:absolute;top:12px;right:12px;width:36px;height:36px;display:grid;place-items:center;border:0;border-radius:var(--r-sm);background:transparent;color:var(--muted);cursor:pointer}
 .ss-modal-x:hover{color:var(--text);background:var(--bg)}
@@ -576,7 +592,7 @@ export const SITE_CSS = `
 @media (prefers-reduced-motion:reduce){[data-ss-mode=live] *{animation:none!important;transition:none!important}.ss-progress{display:none}[data-ss-mode=live] .ss-sec.ss-wait{opacity:1;transform:none}}
 [data-ss-mode=preview]:not(.ss-code) *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 .ss-code[data-ss-mode=preview] *{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition:none!important;scroll-behavior:auto!important}
-.ss-code:not([data-ss-mode=live]) [data-ss-reveal]{opacity:1!important;transform:none!important}
+.ss-code[data-ss-mode]:not([data-ss-mode=live]) [data-ss-reveal]{opacity:1!important;transform:none!important}
 /* treasury */
 .ss-tr{display:grid;gap:36px}.ss-tr>*{min-width:0}
 .ss-tr-acc{display:grid;gap:16px}.ss-tr-acc>*{min-width:0}

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowUp, BookOpen, HelpCircle, ChevronDown, Code2, Crosshair, Eye, ExternalLink, Globe, History, Lightbulb, Link2, Loader2, MessageCircleQuestion, MessageSquare, Mic, MicOff, Monitor, MousePointer2, Palette, Pencil, Plug, Server, FileText, ImagePlus, Smartphone, Tablet, Trash2, Undo2, X, Database, Hammer, Wand2,
+  ArrowUp, BookOpen, Check, HelpCircle, ChevronDown, Code2, Crosshair, Eye, ExternalLink, Globe, History, Lightbulb, Link2, Loader2, MessageCircleQuestion, MessageSquare, Mic, MicOff, Monitor, MousePointer2, Palette, Pencil, Plug, Server, FileText, ImagePlus, Smartphone, Tablet, Trash2, Undo2, X, Database, Hammer, Wand2,
 } from "lucide-react";
 import { HistoryPanel, KnowledgeDialog, useDictation } from "./BuilderExtras";
 import { CodePanel } from "./CodePanel";
@@ -33,6 +33,9 @@ import { AccountMenu } from "@/components/account/AccountMenu";
 type Device = "desktop" | "tablet" | "phone";
 const WIDTH: Record<Device, string> = { desktop: "100%", tablet: "820px", phone: "390px" };
 
+/** "headline" → "Headline", "item:2" → "Item 2", "cta" → "Button": the picked element, for chips. */
+const elName = (e: string) => { const [k, n] = e.split(":"); const w = ({ cta: "Button", subhead: "Subheading", body: "Text", img: "Image" } as Record<string, string>)[k] ?? k.replace(/[-_]/g, " "); return `${w.charAt(0).toUpperCase()}${w.slice(1)}${n ? ` ${n}` : ""}`; };
+
 const VIA: Record<string, string> = { "near-ai": "NEAR AI Cloud", claude: "Claude", "offline writer": "Offline writer", "offline editor": "Offline editor" };
 
 type Mode = "edit" | "plan" | "ask";
@@ -50,6 +53,8 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
   const [viewing, setViewing] = useState<number | null>(null);
   const [view, setView] = useState<"preview" | "code">("preview");
   const [notice, setNotice] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [liveDone, setLiveDone] = useState(false);
   const [noticeTopup, setNoticeTopup] = useState(false);
   const [device, setDevice] = useState<Device>("desktop");
   const [selectOn, setSelectOn] = useState(canEdit);
@@ -177,6 +182,8 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
       else if (m?.type === "ss:text") void typeOver(m.blockId, m.before, m.after);
     };
     window.addEventListener("message", on);
+    // The preview may have said ready before this listener existed: ask again (it answers with ss:ready).
+    send({ type: "ss:hello" });
     return () => window.removeEventListener("message", on);
   }, []);
 
@@ -301,10 +308,22 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
     setText(""); setAttached([]); setDocs([]); setAttachError(null); setBeforeEnhance(null);
     if (picks.length) {
       const fresh = picks.map((s) => ({ id: newId(), blockId: s.blockId, blockLabel: s.element ? `${s.label} · ${s.element}` : s.label, element: s.element ?? undefined, text: t, ...(assets.length ? { assets } : {}) }));
+      // Sent: the selection clears at once (a change that fails comes back in the "didn't apply" tray to retry).
+      setPicks([]);
       void apply([...comments, ...fresh]);
       return;
     }
     void call("/chat", { text: t, ...(assets.length ? { assets } : {}), ...(docs.length ? { docs } : {}), ...(mode !== "edit" ? { mode } : {}) }, "chat").then((ok) => { if (!ok) setText((cur) => cur || t); });
+  }
+
+  // "Update live site" from the chat: republish at the same address, no dialog.
+  async function quickUpdate() {
+    if (!p.published || publishing) return;
+    setPublishing(true);
+    const r = await fetch(`/api/projects/${p.id}/publish`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slug: p.published.slug }) }).catch(() => null);
+    const j = r ? await r.json().catch(() => null) : null;
+    setPublishing(false);
+    if (r?.ok && j?.id) { setP(j as PublicProject); setLiveDone(true); setTimeout(() => setLiveDone(false), 6000); } else setNotice(j?.error ?? "Couldn't update the live site. Try Update at the top.");
   }
 
   // A plan's go-ahead: the request and its steps go in as one edit.
@@ -318,7 +337,7 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
     if (!all.length) return;
     setApplying(all.length);
     const ok = await call("/apply", { comments: all }, "apply");
-    if (ok) { setComments([]); setPicks([]); } else setComments(all);
+    if (ok) setComments([]); else setComments(all);
   }
 
   const ready = !!p.spec;
@@ -424,7 +443,20 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
                 {m.role === "user" ? (
                   <div className="ml-8 whitespace-pre-line break-words [overflow-wrap:anywhere] rounded-[14px] rounded-tr-md border border-white/[0.07] bg-ink-850 px-3.5 py-2.5 text-[13.5px] leading-relaxed text-zinc-100">
                     {m.mode && <span className="mb-1 flex items-center gap-1 text-[11px] font-medium text-zinc-500">{m.mode === "plan" ? <Lightbulb size={11} /> : <MessageCircleQuestion size={11} />} {m.mode === "plan" ? "Plan" : "Ask"}</span>}
-                    {m.text}
+                    {m.targets?.length ? (
+                      m.targets.every((t) => t.text === m.targets![0].text) ? (
+                        <>
+                          <TargetChips targets={m.targets} onFocus={(id) => send({ type: "ss:focus", blockId: id })} />
+                          <span className="mt-1.5 block">{m.targets[0].text}</span>
+                        </>
+                      ) : (
+                        <ul className="space-y-2">
+                          {m.targets.map((t, k) => (
+                            <li key={k}><TargetChips targets={[t]} onFocus={(id) => send({ type: "ss:focus", blockId: id })} /><span className="mt-1 block">{t.text}</span></li>
+                          ))}
+                        </ul>
+                      )
+                    ) : m.text}
                     {!!m.assets?.length && <div className="mt-2 flex flex-wrap gap-1.5">{m.assets.map((u) => <img key={u} src={u} alt="" className="h-12 w-12 rounded-md border border-white/10 object-cover" />)}</div>}
                   </div>
                 ) : (
@@ -455,6 +487,14 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
             {busy === "apply" || busy === "chat" ? (
               <div className="flex items-center gap-2.5 text-[13px] text-zinc-400"><Loader2 size={14} className="animate-spin text-sel" /> {busy === "apply" ? `Applying ${applying} change${applying === 1 ? "" : "s"}…` : mode === "plan" ? "Drafting a plan…" : mode === "ask" ? "Thinking…" : "Working on it…"}</div>
             ) : null}
+            {canEdit && p.published && p.publishedIsCurrent === false && !busy && !building && p.messages[p.messages.length - 1]?.role === "agent" && (
+              <div className="flex animate-rise flex-wrap items-center gap-x-3 gap-y-2 rounded-[12px] border border-sel/30 bg-sel/[0.06] px-3 py-2.5">
+                <Globe size={14} className="shrink-0 text-sel" />
+                <span className="min-w-0 flex-1 text-[12.5px] leading-snug text-zinc-200">Changed in your draft and the preview. <span className="text-zinc-400">{p.liveUrl ? p.liveUrl.replace(/^https?:\/\//, "") : "The live site"} still shows the old version until you update.</span></span>
+                <button type="button" className="btn btn-primary h-8" disabled={!!busy || publishing} onClick={() => void quickUpdate()}>{publishing ? <Loader2 size={14} className="animate-spin" /> : <ArrowUp size={14} />} Update live site</button>
+              </div>
+            )}
+            {liveDone && <div className="flex animate-rise items-center gap-2 rounded-[12px] border border-lime/30 bg-lime/[0.06] px-3 py-2.5 text-[12.5px] text-zinc-200"><Check size={14} className="shrink-0 text-lime" /> <span className="min-w-0 flex-1">The live site is updated.</span>{p.liveUrl && <a className="text-lime underline-offset-2 hover:underline" href={p.liveUrl} target="_blank" rel="noreferrer">Open</a>}</div>}
             {notice && <div className="flex items-start gap-2 rounded-[10px] border border-amber-300/20 bg-amber-300/[0.05] px-3 py-2 text-[12.5px] text-amber-200"><span className="min-w-0 flex-1">{notice}{noticeTopup && <> <Link href="/pricing#topup" className="underline underline-offset-2 hover:text-amber-100">Top up credits</Link></>}</span><button type="button" aria-label="Dismiss" className="text-amber-200/70 hover:text-amber-100" onClick={() => setNotice(null)}><X size={13} /></button></div>}
           </div>
 
@@ -527,7 +567,7 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
                 <div className="flex flex-wrap items-center gap-1.5 px-3 pt-2.5">
                   {picks.map((s) => (
                     <span key={`${s.blockId}|${s.element ?? ""}`} className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-sel/40 bg-sel/10 px-2 text-[12px] text-sel">
-                      <Crosshair size={13} /> {s.label}{s.element ? ` · ${s.element}` : ""}
+                      <Crosshair size={13} /> {s.label}{s.element ? ` · ${elName(s.element)}` : ""}
                       <button type="button" aria-label={`Remove ${s.label} from the selection`} className="ml-0.5 text-sel/70 hover:text-sel" onClick={() => setPicks((cur) => cur.filter((x) => x !== s))}><X size={13} /></button>
                     </span>
                   ))}
@@ -613,7 +653,7 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
               {ready && view === "code" && <CodePanel projectId={p.id} version={p.version} onAsk={canEdit ? (t) => { setMode("ask"); setText(t); setMobileTab("chat"); setTimeout(() => input.current?.focus(), 0); } : undefined} />}
               {ready && building && progress && view === "preview" && <BuildStrip progress={progress} follow={follow} onFollow={() => setFollow((f) => !f)} />}
               {ready ? (
-                <iframe ref={frame} key={p.id} src={`/preview/${p.id}${q}`} title="Site preview" data-tour="preview" className={`min-h-0 w-full flex-1 bg-white ${view === "code" ? "hidden" : ""}`} />
+                <iframe ref={frame} key={p.id} onLoad={() => send({ type: "ss:hello" })} src={`/preview/${p.id}${q}`} title="Site preview" data-tour="preview" className={`min-h-0 w-full flex-1 bg-white ${view === "code" ? "hidden" : ""}`} />
               ) : (
                 building && progress ? <BuildBoard board={p.board ?? {}} steps={p.steps} progress={progress} name={p.title} notify={notify} onNotify={askNotify} /> : <Skeleton failed={p.status === "error"} />
               )}
@@ -684,5 +724,21 @@ function Skeleton({ failed }: { failed: boolean }) {
       ))}
       <div className="grid grid-cols-4 gap-3 pt-6">{[0, 1, 2, 3].map((i) => <div key={i} className="h-20 rounded bg-white/[0.04]" />)}</div>
     </div>
+  );
+}
+
+/** The elements a message was about, as chips; clicking one shows it in the preview. */
+function TargetChips({ targets, onFocus }: { targets: Array<{ blockId: string; label: string; element?: string }>; onFocus: (blockId: string) => void }) {
+  return (
+    <span className="flex flex-wrap gap-1.5">
+      {targets.map((t, k) => (
+        <button key={k} type="button" onClick={() => onFocus(t.blockId)} title="Show it in the preview"
+          className="inline-flex h-6 max-w-full items-center gap-1 rounded-md border border-sel/25 bg-sel/[0.1] px-1.5 text-[11.5px] font-medium text-sel hover:bg-sel/[0.16]">
+          <Crosshair size={12} className="shrink-0" />
+          <span className="truncate">{t.label}</span>
+          {t.element && <span className="truncate font-normal text-sel/75">· {elName(t.element)}</span>}
+        </button>
+      ))}
+    </span>
   );
 }

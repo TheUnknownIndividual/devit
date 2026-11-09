@@ -38,27 +38,28 @@ export const MOTION_CSS = [
   `${L} [data-ss-reveal=right]{translate:20px 0}`,
   // The archetype's own entrance for plain reveals.
   `${L}[data-ss-motion=type] [data-ss-reveal=""]{opacity:1;translate:none;clip-path:inset(0 100% 0 0);transition:clip-path .42s steps(14,end);transition-delay:${STAGGER(60)}}`,
-  `${L}[data-ss-motion=slam] [data-ss-reveal=""]{translate:none;scale:1.04;transition:opacity .2s ease-out,scale .32s cubic-bezier(.2,.9,.3,1);transition-delay:${STAGGER(45)}}`,
+  `${L}[data-ss-motion=slam] [data-ss-reveal=""]{translate:none;scale:1.03;transition:opacity .18s ease-out,scale .3s cubic-bezier(.2,.9,.3,1);transition-delay:${STAGGER(45)}}`,
   `${L}[data-ss-motion=wipe] [data-ss-reveal=""]{opacity:1;translate:none;clip-path:inset(0 0 100% 0);transition:clip-path .6s ${EASE};transition-delay:${STAGGER(60)}}`,
   `${L}[data-ss-motion=float] [data-ss-reveal=""]{translate:0 20px;transition:opacity .6s ease-out,translate .7s ${EASE};transition-delay:${STAGGER(70)}}`,
   // Shown: after every variant and preset so it always wins.
   `${L} [data-ss-reveal].is-in{opacity:1;translate:none;scale:none;clip-path:inset(0 0 0 0)}`,
 
-  // The hero headline word by word: each word slides up from behind its own mask, quickly.
-  `${L} .ss-w{display:inline-block;overflow:clip;vertical-align:top;padding-bottom:.12em;margin-bottom:-.12em}`,
-  `${L} .ss-w>span{display:inline-block;translate:0 105%;transition:translate .55s ${EASE};transition-delay:calc(min(var(--w,0),8)*28ms)}`,
-  `${L}[data-ss-motion=slam] .ss-w>span{translate:0 105%;transition:translate .38s cubic-bezier(.2,.9,.3,1);transition-delay:calc(min(var(--w,0),8)*40ms)}`,
-  `${L}[data-ss-motion=type] .ss-w>span{transition:translate .01s steps(1);transition-delay:calc(min(var(--w,0),10)*55ms)}`,
-  `${L} [data-ss-split].is-in .ss-w>span{translate:none}`,
+  // The hero headline word by word: each word rises a little and fades in, quickly. No mask: a clipping box would
+  // change the line box (the headline jumped 12px) and cut off the model's text-shadow and descenders.
+  `${L} .ss-w{display:inline-block}`,
+  `${L} .ss-w>span{display:inline-block;opacity:0;translate:0 .32em;transition:opacity .3s ease-out,translate .45s ${EASE};transition-delay:calc(min(var(--w,0),8)*30ms)}`,
+  `${L}[data-ss-motion=slam] .ss-w>span{translate:none;scale:1.12;transition:opacity .16s ease-out,scale .3s cubic-bezier(.2,.9,.3,1);transition-delay:calc(min(var(--w,0),8)*40ms)}`,
+  `${L}[data-ss-motion=type] .ss-w>span{translate:none;transition:opacity .01s steps(1);transition-delay:calc(min(var(--w,0),10)*55ms)}`,
+  `${L} [data-ss-split].is-in .ss-w>span{opacity:1;translate:none;scale:none}`,
   // Until the kit is ready the h1 (the hero headline) waits, so it never shows, vanishes and slides back in (never more than 1.2s, in case scripts don't run).
   `${L}:not([data-ss-ready]) .ss-code-body>section h1{opacity:0;animation:ssShow 0s 1.2s forwards}`,
   `@keyframes ssShow{to{opacity:1}}`,
 
   // Hover floor: everything clickable answers the pointer, briefly and by a pixel. Zero specificity, so the model's own
   // hover wins. Cards don't float up on hover (that reads as slime): their border takes the accent instead.
-  `:where(${L}) :where(a[href],button):not(:where([data-ss-widget] *)){transition:translate .15s ease-out,scale .15s ease-out,color .15s,background-color .15s,border-color .15s,opacity .15s}`,
-  `:where(${L}) :where(a[href],button):not(:where([data-ss-widget] *)):hover{translate:0 -1px}`,
-  `:where(${L}) :where(a[href],button):not(:where([data-ss-widget] *)):active{translate:0 0;scale:.98}`,
+  `:where(${L}) :where(a[href],button):not(:where([data-ss-widget] *,.ss-modal *)){transition:translate .15s ease-out,scale .15s ease-out,color .15s,background-color .15s,border-color .15s,opacity .15s}`,
+  `:where(${L}) :where(a[href],button):not(:where([data-ss-widget] *,.ss-modal *)):hover{translate:0 -1px}`,
+  `:where(${L}) :where(a[href],button):not(:where([data-ss-widget] *,.ss-modal *)):active{translate:0 0;scale:.98}`,
   `:where(${L}) :where(article,[data-ss-card]){transition:border-color .2s,box-shadow .2s}`,
   `:where(${L}) :where(article,[data-ss-card]):hover{border-color:color-mix(in oklab,var(--accent) 70%,transparent)}`,
   // Pointer tilt for hero art (the kit sets --rx/--ry, at most 6deg); don't combine with data-ss-reveal on the same element.
@@ -86,5 +87,5 @@ export const MOTION_CSS = [
   `.ss-zoom>button{position:absolute;top:12px;right:12px;width:40px;height:40px;display:grid;place-items:center;border:0;border-radius:8px;background:rgba(255,255,255,.14);color:#fff;font:400 22px/1 system-ui,sans-serif;cursor:pointer}`,
   `.ss-zoom>button:hover{background:rgba(255,255,255,.24)}`,
 
-  `@media (prefers-reduced-motion:reduce){.ss-code [data-ss-reveal]{opacity:1!important;translate:none!important;scale:none!important;clip-path:none!important}.ss-code .ss-w>span{translate:none!important}.ss-code .ss-code-body>section h1{opacity:1!important;animation:none!important}.ss-code .ss-pulse{display:none}.ss-zoom,.ss-zoom>img{transition:none}}`,
+  `@media (prefers-reduced-motion:reduce){.ss-code [data-ss-reveal]{opacity:1!important;translate:none!important;scale:none!important;clip-path:none!important}.ss-code .ss-w>span{opacity:1!important;translate:none!important;scale:none!important}.ss-code .ss-code-body>section h1{opacity:1!important;animation:none!important}.ss-code .ss-pulse{display:none}.ss-zoom,.ss-zoom>img{transition:none}}`,
 ].join("");

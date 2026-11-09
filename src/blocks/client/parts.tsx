@@ -328,6 +328,21 @@ const NATIVE = "native";
 const kind = (c: Chain): "evm" | "solana" | "near" => (c === "solana" ? "solana" : c === "near" ? "near" : "evm");
 const EVM_PAY_CHAINS = new Set(["eth", "base", "arb", "op", "pol", "avax", "bsc", "bera", "monad", "hood", "scroll", "xlayer", "plasma"]);
 
+/** An amount as typed: digits and one decimal point. */
+const cleanAmt = (v: string) => { const t = v.replace(/,/g, ".").replace(/[^0-9.]/g, ""); const i = t.indexOf("."); return i < 0 ? t : t.slice(0, i + 1) + t.slice(i + 1).replace(/\./g, ""); };
+/** A router's amount string ("20.997097964203616668461428") as people read it. */
+const amt = (s: string) => { const n = Number(s); return Number.isFinite(n) ? num(n) : s; };
+const dollars = (s: string | number) => { const n = Number(s); return Number.isFinite(n) ? `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ""; };
+/** Router and wallet errors in words a buyer can act on; busy says whether trying again by itself makes sense. */
+function sayErr(m: string | undefined): { text: string; busy: boolean } {
+  const e = m ?? "";
+  if (/rate.?limit|too many|429|busy|timeout|timed out|fetch failed/i.test(e)) return { text: "Quotes are busy for a moment. Trying again…", busy: true };
+  if (/failed to get quote/i.test(e)) return { text: "NEAR Intents couldn't quote this one. Check both addresses, or try a different amount.", busy: false };
+  if (/bad request|invalid amount|amount/i.test(e) && !/too small/i.test(e)) return { text: "That amount can't be quoted. Try a smaller one.", busy: false };
+  if (/no route|no pool|not found/i.test(e)) return { text: "No route for this amount right now.", busy: false };
+  return { text: e || "No quote right now.", busy: false };
+}
+
 export function BuyBox({ chain, token, ticker, presets }: { chain: Chain; token: TokenInfo | null; ticker: string; presets?: number[] }) {
   const { connected, evm, near } = useWallets();
   const nearToken = chain === "near" && !!token;
@@ -372,8 +387,14 @@ export function BuyBox({ chain, token, ticker, presets }: { chain: Chain; token:
     return NATIVE;
   }, [fam, nearToken, st, connected?.chainId, chain, evm, near]);
   // "dep:<key>" is an Ethereum coin paid by deposit instead (no Ethereum wallet here, e.g. it sits on an exchange).
+  // The auto pick settles once: when the wallet's balances first arrive, or as soon as the buyer touches the box. It
+  // never changes under someone who is typing (an amount meant as ETH silently becoming USDC).
+  const [held0, setHeld0] = useState<string | null>(null);
+  useEffect(() => { setHeld0(null); }, [evmAddr, fam]);
+  useEffect(() => { if (!held0 && fam === "evm" && st) setHeld0(auto); }, [held0, fam, st, auto]);
+  const autoNow = held0 ?? auto;
   const dep = picked?.startsWith("dep:") ? coins.find((c) => c.key === picked.slice(4)) : null;
-  const key = picked && coins.some((c) => c.key === picked) ? picked : auto;
+  const key = picked && coins.some((c) => c.key === picked) ? picked : autoNow;
   const coin: PayCoin = dep ? { ...dep, how: "intents" } : coins.find((c) => c.key === key) ?? coins[0];
   // Selling back is the Ethereum route's (the NEAR route sells on the token's own markets).
   const canSell = coin.how === "evm" && !!evmAddr;
@@ -403,7 +424,9 @@ export function BuyBox({ chain, token, ticker, presets }: { chain: Chain; token:
   const sub = (c: PayCoin) => (c.how === "intents" ? `on ${c.chain}, by deposit` : `on ${c.chain}`);
 
   return (
-    <div className="ss-card ss-buy" data-el="buybox">
+    <div className="ss-card ss-buy" data-el="buybox" onInputCapture={() => { if (!held0 && !picked) setHeld0(autoNow); }}>
+      {/* Which wallet is connected, with Switch account and Disconnect behind it. Also resumes a returning wallet. */}
+      <div className="ss-buy-acct"><WalletButton chain={chain} quiet /></div>
       {canSell && (
         <div className="ss-tabs" role="tablist" aria-label="Buy or sell">
           <button type="button" role="tab" aria-selected={sideNow === "buy"} onClick={() => setSide("buy")}>Buy</button>
@@ -412,13 +435,13 @@ export function BuyBox({ chain, token, ticker, presets }: { chain: Chain; token:
       )}
       <span className="ss-label" style={{ marginTop: 0 }}>{sideNow === "buy" ? "Pay with" : "Get back"}</span>
       <button type="button" className="ss-coin" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <CoinMark symbol={coin.symbol} />
+        <CoinMark symbol={coin.symbol} chain={coin.chain} />
         <span className="ss-coin-name"><b>{coin.symbol}</b><span>{sub(coin)}</span></span>
         {bal(coin) != null && <span className="ss-coin-bal">{num(bal(coin)!)}</span>}
         <ChevronDown size={16} aria-hidden style={{ transform: open ? "rotate(180deg)" : undefined }} />
       </button>
       {open && (
-        <div className="ss-coins" role="listbox" aria-label="Pay with">
+        <div className="ss-coins" role="listbox" aria-label="Pay with" data-all={all || undefined}>
           {groups.map(([title, cs, max]) => {
             const room = all ? cs : cs.slice(0, max);
             if (!room.length) return null;
@@ -427,7 +450,7 @@ export function BuyBox({ chain, token, ticker, presets }: { chain: Chain; token:
                 <div className="ss-wsep">{title}</div>
                 {room.map((c) => (
                   <button key={c.key} type="button" role="option" aria-selected={c.key === coin.key} className="ss-coin" onClick={() => pick(c)}>
-                    <CoinMark symbol={c.symbol} size={24} />
+                    <CoinMark symbol={c.symbol} chain={c.chain} size={24} />
                     <span className="ss-coin-name"><b>{c.symbol}</b><span>{sub(c)}</span></span>
                     {bal(c) != null && bal(c)! > 0 && <span className="ss-coin-bal">{num(bal(c)!)}</span>}
                   </button>
@@ -438,12 +461,15 @@ export function BuyBox({ chain, token, ticker, presets }: { chain: Chain; token:
           {!all && hiddenCount > 0 && <button type="button" className="ss-link-btn" style={{ marginTop: 6 }} onClick={() => setAll(true)}>Show all {list.length} coins</button>}
         </div>
       )}
-      {!open && (coin.how === "native" ? <SameChain chain={chain} token={token} ticker={ticker} presets={presets} />
-        : coin.how === "evm" ? (evmAddr || token?.demo
-          ? <WalletTrade token={token!} ticker={ticker} side={sideNow} coinKey={coin.key} st={st} reload={reload} />
-          : <EvmConnect chain={chain} ticker={ticker} depositOk={intentsList.some((p) => p.key === coin.key)} onDeposit={() => setPicked(`dep:${coin.key}`)} />)
-        : <AnyChain chain={chain} token={token} ticker={ticker} payKey={coin.key} onLanding={setLanding} onUseNative={() => setPicked(NATIVE)} />)}
-      {nearToken && !token!.demo && !open && <FinishSwap token={token!} ticker={ticker} account={landing ?? myNear} waiting={!!landing} />}
+      {/* Hidden, not unmounted, while the list is open: what was typed (amount, addresses) survives a look at the list. */}
+      <div hidden={open}>
+        {coin.how === "native" ? <SameChain chain={chain} token={token} ticker={ticker} presets={presets} onUseEvm={nearToken ? () => setPicked(bestCoin(st, connected?.chainId)) : undefined} />
+          : coin.how === "evm" ? (evmAddr || token?.demo
+            ? <WalletTrade token={token!} ticker={ticker} side={sideNow} coinKey={coin.key} st={st} reload={reload} />
+            : <EvmConnect chain={chain} ticker={ticker} depositOk={intentsList.some((p) => p.key === coin.key)} onDeposit={() => setPicked(`dep:${coin.key}`)} />)
+          : <AnyChain key={coin.key} chain={chain} token={token} ticker={ticker} payKey={coin.key} onLanding={setLanding} onUseNative={() => setPicked(NATIVE)} />}
+        {nearToken && !token!.demo && <FinishSwap token={token!} ticker={ticker} account={landing ?? myNear} waiting={!!landing} />}
+      </div>
     </div>
   );
 }
@@ -459,13 +485,14 @@ function EvmConnect({ chain, ticker, depositOk, onDeposit }: { chain: Chain; tic
   );
 }
 
-function SameChain({ chain, token, ticker, presets }: { chain: Chain; token: TokenInfo | null; ticker: string; presets?: number[] }) {
+function SameChain({ chain, token, ticker, presets, onUseEvm }: { chain: Chain; token: TokenInfo | null; ticker: string; presets?: number[]; onUseEvm?: () => void }) {
   const { connected } = useWallets();
   const [amount, setAmount] = useState(chain === "solana" ? "0.1" : chain === "near" ? "1" : "0.01");
   const [q, setQ] = useState<{ out?: number; venue?: string; handoff?: string; impactPct?: number | null; swap?: boolean; error?: string } | null>(null);
   const [step, setStep] = useState<"idle" | "building" | "signing" | "sent">("idle");
   const [tx, setTx] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [tries, setTries] = useState(0);
   const native = CHAINS[chain].native;
   // Still on a launchpad curve: its own page is the way in when our router can't fill the curve (four.meme).
   const tv = token?.venue;
@@ -483,13 +510,19 @@ function SameChain({ chain, token, ticker, presets }: { chain: Chain; token: Tok
       setQ(token.priceUsd ? { out: (a * nativeUsd) / token.priceUsd, venue: "sample quote", swap: false } : null);
       return;
     }
+    let stale = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
     const h = setTimeout(async () => {
       const acct = chain === "near" && connected?.wallet.kind === "near" ? `&account=${encodeURIComponent(connected.address)}` : "";
       const r = await fetch(`/api/quote?chain=${chain}&token=${encodeURIComponent(token.address)}&amount=${a}&decimals=${token.decimals ?? 6}${acct}`).catch(() => null);
-      setQ(r ? await r.json() : { error: "No quote right now" });
+      const j = (r ? await r.json().catch(() => ({ error: "busy" })) : { error: "busy" }) as NonNullable<typeof q>;
+      if (stale) return;
+      // A busy router: keep the last good quote on screen and ask again shortly, a few times.
+      if (j.error && sayErr(j.error).busy && tries < 5) { retry = setTimeout(() => setTries((t) => t + 1), 2500 + tries * 1500); setQ((old) => (old?.out != null ? old : j)); return; }
+      setQ(j);
     }, 350);
-    return () => clearTimeout(h);
-  }, [amount, chain, token, connected, viaPad]);
+    return () => { stale = true; clearTimeout(h); clearTimeout(retry); };
+  }, [amount, chain, token, connected, viaPad, tries]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!token) return <p className="ss-muted" style={{ margin: 0 }}>The buy box goes live once the site knows the token's contract address.</p>;
   const wantKind = chain === "solana" ? "solana" : chain === "near" ? "near" : "evm";
@@ -522,7 +555,7 @@ function SameChain({ chain, token, ticker, presets }: { chain: Chain; token: Tok
   return (
     <>
       <label className="ss-label" htmlFor="ss-amt">You pay ({native})</label>
-      <input id="ss-amt" className="ss-input" inputMode="decimal" value={amount} disabled={step === "building" || step === "signing"} onChange={(e) => { setAmount(e.target.value.replace(/[^0-9.]/g, "")); setStep("idle"); setTx(null); }} />
+      <input id="ss-amt" className="ss-input" inputMode="decimal" value={amount} disabled={step === "building" || step === "signing"} onChange={(e) => { setAmount(cleanAmt(e.target.value)); setStep("idle"); setTx(null); setTries(0); }} />
       {presets && presets.length > 0 && (
         // Presets only fill the amount: nothing is sent until the buyer presses Buy and confirms in their wallet.
         <div className="ss-presets" data-el="presets">
@@ -537,7 +570,7 @@ function SameChain({ chain, token, ticker, presets }: { chain: Chain; token: Tok
           <div className="ss-note">Route: {q.venue}{q.impactPct != null ? ` · price impact ${q.impactPct.toFixed(2)}%` : ""}</div>
         </div>
       )}
-      {q?.error && !curveUrl && <div className="ss-err">{q.error}</div>}
+      {q?.error && !curveUrl && <div className={sayErr(q.error).busy ? "ss-note" : "ss-err"} role="status" style={{ marginTop: 10 }}>{sayErr(q.error).text}</div>}
       {curveUrl && pad && !q?.swap && <div className="ss-note" style={{ marginTop: 10 }}>${ticker} is still on the {pad.name} bonding curve{tv?.progress != null ? ` (${Math.round(tv.progress * 100)}% sold)` : ""}: buy it there until it graduates.</div>}
       {step === "sent" && tx && (
         <div className="ss-quote" style={{ borderColor: "var(--accent)" }}>
@@ -545,22 +578,28 @@ function SameChain({ chain, token, ticker, presets }: { chain: Chain; token: Tok
         </div>
       )}
       {err && <div className="ss-err">{err}</div>}
-      {q?.swap && !connected && <div style={{ marginTop: 14 }}><WalletButton chain={chain} token={token} block prefer={chain === "near" ? "near" : undefined} /></div>}
+      {/* Connect never waits on a quote: a busy router mustn't hide the way in. */}
+      {!connected && !token.demo && !viaPad && <div style={{ marginTop: 14 }}><WalletButton chain={chain} token={token} block prefer={chain === "near" ? "near" : undefined} /></div>}
       {canSwap && (
         <button type="button" className="ss-btn" style={{ width: "100%", marginTop: 14 }} disabled={step === "building" || step === "signing" || !(Number(amount) > 0) || q?.out == null} onClick={() => void buy()}>
           {step === "building" || step === "signing" ? <Loader2 size={16} className="ss-spin" /> : <ArrowRightLeft size={16} />}
           {step === "building" ? "Preparing…" : step === "signing" ? "Confirm in your wallet" : `Buy $${ticker}`}
         </button>
       )}
-      {wrongWallet && <div className="ss-note" style={{ marginTop: 10 }}>Connect a {CHAINS[chain].name} wallet to buy here.</div>}
+      {wrongWallet && (chain === "near" && familyOf(connected!.wallet) === "evm" && onUseEvm ? (
+        <div style={{ marginTop: 14 }}>
+          <button type="button" className="ss-btn" style={{ width: "100%" }} onClick={onUseEvm}><ArrowRightLeft size={16} /> Pay with ETH or USDC instead</button>
+          <div className="ss-note" style={{ marginTop: 8, textAlign: "center" }}>Paying in NEAR needs a NEAR wallet. Your Ethereum wallet buys into its own NEAR address.</div>
+        </div>
+      ) : <div className="ss-note" style={{ marginTop: 10 }}>Connect a {CHAINS[chain].name} wallet to buy here.</div>)}
       {token.demo && (
         <button type="button" className="ss-btn" style={{ width: "100%", marginTop: 14 }} title="This is a sample site with a made-up token">
           <ArrowRightLeft size={16} /> Buy ${ticker}
         </button>
       )}
       {handoff && (
-        <a className={q?.swap ? "ss-note" : "ss-btn"} style={q?.swap ? { display: "block", marginTop: 10, textAlign: "center", textDecoration: "underline" } : { width: "100%", marginTop: 14 }} href={handoff} target="_blank" rel="noreferrer">
-          {!q?.swap && <ArrowRightLeft size={16} />} {q?.swap ? `Or buy on ${handoffName}` : `Buy $${ticker} on ${handoffName}`}
+        <a className={q?.swap || (!connected && !viaPad) ? "ss-note" : "ss-btn"} style={q?.swap || (!connected && !viaPad) ? { display: "block", marginTop: 10, textAlign: "center", textDecoration: "underline" } : { width: "100%", marginTop: 14 }} href={handoff} target="_blank" rel="noreferrer">
+          {!q?.swap && <ArrowRightLeft size={16} />} {q?.swap || !connected ? `Or buy on ${handoffName}` : `Buy $${ticker} on ${handoffName}`}
         </a>
       )}
     </>
@@ -624,20 +663,22 @@ function IntentsRoute({ chain, token, ticker, payKey, onLanding, onUseNative }: 
   // Dry quote as you type: shows what arrives without asking for addresses.
   useEffect(() => {
     const a = Number(amount);
-    if (!(a > 0)) { setQ(null); return; }
     setErr(null);
+    if (!(a > 0)) { setQ(null); return; }
     if (token?.demo) {
       const sym = pays.find((p) => p.key === pay)?.label ?? "ETH";
       const out = token.priceUsd ? (a * (DEMO_USD[sym] ?? 1) * 0.995) / token.priceUsd : null;
       setQ(out ? { depositAddress: null, amountIn: String(a), amountOut: num(out), amountOutUsd: String(a * (DEMO_USD[sym] ?? 1) * 0.995), timeEstimate: priv ? 40 : 20, deliver: { symbol: `$${ticker}`, direct: true }, dry: true, private: priv } : null);
       return;
     }
+    let stale = false;
     const h = setTimeout(async () => {
       const r = await fetch("/api/intents", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pay, amount: a, chain, token: token?.address ?? null, private: priv || undefined }) }).catch(() => null);
-      const j = r ? await r.json() : { error: "No quote right now" };
-      if ("error" in j) { setErr(j.error); setQ(null); } else setQ(j);
+      const j = r ? await r.json().catch(() => ({ error: "busy" })) : { error: "busy" };
+      if (stale) return;
+      if ("error" in j) { setErr(sayErr(j.error).text); setQ(null); } else setQ(j);
     }, 450);
-    return () => clearTimeout(h);
+    return () => { stale = true; clearTimeout(h); };
   }, [pay, amount, chain, token?.address, token?.demo, token?.priceUsd, priv, pays, ticker]);
 
   useEffect(() => {
@@ -658,7 +699,7 @@ function IntentsRoute({ chain, token, ticker, payKey, onLanding, onUseNative }: 
     const r = await fetch("/api/intents", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pay, amount: Number(amount), chain, token: token?.address ?? null, recipient: recipient.trim(), refundTo: refund.trim(), private: priv || undefined }) }).catch(() => null);
     const j = r ? await r.json() : { error: "No quote right now" };
     setBusy(false);
-    if ("error" in j) { setErr(j.error); return; }
+    if ("error" in j) { setErr(sayErr(j.error).text); return; }
     setQ(j);
     // Not deliverable as the token: wNEAR lands, and the box swaps it with one signature from that account.
     if (chain === "near" && token && !(j as IntentQuote).deliver.direct) {
@@ -677,7 +718,7 @@ function IntentsRoute({ chain, token, ticker, payKey, onLanding, onUseNative }: 
         {!payKey && <select id="ss-pay" className="ss-select" value={pay} onChange={(e) => setPay(e.target.value)} disabled={!!live}>
           {(pays.length ? pays : [{ key: "eth:ETH", label: "ETH", chain: "Ethereum" }]).map((p) => <option key={p.key} value={p.key}>{p.label} on {p.chain}</option>)}
         </select>}
-        <input id="ss-iamt" className="ss-input" style={{ flex: 1, minWidth: 0 }} inputMode="decimal" aria-label="Amount" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} disabled={!!live} />
+        <input id="ss-iamt" className="ss-input" style={{ flex: 1, minWidth: 0 }} inputMode="decimal" aria-label="Amount" value={amount} onChange={(e) => setAmount(cleanAmt(e.target.value))} disabled={!!live} />
       </div>
       {canPrivate && (
         <button type="button" role="switch" aria-checked={priv} className="ss-private" disabled={!!live} onClick={() => setPriv((v) => !v)}>
@@ -688,15 +729,15 @@ function IntentsRoute({ chain, token, ticker, payKey, onLanding, onUseNative }: 
       {q && (
         <div className="ss-quote">
           {q.deliver.direct
-            ? <>Arrives as <b>{q.amountOut}</b> {q.deliver.symbol}</>
-            : q.then ? <>You get about <b>{num(q.then.out)}</b> ${ticker}</> : <>Arrives as <b>{q.amountOut}</b> {q.deliver.symbol}, then swapped for ${ticker}</>}
-          {q.amountOutUsd ? <span className="ss-muted"> (≈ ${Number(q.amountOutUsd).toFixed(2)})</span> : null}
+            ? <>Arrives as <b>{amt(q.amountOut)}</b> {q.deliver.symbol}</>
+            : q.then ? <>You get about <b>{num(q.then.out)}</b> ${ticker}</> : <>Arrives as <b>{amt(q.amountOut)}</b> {q.deliver.symbol}, then swapped for ${ticker}</>}
+          {q.amountOutUsd ? <span className="ss-muted" style={{ whiteSpace: "nowrap" }}> (≈ {dollars(q.amountOutUsd)})</span> : null}
           <div className="ss-note">
             {q.deliver.direct
               ? `Delivered straight to your ${CHAINS[chain].name} wallet.`
               : chain === "near"
-                ? `Lands as ${q.amountOut} wNEAR, then one signature from the wallet it lands in swaps it for $${ticker}. An Ethereum wallet can sign it, no NEAR wallet needed.`
-                : `Lands as ${q.amountOut} ${q.deliver.symbol} in your ${CHAINS[chain].name} wallet, then you buy $${ticker} with it here in one tap.`}
+                ? `Lands as ${amt(q.amountOut)} wNEAR, then one signature swaps it for $${ticker}. An Ethereum wallet can sign it, no NEAR wallet needed.`
+                : `Lands as ${amt(q.amountOut)} ${q.deliver.symbol} in your ${CHAINS[chain].name} wallet, then you buy $${ticker} with it here in one tap.`}
             {q.timeEstimate ? ` About ${q.timeEstimate < 90 ? `${Math.max(5, Math.round(q.timeEstimate / 5) * 5)} s` : `${Math.round(q.timeEstimate / 60)} min`}.` : ""} {q.private ? "Private, routed by NEAR Intents." : "Routed by NEAR Intents."}
           </div>
         </div>
@@ -712,7 +753,8 @@ function IntentsRoute({ chain, token, ticker, payKey, onLanding, onUseNative }: 
             <>
               <label className="ss-label" htmlFor="ss-to">Lands in ({CHAINS[chain].name} address)</label>
               <input id="ss-to" className="ss-input ss-mono" style={{ fontSize: 13 }} value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder={chain === "near" ? "name.near, or any 0x address" : "Paste an address"} />
-              {!connected && <div style={{ marginTop: 10 }}><WalletButton chain={chain} block label="Or connect a wallet to fill it" /></div>}
+              {!connected && <div style={{ marginTop: 10 }}><WalletButton chain={chain} block ghost label="Or connect a wallet to fill it" /></div>}
+              {toFromWallet && editTo && <button type="button" className="ss-link-btn" style={{ marginTop: 8 }} onClick={() => { setEditTo(false); setRecipient(toFromWallet); }}>Use my wallet {short(toFromWallet)}</button>}
             </>
           )}
           {!(refundFromWallet && refund === refundFromWallet) && (
@@ -722,8 +764,9 @@ function IntentsRoute({ chain, token, ticker, payKey, onLanding, onUseNative }: 
             </>
           )}
           <button type="button" className="ss-btn" style={{ width: "100%", marginTop: 14 }} disabled={busy || !q || !recipient.trim() || !refund.trim() || !!token?.demo} title={token?.demo ? "This is a sample site with a made-up token" : undefined} onClick={() => void getDeposit()}>
-            {priv ? <Shield size={16} /> : <Globe2 size={16} />} {busy ? "Getting address…" : priv ? "Get private deposit address" : "Get deposit address"}
+            {busy ? <Loader2 size={16} className="ss-spin" /> : priv ? <Shield size={16} /> : <Globe2 size={16} />} {busy ? "Getting address…" : priv ? "Get private deposit address" : "Get deposit address"}
           </button>
+          {!busy && !token?.demo && (!recipient.trim() || !refund.trim()) && <div className="ss-note" style={{ marginTop: 8, textAlign: "center" }}>{!recipient.trim() ? `Add where $${ticker} lands to continue.` : `Add a refund address on ${payLabel?.chain ?? "the paying chain"} to continue.`}</div>}
         </>
       )}
       {live && (

@@ -211,7 +211,14 @@ export function autoConnect(chain: Chain, walletconnectProjectId?: string | null
   if (typeof window === "undefined") return;
   // The buy box's button can run first; the nav's carries the IDs.
   if (privyAppId && !privyId && chain !== "near") { privyId = privyAppId; resumePrivy(chain); }
-  if (resumeChain) return;
+  if (resumeChain) {
+    // The buy box's button can mount before the nav's: a WalletConnect ID that arrives second still resumes.
+    if (walletconnectProjectId && !wcProjectId) {
+      wcProjectId = walletconnectProjectId;
+      if (lastWallet() === "evm:walletconnect" && chain !== "near" && chain !== "solana") void resumeWalletConnect(chain).catch(() => undefined);
+    }
+    return;
+  }
   start();
   resumeChain = chain;
   wcProjectId = walletconnectProjectId || null;
