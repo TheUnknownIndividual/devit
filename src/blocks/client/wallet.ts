@@ -228,8 +228,9 @@ function resume() {
   const chain = resumeChain;
   if (!chain || connected || resuming || lastWallet() === OFF) return;
   const lastKey = lastWallet();
-  const kind = chain === "solana" ? "solana" : chain === "near" ? "near" : "evm";
-  const pool: Wallet[] = kind === "evm" ? evm : kind === "solana" ? solanaWallets() : [];
+  // A NEAR site takes Ethereum wallets too (they buy with ETH/USDC into the same 0x address on NEAR); NEAR wallets
+  // themselves come back through resumeNear.
+  const pool: Wallet[] = chain === "solana" ? solanaWallets() : evm;
   // The wallet used last wins; with no memory, a single wallet that already trusts the site.
   let w = pool.find((x) => keyOf(x) === lastKey && authorised[keyOf(x)]);
   if (!w && !lastKey) w = pool.find((x) => authorised[keyOf(x)]);
@@ -408,11 +409,50 @@ function connector(): Promise<Connector> {
 
 const nearOf = (m: { id: string; name: string; icon?: string; type?: string }): NearWallet => ({ kind: "near", id: m.id, name: m.name, icon: m.icon ?? null, injected: m.type === "injected" });
 
+// NEAR Connect runs every NEAR wallet in a sandbox, so its list can't say which ones the visitor really has. These are
+// the marks the extensions leave on the page: their EIP-6963 announcement (HOT and OKX are EVM wallets too) or a window
+// global. Best effort, and it only changes the order: a wallet we can't see still shows, lower down.
+const NEAR_MARKS: Array<{ id: string; rdns?: RegExp; global?: (w: Record<string, any>) => unknown }> = [ // eslint-disable-line @typescript-eslint/no-explicit-any
+  { id: "hot-wallet", rdns: /hot-?labs|hotwallet|\.hot\b/i, global: (w) => w.hotWallet ?? w.HOT },
+  { id: "okx-wallet", rdns: /okex|okx/i, global: (w) => w.okxwallet?.near },
+  { id: "meteor-wallet", global: (w) => w.meteorCom ?? w.meteorWallet },
+  { id: "nightly-wallet", rdns: /nightly/i, global: (w) => w.nightly?.near },
+  { id: "intear-wallet", rdns: /intear/i, global: (w) => w.intearWallet },
+];
+/** NEAR Connect entries we never list: its own Ethereum-wallet bridge (ours is better wired in) and the CLI. */
+export const NEAR_HIDDEN = /^(ethereum-wallets|near-cli)$/;
+
+/** NEAR wallet ids whose extension is in this browser. */
+export function nearInstalled(): Set<string> {
+  const out = new Set<string>();
+  if (typeof window === "undefined") return out;
+  const g = window as unknown as Record<string, unknown>;
+  for (const m of NEAR_MARKS) {
+    let hit = false;
+    try { hit = !!m.global?.(g as never); } catch { /* a getter that throws is not a wallet */ }
+    if (hit || (m.rdns && evm.some((w) => m.rdns!.test(w.rdns)))) out.add(m.id);
+  }
+  return out;
+}
+
+/**
+ * Ledger over USB: "paired" when this site was already allowed a Ledger (WebHID lists only devices the visitor
+ * granted, so an unplugged or never-paired one can't be seen), "usb" when the browser can talk to one at all
+ * (Chrome, Edge, Brave), null otherwise (Safari, Firefox, phones).
+ */
+export async function ledgerState(): Promise<"paired" | "usb" | null> {
+  const hid = typeof navigator !== "undefined" ? (navigator as unknown as { hid?: { getDevices(): Promise<Array<{ vendorId: number }>> } }).hid : undefined;
+  if (!hid) return null;
+  const ds = await hid.getDevices().catch(() => []);
+  return ds.some((d) => d.vendorId === 0x2c97) ? "paired" : "usb";
+}
+
 /** NEAR Connect's wallet list, for the picker. Injected ones (browser extensions) count as detected. */
 export async function loadNear(): Promise<NearWallet[]> {
   const c = await connector();
   await c.whenManifestLoaded.catch(() => undefined);
-  near = c.availableWallets.map((w) => nearOf(w.manifest));
+  const have = nearInstalled();
+  near = c.availableWallets.map((w) => nearOf(w.manifest)).filter((w) => !NEAR_HIDDEN.test(w.id)).map((w) => (have.has(w.id) ? { ...w, injected: true } : w));
   emit();
   return near;
 }
@@ -478,7 +518,7 @@ function wcProvider(projectId: string): Promise<Universal> {
   return wc;
 }
 
-// On a NEAR site the wallet pays from any chain the With ETH tab takes, then signs on NEAR's own chain (397).
+// On a NEAR site an Ethereum wallet pays from any chain the buy box lists, then signs on NEAR's own chain (397).
 const NEAR_SITE_CHAINS = [...Object.values(XCHAINS), NEAR_EVM_CHAIN];
 function wcChains(chain: Chain): string[] {
   const id = parseInt(EVM_CHAIN[chain]?.id ?? "0x1", 16);

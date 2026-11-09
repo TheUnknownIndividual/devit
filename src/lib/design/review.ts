@@ -17,7 +17,7 @@ const WIDGET_STUB = `[data-ss-widget]{display:grid;place-items:center;min-height
 [data-ss-widget=stats]{min-height:96px}[data-ss-widget=ca]{min-height:52px}[data-ss-widget=wallet]{min-height:40px;min-width:140px}
 [data-ss-widget=signup]{min-height:110px}[data-ss-widget=milestones]{min-height:150px}[data-ss-widget=socials]{min-height:44px}[data-ss-widget=toasts]{display:none}
 [data-ss-bind]::after{content:"$0.00042"}
-[data-ss-reveal]{opacity:1!important;transform:none!important}
+[data-ss-reveal]{opacity:1!important;transform:none!important;translate:none!important;scale:none!important;clip-path:none!important}
 *,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition:none!important;scroll-behavior:auto!important}`;
 
 /** A standalone page of the site: the renderer's own base CSS (so it measures like the live page), fonts, the site's CSS, sections and widget boxes. Also used by the demo script. */
@@ -318,6 +318,39 @@ function lint(vw: number): string[] {
       }
       if (hit) out.push(`At ${vw}px in #${sid}, text is drawn on top of other text: ${hit} overlap. Give the label its own space (padding or margin on its parent, or move it) so no copy sits on other copy.`);
     }
+  }
+
+  // 5e. Motion that reads as slimy (owner feedback 2026-11-09): springy curves that overshoot, slow transitions,
+  // "transition: all", and cards that float far up on hover. Read from the model's own rules (its x- classes); the
+  // motion kit's rules don't count. Checked once, at the desktop width.
+  if (vw >= 900) {
+    const bad: string[] = [];
+    const secs = (v: string) => (v || "0s").split(",").map((x) => (x.trim().endsWith("ms") ? parseFloat(x) / 1000 : parseFloat(x) || 0));
+    const lift = (v: string) => {
+      const m = /translate(?:Y|3d)?\(\s*(?:[-\d.]+px\s*,\s*)?(-?[\d.]+)px/.exec(v) ?? /^\S+\s+(-?[\d.]+)px/.exec(v);
+      return m ? Math.abs(parseFloat(m[1])) : 0;
+    };
+    const walk = (rules: CSSRuleList) => {
+      for (const r of [...rules]) {
+        if ("cssRules" in r && !(r instanceof CSSStyleRule)) { if (!(r instanceof CSSKeyframesRule)) walk((r as CSSGroupingRule).cssRules); continue; }
+        if (!(r instanceof CSSStyleRule) || !/\.x-/.test(r.selectorText)) continue;
+        const st = r.style, sel = r.selectorText.replace(/\.ss-code\s+/g, "").slice(0, 60);
+        const timing = `${st.transitionTimingFunction} ${st.animationTimingFunction} ${st.transition} ${st.animation}`;
+        for (const m of timing.matchAll(/cubic-bezier\(([^)]+)\)/g)) {
+          const v = m[1].split(",").map(Number);
+          if (v[1] > 1.02 || v[3] > 1.02 || v[1] < -0.02 || v[3] < -0.02) { bad.push(`${sel} uses a springy curve that overshoots (cubic-bezier(${m[1].replace(/\s+/g, "")}))`); break; }
+        }
+        if (/(^|,\s*)all\b/.test(st.transitionProperty)) bad.push(`${sel} transitions "all"`);
+        const slow = Math.max(0, ...secs(st.transitionDuration));
+        if (slow > 0.8) bad.push(`${sel} takes ${slow}s to transition`);
+        if (/:hover/.test(r.selectorText)) {
+          const up = Math.max(lift(st.transform), lift(st.translate));
+          if (up > 3) bad.push(`${sel} jumps ${up}px on hover`);
+        }
+      }
+    };
+    for (const sh of [...document.styleSheets]) { try { walk(sh.cssRules); } catch { /* cross-origin font sheet */ } }
+    if (bad.length) out.push(`The motion reads as slimy: ${[...new Set(bad)].slice(0, 4).join("; ")}. Make it crisp: ease-out curves that settle without overshoot, entrances 0.2–0.6s and at most 16px of travel, hovers 0.12–0.2s and at most 2px, cards change border or colour instead of floating up, and list the properties you transition.`);
   }
 
   // 6. Hero fits the first screen at desktop.

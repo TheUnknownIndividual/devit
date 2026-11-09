@@ -140,7 +140,7 @@ const SAMPLES: Sample[] = [
     faq: [
       { q: "Where does the price come from?", a: "Straight from the pool, refreshed every few seconds." },
       { q: "What routes my trade?", a: "Jupiter, for the best price across Solana." },
-      { q: "Can I pay from Ethereum?", a: "Yes, through NEAR Intents in the Other chains tab." },
+      { q: "Can I pay from Ethereum?", a: "Yes. Pick ETH or USDC under Pay with in the buy box." },
     ],
     prompt: "A terminal-style site for $TAPE on Solana, like Axiom: live chart, trades and a fast buy box up top",
   },

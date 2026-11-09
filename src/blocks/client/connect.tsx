@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { AlertTriangle, ArrowLeft, Check, Copy, ExternalLink, Loader2, LogOut, Mail, Repeat, Smartphone, Wallet as WalletIcon, X } from "lucide-react";
 import { renderSVG } from "uqr";
 import { CHAINS, type Chain, type TokenInfo } from "@/lib/spec";
-import { autoConnect, connect, connectPrivy, connectWalletConnect, disconnect, ensureChain, EVM_CHAIN, familyOf, keyOf, listSolana, loadNear, privyApp, privyMethods, short, switchAccount, useWallets, type Connected, type Wallet } from "./wallet";
+import { autoConnect, connect, connectPrivy, connectWalletConnect, disconnect, ensureChain, EVM_CHAIN, familyOf, keyOf, ledgerState, listSolana, loadNear, nearInstalled, NEAR_HIDDEN, privyApp, privyMethods, short, switchAccount, useWallets, type Connected, type Wallet } from "./wallet";
 import { num } from "../format";
 
 // The Connect button and wallet picker on a generated site. Wallets the browser already has come first, with the
@@ -73,16 +73,27 @@ function useBalance(c: Connected | null, chain: Chain): number | null {
 
 const fmtBal = (n: number) => (n === 0 ? "0" : n < 0.0001 ? "<0.0001" : n < 1 ? n.toFixed(4).replace(/0+$/, "") : num(n));
 
-export function WalletButton({ chain, walletconnect, privy, block }: { chain: Chain; token?: TokenInfo | null; walletconnect?: string | null; privy?: string | null; block?: boolean }) {
+/** What a wallet's family buys with on this site, shown under its name in the picker. */
+function paysWith(fam: "evm" | "solana" | "near", chain: Chain): string {
+  if (chain === "near") return fam === "near" ? "Pays with NEAR" : "Pays with ETH or USDC";
+  return `Pays with ${CHAINS[chain].native}`;
+}
+
+/** The families a site's picker lists: a NEAR site takes Ethereum wallets too (see xbuy.tsx). */
+const familiesOf = (chain: Chain): Array<"evm" | "solana" | "near"> => (chain === "near" ? ["near", "evm"] : [kind(chain)]);
+
+export function WalletButton({ chain, walletconnect, privy, block, prefer, label }: { chain: Chain; token?: TokenInfo | null; walletconnect?: string | null; privy?: string | null; block?: boolean; prefer?: "evm" | "near"; label?: string }) {
   const { evm, sol, near, authorised, connected } = useWallets();
   const [open, setOpen] = useState<null | "pick" | "account">(null);
-  const kind = chain === "solana" ? "solana" : chain === "near" ? "near" : "evm";
-  const mine = connected && familyOf(connected.wallet) === kind ? connected : null;
-  const bal = useBalance(mine, chain);
-  const wrongNet = kind === "evm" && !!mine && !!EVM_CHAIN[chain] && !!mine.chainId && mine.chainId !== EVM_CHAIN[chain]!.id;
+  const fam = connected ? familyOf(connected.wallet) : null;
+  const mine = connected && fam && familiesOf(chain).includes(fam) ? connected : null;
+  // The chip's balance is the site's own coin, so only for a wallet of the site's own family.
+  const bal = useBalance(mine && fam === kind(chain) ? mine : null, chain);
+  const wrongNet = kind(chain) === "evm" && !!mine && !!EVM_CHAIN[chain] && !!mine.chainId && mine.chainId !== EVM_CHAIN[chain]!.id;
 
   useEffect(() => { autoConnect(chain, walletconnect, privy); }, [chain, walletconnect, privy]);
 
+  const picker = open === "pick" && <Picker chain={chain} walletconnect={walletconnect} prefer={prefer} evm={evm} sol={sol} near={near} authorised={authorised} connected={connected} onClose={() => setOpen(null)} />;
   if (mine) {
     return (
       <>
@@ -92,7 +103,7 @@ export function WalletButton({ chain, walletconnect, privy, block }: { chain: Ch
           {wrongNet ? <span className="ss-chip-warn"><AlertTriangle size={14} /> Wrong network</span> : bal != null && <span className="ss-chip-bal">{fmtBal(bal)} {CHAINS[chain].native}</span>}
         </button>
         {open === "account" && <Account chain={chain} c={mine} bal={bal} wrongNet={wrongNet} onClose={() => setOpen(null)} onSwitch={() => setOpen("pick")} />}
-        {open === "pick" && <Picker chain={chain} walletconnect={walletconnect} evm={evm} sol={sol} near={near} authorised={authorised} connected={connected} onClose={() => setOpen(null)} />}
+        {picker}
       </>
     );
   }
@@ -100,9 +111,9 @@ export function WalletButton({ chain, walletconnect, privy, block }: { chain: Ch
   return (
     <>
       <button type="button" className={block ? "ss-btn" : "ss-btn ss-btn-sm"} style={block ? { width: "100%" } : undefined} onClick={() => setOpen("pick")}>
-        <WalletIcon size={16} /> {block ? "Connect a wallet to buy" : "Connect"}
+        <WalletIcon size={16} /> {label ?? (block ? "Connect wallet" : "Connect")}
       </button>
-      {open && <Picker chain={chain} walletconnect={walletconnect} evm={evm} sol={sol} near={near} authorised={authorised} connected={connected} onClose={() => setOpen(null)} />}
+      {picker}
     </>
   );
 }
@@ -125,43 +136,62 @@ function Modal({ label, onClose, children }: { label: string; onClose: () => voi
   );
 }
 
-type Row = { key: string; name: string; logo: string | null; tag: "Connected" | "Detected" | null; wallet: Wallet };
+type Row = { key: string; name: string; sub: string; logo: string | null; tag: "Connected" | "Detected" | "Paired" | null; wallet: Wallet | null; fam: "evm" | "solana" | "near" };
 
-function Picker({ chain, walletconnect, evm, sol, near, authorised, connected, onClose }: {
-  chain: Chain; walletconnect?: string | null; evm: Wallet[]; sol: Wallet[]; near: Wallet[] | null; authorised: Record<string, string>; connected: Connected | null; onClose: () => void;
+function Picker({ chain, walletconnect, prefer, evm, sol, near, authorised, connected, onClose }: {
+  chain: Chain; walletconnect?: string | null; prefer?: "evm" | "near"; evm: Wallet[]; sol: Wallet[]; near: Wallet[] | null; authorised: Record<string, string>; connected: Connected | null; onClose: () => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [wc, setWc] = useState<null | { uri: string | null }>(null);
+  const [wc, setWc] = useState<null | { uri: string | null; ledger?: boolean }>(null);
   const [phone, setPhone] = useState(false);
   const [here, setHere] = useState<URL | null>(null);
+  const [ledger, setLedger] = useState<"paired" | "usb" | null>(null);
+  const [more, setMore] = useState(false);
   // Privy: undefined while its sign-in methods load, null when Privy didn't say; hidden while Privy's own modal is up.
   const privy = chain !== "near" ? privyApp() : null;
   const [methods, setMethods] = useState<string[] | null | undefined>(undefined);
   const [hidden, setHidden] = useState(false);
+  const fams = familiesOf(chain);
 
   useEffect(() => {
     setPhone(isPhone());
     setHere(new URL(location.href));
+    void ledgerState().then(setLedger);
     if (chain === "solana") listSolana();
     if (chain === "near") void loadNear().catch(() => setErr("NEAR wallets didn't load. Try again."));
   }, [chain]);
   useEffect(() => { if (privy) void privyMethods(privy).then((m) => setMethods(m && m.map((x) => x.label))); }, [privy]);
 
-  const pool = chain === "solana" ? sol : chain === "near" ? near ?? [] : evm;
+  // Every wallet this site can use, one list: what's installed (or already trusts the site) first, the rest under
+  // "More wallets". On a NEAR site that is NEAR wallets and Ethereum wallets together; the buy box adapts to whichever.
+  const nearHave = useMemo(() => nearInstalled(), [evm, near]); // eslint-disable-line react-hooks/exhaustive-deps
   const rows = useMemo<Row[]>(() => {
-    const r = pool.map((w): Row => {
-      const k = keyOf(w);
-      const tag = connected && keyOf(connected.wallet) === k ? "Connected" : authorised[k] ? "Connected" : w.kind !== "near" || w.injected ? "Detected" : null;
-      return { key: k, name: w.name, logo: logoOf(w), tag, wallet: w };
-    });
-    const rank = (t: Row["tag"]) => (t === "Connected" ? 0 : t === "Detected" ? 1 : 2);
-    return r.sort((a, b) => rank(a.tag) - rank(b.tag));
-  }, [pool, authorised, connected]);
-  const known = chain === "solana" ? SOL_KNOWN : chain === "near" ? [] : EVM_KNOWN;
+    const pool: Wallet[] = [...(fams.includes("near") ? near ?? [] : []), ...(fams.includes("evm") ? evm : []), ...(fams.includes("solana") ? sol : [])];
+    const r = pool
+      .filter((w) => !(w.kind === "near" && (NEAR_HIDDEN.test(w.id) || w.id === "ledger" || w.id === "wallet-connect")))
+      .map((w): Row => {
+        const k = keyOf(w);
+        const fam = familyOf(w);
+        const seen = w.kind === "near" ? !!w.injected || nearHave.has(w.id) : true;
+        const tag = (connected && keyOf(connected.wallet) === k) || authorised[k] ? "Connected" : seen ? "Detected" : null;
+        return { key: k, name: w.name, sub: paysWith(fam, chain), logo: logoOf(w), tag, wallet: w, fam };
+      });
+    const rank = (x: Row) => (x.tag === "Connected" ? 0 : x.tag ? 1 : 3) + (prefer && x.fam !== prefer ? 0.5 : 0);
+    return r.sort((x, y) => rank(x) - rank(y));
+  }, [near, evm, sol, authorised, connected, nearHave, chain, prefer]); // eslint-disable-line react-hooks/exhaustive-deps
+  const nearLedger = fams.includes("near") ? (near ?? []).find((w) => w.id === "ledger") ?? null : null;
+  const nearWc = fams.includes("near") ? (near ?? []).find((w) => w.id === "wallet-connect") ?? null : null;
+  const top = rows.filter((r) => r.tag);
+  const rest = rows.filter((r) => !r.tag);
+  const known = chain === "solana" ? SOL_KNOWN : fams.includes("evm") ? EVM_KNOWN : [];
+  const pool = chain === "solana" ? sol : evm;
   const missing = known.filter((k) => !pool.some((w) => k.match.test(w.kind === "evm" ? w.rdns : w.name)));
+  // With nothing installed, the install links matter more than a long list of web wallets.
+  const nothing = top.length === 0;
 
   async function pick(row: Row) {
+    if (!row.wallet) return;
     setErr(null);
     setBusy(row.key);
     try {
@@ -190,16 +220,16 @@ function Picker({ chain, walletconnect, evm, sol, near, authorised, connected, o
     }
   }
 
-  async function pickWc() {
+  async function pickWc(viaLedger = false) {
     if (!walletconnect) return;
     setErr(null);
-    setWc({ uri: null });
+    setWc({ uri: null, ledger: viaLedger });
     let gotUri = false;
     // A wrong project ID or a blocked relay never produces a link; say so instead of spinning forever.
     const slow = setTimeout(() => { if (!gotUri) setErr("WalletConnect didn't answer. Try again in a moment."); }, 15_000);
     try {
       if (connected) await disconnect();
-      await connectWalletConnect(walletconnect, chain, (uri) => { gotUri = true; setErr(null); setWc({ uri }); });
+      await connectWalletConnect(walletconnect, chain, (uri) => { gotUri = true; setErr(null); setWc({ uri, ledger: viaLedger }); });
       onClose();
     } catch (e) {
       setErr(walletError(e, "The wallet") ?? "The wallet didn't connect.");
@@ -208,45 +238,76 @@ function Picker({ chain, walletconnect, evm, sol, near, authorised, connected, o
     }
   }
 
-  if (hidden) return null;
-  if (wc) return <Modal label="Connect with WalletConnect" onClose={onClose}><WcView uri={wc.uri} phone={phone} onBack={() => { setWc(null); setErr(null); }} err={err} /></Modal>;
+  const rowBtn = (r: Row) => (
+    <button key={r.key} type="button" className="ss-wallet" data-wallet={r.key} disabled={!!busy} onClick={() => void pick(r)}>
+      <Logo src={r.logo} />
+      <span className="ss-wname"><b>{r.name}</b><span>{busy === r.key ? `Confirm in ${r.name}` : r.sub}</span></span>
+      {busy === r.key ? <small><Loader2 size={13} className="ss-spin" /></small> : r.tag && <small className={r.tag === "Connected" ? "on" : undefined}>{r.tag}</small>}
+    </button>
+  );
+  const ledgerRow = ledger && (nearLedger || (walletconnect && fams.includes("evm") && !fams.includes("near"))) && (
+    <button key="ledger" type="button" className="ss-wallet" data-wallet="ledger" disabled={!!busy}
+      onClick={() => void (nearLedger ? pick({ key: keyOf(nearLedger), name: "Ledger", sub: "", logo: null, tag: null, wallet: nearLedger, fam: "near" }) : pickWc(true))}>
+      <Logo src={nearLedger?.icon ?? "/wallets/ledger.svg"} />
+      <span className="ss-wname"><b>Ledger</b><span>{busy === (nearLedger && keyOf(nearLedger)) ? "Unlock it and open the NEAR app" : nearLedger ? "Hardware wallet over USB, NEAR app" : "Through Ledger Live"}</span></span>
+      {ledger === "paired" && <small>Paired</small>}
+    </button>
+  );
+  const wcRow = walletconnect && fams.includes("evm") && chain !== "near" && (
+    <button key="wc" type="button" className="ss-wallet" data-wallet="walletconnect" disabled={!!busy} onClick={() => void pickWc()}>
+      <Logo src="/wallets/walletconnect.svg" />
+      <span className="ss-wname"><b>WalletConnect</b><span>{phone ? "Any wallet app on this phone" : "Scan with a wallet on your phone"}</span></span>
+    </button>
+  );
+  const nearWcRow = nearWc && (
+    <button key="nwc" type="button" className="ss-wallet" data-wallet={keyOf(nearWc)} disabled={!!busy} onClick={() => void pick({ key: keyOf(nearWc), name: nearWc.name, sub: "", logo: null, tag: null, wallet: nearWc, fam: "near" })}>
+      <Logo src={nearWc.icon ?? "/wallets/walletconnect.svg"} />
+      <span className="ss-wname"><b>Phone wallet</b><span>Scan with a NEAR wallet app</span></span>
+    </button>
+  );
+  const privyRow = privy && methods?.length !== 0 && (
+    <button key="privy" type="button" className="ss-wallet" data-wallet="privy" disabled={!!busy} onClick={() => void pickPrivy()}>
+      <span className="ss-wi"><Mail size={16} /></span>
+      <span className="ss-wname"><b>Email or social</b><span>{busy === "privy" ? "Opening…" : methods ? `${methods.slice(0, 3).join(", ")}. No wallet needed` : "No wallet needed"}</span></span>
+    </button>
+  );
+  const installRows = missing.length > 0 && here && missing.map((k) => {
+    const app = phone && k.app ? k.app(here) : null;
+    return (
+      <a key={k.name} className="ss-wallet" data-wallet={`install:${k.name}`} href={app ?? k.install} target={app ? undefined : "_blank"} rel="noreferrer">
+        <Logo src={k.logo} />
+        <span className="ss-wname"><b>{k.name}</b><span>{app ? "Open this page in the app" : "Not installed"}</span></span>
+        <small>{app ? <Smartphone size={13} /> : <ExternalLink size={13} />}</small>
+      </a>
+    );
+  });
 
+  if (hidden) return null;
+  if (wc) return <Modal label="Connect with WalletConnect" onClose={onClose}><WcView uri={wc.uri} phone={phone} ledger={!!wc.ledger} onBack={() => { setWc(null); setErr(null); }} err={err} /></Modal>;
+
+  const loadingNear = fams.includes("near") && !near;
   return (
     <Modal label="Connect a wallet" onClose={onClose}>
       <h3>Connect a wallet</h3>
-      <div className="ss-muted" style={{ fontSize: 14 }}>{CHAINS[chain].name}</div>
-      {chain === "near" && !near && <div className="ss-wallet" style={{ cursor: "default" }}><Loader2 size={18} className="ss-spin" />Loading NEAR wallets…</div>}
-      {privy && methods?.length !== 0 && (
-        <button type="button" className="ss-wallet" data-wallet="privy" disabled={!!busy} onClick={() => void pickPrivy()}>
-          <span className="ss-wi"><Mail size={16} /></span>Continue with {methods ? methods.slice(0, 3).join(" / ") : "email or social"}
-          {busy === "privy" ? <small><Loader2 size={13} className="ss-spin" style={{ display: "inline", verticalAlign: -2 }} /> Loading</small> : <small>No wallet needed</small>}
-        </button>
-      )}
-      {rows.map((r) => (
-        <button key={r.key} type="button" className="ss-wallet" data-wallet={r.key} disabled={!!busy} onClick={() => void pick(r)}>
-          <Logo src={r.logo} />{r.name}
-          {busy === r.key ? <small><Loader2 size={13} className="ss-spin" style={{ display: "inline", verticalAlign: -2 }} /> Check {r.name}</small> : r.tag && <small className={r.tag === "Connected" ? "on" : undefined}>{r.tag}</small>}
+      <p className="ss-msub">{chain === "near" ? "Any NEAR or Ethereum wallet. An Ethereum wallet buys straight into the same address on NEAR." : `${CHAINS[chain].name}. Wallets in this browser come first.`}</p>
+      {top.length > 0 && <div className="ss-wsep">In this browser</div>}
+      {top.map(rowBtn)}
+      {ledger === "paired" && ledgerRow}
+      {nothing && privyRow}
+      {nothing && installRows}
+      <div className="ss-wsep">{nothing ? "Other ways" : "More ways"}</div>
+      {!nothing && privyRow}
+      {wcRow}
+      {nearWcRow}
+      {ledger !== "paired" && ledgerRow}
+      {loadingNear && <div className="ss-wallet" style={{ cursor: "default" }}><Loader2 size={18} className="ss-spin" /><span className="ss-wname"><b>NEAR wallets</b><span>Loading…</span></span></div>}
+      {rest.length > 0 && (more || rest.length <= 2 ? rest.map(rowBtn) : (
+        <button type="button" className="ss-wallet ss-wallet-more" onClick={() => setMore(true)}>
+          <span className="ss-wi"><WalletIcon size={16} /></span>
+          <span className="ss-wname"><b>Web and app wallets</b><span>{rest.slice(0, 3).map((r) => r.name).join(", ")}{rest.length > 3 ? ` and ${rest.length - 3} more` : ""}</span></span>
+          <small>Show</small>
         </button>
       ))}
-      {walletconnect && kind(chain) === "evm" && (
-        <button type="button" className="ss-wallet" data-wallet="walletconnect" disabled={!!busy} onClick={() => void pickWc()}>
-          <Logo src="/wallets/walletconnect.svg" />WalletConnect<small>{phone ? "Wallet apps" : "Scan with phone"}</small>
-        </button>
-      )}
-      {missing.length > 0 && here && (
-        <>
-          {rows.length > 0 && <div className="ss-wsep">{phone ? "Open in a wallet app" : "Not installed"}</div>}
-          {missing.map((k) => {
-            const app = phone && k.app ? k.app(here) : null;
-            return (
-              <a key={k.name} className="ss-wallet" data-wallet={`install:${k.name}`} href={app ?? k.install} target={app ? undefined : "_blank"} rel="noreferrer">
-                <Logo src={k.logo} />{k.name}
-                <small>{app ? <><Smartphone size={12} style={{ display: "inline", verticalAlign: -2 }} /> Open app</> : <>Install <ExternalLink size={12} style={{ display: "inline", verticalAlign: -1 }} /></>}</small>
-              </a>
-            );
-          })}
-        </>
-      )}
       {err && <div className="ss-err">{err}</div>}
     </Modal>
   );
@@ -254,14 +315,15 @@ function Picker({ chain, walletconnect, evm, sol, near, authorised, connected, o
 
 const kind = (c: Chain) => (c === "solana" ? "solana" : c === "near" ? "near" : "evm");
 
-function WcView({ uri, phone, onBack, err }: { uri: string | null; phone: boolean; onBack: () => void; err: string | null }) {
+function WcView({ uri, phone, ledger, onBack, err }: { uri: string | null; phone: boolean; ledger?: boolean; onBack: () => void; err: string | null }) {
   const [copied, setCopied] = useState(false);
   const svg = useMemo(() => (uri ? renderSVG(uri, { ecc: "Q", border: 0 }) : null), [uri]);
   return (
     <>
       <button type="button" className="ss-modal-back" onClick={onBack}><ArrowLeft size={16} /> Back</button>
-      <h3>WalletConnect</h3>
-      <div className="ss-muted" style={{ fontSize: 14 }}>{phone ? "Pick your wallet app, then approve there." : "Scan with your phone's wallet app."}</div>
+      <h3>{ledger ? "Ledger Live" : "WalletConnect"}</h3>
+      <p className="ss-msub">{ledger ? "Open Ledger Live with your Ledger plugged in, then approve there." : phone ? "Pick your wallet app, then approve there." : "Scan with your phone's wallet app."}</p>
+      {ledger && <a className="ss-btn" style={{ width: "100%", marginTop: 12 }} href={uri ? `ledgerlive://wc?uri=${enc(uri)}` : undefined} aria-disabled={!uri}>Open Ledger Live</a>}
       {!phone && (
         <div className="ss-qr" data-el="wc-qr">
           {svg ? <><span className="ss-qr-code" dangerouslySetInnerHTML={{ __html: svg }} /><img src="/wallets/walletconnect.svg" alt="" /></> : !err && <Loader2 size={22} className="ss-spin" style={{ margin: "auto", color: "#555" }} />}

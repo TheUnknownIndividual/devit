@@ -1,13 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDownUp, ArrowRightLeft, Check, ChevronDown, Copy, Loader2 } from "lucide-react";
+import { ArrowDownUp, ArrowRightLeft, Check, Copy, Loader2 } from "lucide-react";
 import type { TokenInfo } from "@/lib/spec";
 import type { NearTx } from "@/lib/swap";
 import { NEAR_EVM, onboardTx, toEthTxs } from "@/lib/ethnear";
-import { XCOINS, addChainParams, chainOfCoin, xcoin, fromUnits, toUnits, unitsToInput, type XCoin } from "@/lib/xpay";
+import { XCOINS, addChainParams, chainOfCoin, xcoin, fromUnits, toUnits, unitsToInput } from "@/lib/xpay";
 import { evmSession, familyOf, short, switchEvm, useWallets } from "./wallet";
-import { WalletButton } from "./connect";
 import { num } from "../format";
 
 // "Your wallet" on a NEAR token's site: buy or sell with ETH/USDC already in a connected Ethereum wallet, without
@@ -15,7 +14,7 @@ import { num } from "../format";
 // their Ethereum wallet). Bridging runs through NEAR Intents; when the token isn't on Intents, the bridge lands wNEAR
 // and neartrade's router swaps it on NEAR, signed by the same Ethereum wallet on NEAR's chain 397 (lib/ethnear.ts).
 
-interface State {
+export interface XState {
   account: string;
   coins: Array<{ key: string; balance: string; price: number }>;
   token: { direct: boolean; decimals: number; price: number | null };
@@ -37,6 +36,17 @@ const MARKS: Record<string, [string, string, number]> = {
   MON: ["#836EF9", "MON", 10],
   OKB: ["#111111", "OKB", 10],
   XPL: ["#162F29", "XPL", 10],
+  BTC: ["#F7931A", "₿", 17],
+  SOL: ["#14151A", "SOL", 10],
+  BNB: ["#F0B90B", "BNB", 10],
+  DOGE: ["#C2A633", "Ð", 17],
+  ZEC: ["#ECB244", "ⓩ", 16],
+  SUI: ["#4DA2FF", "SUI", 10],
+  APT: ["#111111", "APT", 10],
+  TRX: ["#EB0029", "TRX", 10],
+  TON: ["#0098EA", "TON", 10],
+  XRP: ["#23292F", "XRP", 10],
+  LTC: ["#345D9D", "Ł", 17],
 };
 
 export function CoinMark({ symbol, size = 28 }: { symbol: string; size?: number }) {
@@ -48,7 +58,15 @@ export function CoinMark({ symbol, size = 28 }: { symbol: string; size?: number 
       </svg>
     );
   }
-  const [fill, glyph, fs] = MARKS[symbol] ?? ["#555", symbol.slice(0, 3), 10];
+  if (symbol === "NEAR" || symbol === "wNEAR") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden style={{ flex: "none" }}>
+        <circle cx="16" cy="16" r="16" fill="#00EC97" />
+        <path fill="#111" d="M20.6 8.6 17.4 13.4c-.2.3.2.7.5.4l3.2-2.7c.1-.1.3 0 .3.1v8.6c0 .2-.2.2-.3.1l-9.6-11.5c-.3-.4-.8-.6-1.3-.6h-.3c-.9 0-1.6.7-1.6 1.6v12.2c0 .9.7 1.6 1.6 1.6.6 0 1.1-.3 1.4-.8l3.2-4.8c.2-.3-.2-.7-.5-.4l-3.2 2.7c-.1.1-.3 0-.3-.1v-8.6c0-.2.2-.2.3-.1l9.6 11.5c.3.4.8.6 1.3.6h.3c.9 0 1.6-.7 1.6-1.6V9.4c0-.9-.7-1.6-1.6-1.6-.6 0-1.1.3-1.4.8Z" />
+      </svg>
+    );
+  }
+  const [fill, glyph, fs] = MARKS[symbol] ?? ["#555", symbol.slice(0, 4), symbol.length > 3 ? 8.5 : 10];
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden style={{ flex: "none" }}>
       <circle cx="16" cy="16" r="16" fill={fill} />
@@ -101,7 +119,7 @@ const METHOD: Record<string, string> = {
 };
 
 /** Signs NEAR transactions from the Ethereum wallet on chain 397, onboarding NEAR's relayer first if needed. */
-async function signOnNear(txs: NearTx[], st: State, onStep: (s: string) => void): Promise<string | null> {
+async function signOnNear(txs: NearTx[], st: XState, onStep: (s: string) => void): Promise<string | null> {
   const s = evmSession();
   if (!s) throw new Error("Connect an Ethereum wallet first.");
   if (!st.near.relayerKey) throw new Error("NEAR's relayer isn't answering right now. Try again in a minute.");
@@ -138,14 +156,30 @@ function CopyAddr({ address }: { address: string }) {
   );
 }
 
-export function WalletTrade({ token, ticker }: { token: TokenInfo; ticker: string }) {
+/** The visitor's 0x account on NEAR and what it and the Ethereum wallet hold, for the buy box. */
+export function useXState(evm: string | null, token: TokenInfo | null): { st: XState | null; reload: () => Promise<void> } {
+  const [st, setSt] = useState<XState | null>(null);
+  const reload = useCallback(async () => {
+    if (!evm || !token || token.demo) return;
+    const r = await fetch(`/api/xbuy?evm=${evm}&token=${encodeURIComponent(token.address)}`).catch(() => null);
+    if (r?.ok) setSt((await r.json()) as XState);
+  }, [evm, token?.address, token?.demo]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setSt(null); void reload(); }, [reload]);
+  return { st, reload };
+}
+
+/** The coin a connected Ethereum wallet would pay with: what it holds most of (by dollar value), else ETH on its chain. */
+export function bestCoin(st: XState | null, chainId: string | undefined): string {
+  const best = st ? [...st.coins].sort((a, b) => fromUnits(b.balance, xcoin(b.key)!.decimals) * b.price - fromUnits(a.balance, xcoin(a.key)!.decimals) * a.price)[0] : null;
+  if (best && BigInt(best.balance) > 0n) return best.key;
+  return XCOINS.find((c) => c.symbol === c.native && c.chainId === chainId)?.key ?? "eth:ETH";
+}
+
+/** Buy or sell with the chosen coin from the connected Ethereum wallet. The buy box owns the coin and the side. */
+export function WalletTrade({ token, ticker, side, coinKey, st, reload }: { token: TokenInfo; ticker: string; side: "buy" | "sell"; coinKey: string; st: XState | null; reload: () => Promise<void> }) {
   const { connected } = useWallets();
   const evm = connected && familyOf(connected.wallet) === "evm" ? connected.address : null;
-  const [side, setSide] = useState<"buy" | "sell">("buy");
-  const [st, setSt] = useState<State | null>(null);
-  const [coinKey, setCoinKey] = useState<string | null>(null);
-  const [picking, setPicking] = useState(false);
-  const [allCoins, setAllCoins] = useState(false);
+  const load = reload;
   const [amount, setAmount] = useState("");
   const [inUsd, setInUsd] = useState(false);
   const [q, setQ] = useState<Quote | null>(null);
@@ -155,23 +189,7 @@ export function WalletTrade({ token, ticker }: { token: TokenInfo; ticker: strin
   const [needNear, setNeedNear] = useState(false);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    if (!evm || token.demo) return;
-    const r = await fetch(`/api/xbuy?evm=${evm}&token=${encodeURIComponent(token.address)}`).catch(() => null);
-    if (r?.ok) setSt((await r.json()) as State);
-  }, [evm, token.address, token.demo]);
-  useEffect(() => { setSt(null); setCoinKey(null); void load(); }, [load]);
-
-  // Pick the coin the wallet holds most of (by dollar value); with nothing, ETH on the chain the wallet is on.
-  useEffect(() => {
-    if (coinKey || (!st && !token.demo)) return;
-    if (!st) { setCoinKey("eth:ETH"); return; }
-    const best = [...st.coins].sort((a, b) => fromUnits(b.balance, xcoin(b.key)!.decimals) * b.price - fromUnits(a.balance, xcoin(a.key)!.decimals) * a.price)[0];
-    const has = best && BigInt(best.balance) > 0n;
-    const here = XCOINS.find((c) => c.symbol === c.native && c.chainId === connected?.chainId);
-    setCoinKey(has ? best.key : here?.key ?? "eth:ETH");
-  }, [st, coinKey, connected?.chainId, token.demo]);
+  useEffect(() => { setAmount(""); setInUsd(false); setSteps(null); setErr(null); setDone(null); setNeedNear(false); }, [side]);
 
   const coin = coinKey ? xcoin(coinKey) : null;
   const coinRow = st?.coins.find((c) => c.key === coinKey);
@@ -302,56 +320,10 @@ export function WalletTrade({ token, ticker }: { token: TokenInfo; ticker: strin
     }
   }
 
-  if (!evm && !token.demo) {
-    return (
-      <>
-        <p className="ss-muted" style={{ margin: "0 0 12px", fontSize: 14 }}>Buy ${ticker} with ETH, USDC or USDT you already have on Ethereum, Base, Arbitrum, Optimism, Polygon, Avalanche and more. No NEAR wallet needed: it lands in the same address on NEAR.</p>
-        <WalletButton chain="ethereum" token={token} block />
-      </>
-    );
-  }
-
-  const coinBal = (c: XCoin) => fromUnits(st?.coins.find((x) => x.key === c.key)?.balance ?? "0", c.decimals);
-  const coinUsd = (c: XCoin) => coinBal(c) * (st?.coins.find((x) => x.key === c.key)?.price ?? 0);
-  // Coins the wallet holds first (by dollar value), then the rest in list order; six until "More coins".
-  const sorted = XCOINS.map((c, i) => ({ c, i, usd: coinUsd(c) })).sort((a, b) => b.usd - a.usd || a.i - b.i).map((x) => x.c);
-  const shown = allCoins ? sorted : sorted.slice(0, 6);
   const outSym = side === "buy" ? `$${ticker}` : coin?.symbol ?? "ETH";
 
   return (
     <>
-      <div className="ss-route" role="radiogroup" aria-label="Buy or sell">
-        {([["buy", "Buy", `Pay with ${coin?.symbol ?? "ETH"}`], ["sell", "Sell", `Get ${coin?.symbol ?? "ETH"} back`]] as const).map(([k, name, sub]) => (
-          <button key={k} type="button" role="radio" aria-checked={side === k} disabled={busy} onClick={() => { setSide(k); setAmount(""); setInUsd(false); reset(); }}>
-            <b>{name}</b><span>{sub}</span>
-          </button>
-        ))}
-      </div>
-
-      <span className="ss-label">{side === "buy" ? "Pay with" : "Get back"}</span>
-      {coin && (
-        <button type="button" className="ss-coin" aria-expanded={picking} disabled={busy} onClick={() => setPicking((v) => !v)}>
-          <CoinMark symbol={coin.symbol} />
-          <span className="ss-coin-name"><b>{coin.symbol}</b><span>on {coin.chain}</span></span>
-          {st && <span className="ss-coin-bal">{num(coinBal(coin))}</span>}
-          <ChevronDown size={16} aria-hidden />
-        </button>
-      )}
-      {picking && (
-        <div className="ss-coins" role="listbox" aria-label="Coins in your wallet">
-          {shown.map((c) => (
-            <button key={c.key} type="button" role="option" aria-selected={c.key === coinKey} className="ss-coin" onClick={() => { setCoinKey(c.key); setPicking(false); setAllCoins(false); }}>
-              <CoinMark symbol={c.symbol} size={24} />
-              <span className="ss-coin-name"><b>{c.symbol}</b><span>on {c.chain}</span></span>
-              {st && <span className="ss-coin-bal">{num(coinBal(c))}</span>}
-            </button>
-          ))}
-          {!allCoins && sorted.length > shown.length && (
-            <button type="button" className="ss-link-btn" onClick={() => setAllCoins(true)}>More coins ({sorted.length - shown.length})</button>
-          )}
-        </div>
-      )}
-
       <label className="ss-label" htmlFor="ss-xamt">{side === "buy" ? "Amount" : `Sell ($${ticker})`}</label>
       <div className="ss-amt">
         <input id="ss-xamt" className="ss-input" inputMode="decimal" placeholder="0" value={amount} disabled={busy} onChange={(e) => { setAmount(e.target.value.replace(/[^0-9.]/g, "")); reset(); }} />

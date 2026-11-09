@@ -8,7 +8,8 @@ import { useTrades } from "./fomo";
 // The moving half of the motion kit (blocks/motion.ts has the CSS). Live view only, nothing under reduced motion.
 //  - Reveals: the model's [data-ss-reveal] elements, plus, in sections where it wrote none, the section's content
 //    blocks below the first screen. Already-visible content is left alone so nothing blinks on load.
-//  - Headlines: [data-ss-split], plus each section's main heading, split into words that slide up in turn.
+//  - Headlines: [data-ss-split], plus the hero's h1, split into words that slide up in turn.
+//  - Images the layout crops or shrinks open full size on click (data-ss-zoom).
 //  - [data-ss-tilt] follows the pointer; [data-ss-parallax="0.15"] drifts with the scroll.
 //  - The market pulse: a real trade after the page opened sets data-ss-pulse="buy|sell" on the root for a moment
 //    (the CSS sweeps the bottom edge; the model's CSS may react too) and flashes the live numbers.
@@ -74,6 +75,70 @@ function splittable(h: HTMLElement): boolean {
   return true;
 }
 
+/** A content image worth opening: big enough to matter, not a link or control, and cropped or shown much smaller. */
+function zoomable(img: HTMLImageElement): boolean {
+  if (!img.naturalWidth || img.closest("a[href], button, [data-ss-widget], [aria-hidden=true]")) return false;
+  const r = img.getBoundingClientRect();
+  if (r.width < 120 || r.height < 80) return false;
+  const cs = getComputedStyle(img);
+  const box = r.width / r.height, own = img.naturalWidth / img.naturalHeight;
+  const cropped = (cs.objectFit === "cover" || cs.objectFit === "none") && Math.abs(Math.log(own / box)) > 0.08;
+  // An ancestor that clips the image (overflow hidden on a smaller frame) crops it too.
+  const frame = img.parentElement;
+  const clipped = !!frame && getComputedStyle(frame).overflow !== "visible" && (frame.clientWidth < r.width - 4 || frame.clientHeight < r.height - 4);
+  const shrunk = img.naturalWidth > r.width * 1.5 && img.naturalWidth >= 600;
+  return cropped || clipped || shrunk;
+}
+
+/** The biggest version of a picture its host serves: X's media URLs carry a size name. */
+function fullSrc(src: string): string {
+  try {
+    const u = new URL(src);
+    if (u.hostname === "pbs.twimg.com" && u.pathname.startsWith("/media/")) { u.searchParams.set("name", "large"); return u.href; }
+  } catch { /* relative or data URL */ }
+  return src;
+}
+
+/** Shows one image full screen over the page; click, Escape or the button closes it. Returns the closer. */
+function openZoom(img: HTMLImageElement): () => void {
+  const host = document.querySelector(".ss") ?? document.body;
+  const back = document.activeElement as HTMLElement | null;
+  const wrap = document.createElement("div");
+  wrap.className = "ss-zoom";
+  wrap.setAttribute("role", "dialog");
+  wrap.setAttribute("aria-modal", "true");
+  wrap.setAttribute("aria-label", img.alt || "Image");
+  const big = document.createElement("img");
+  big.src = img.currentSrc || img.src;
+  big.alt = img.alt;
+  const full = fullSrc(big.src);
+  if (full !== big.src) { const pre = new Image(); pre.onload = () => { big.src = full; }; pre.src = full; }
+  const x = document.createElement("button");
+  x.type = "button";
+  x.setAttribute("aria-label", "Close");
+  x.textContent = "×";
+  wrap.append(big, x);
+  host.append(wrap);
+  const prevOverflow = document.documentElement.style.overflow;
+  document.documentElement.style.overflow = "hidden";
+  requestAnimationFrame(() => wrap.classList.add("is-on"));
+  x.focus({ preventScroll: true });
+  let done = false;
+  const close = () => {
+    if (done) return;
+    done = true;
+    removeEventListener("keydown", key);
+    document.documentElement.style.overflow = prevOverflow;
+    wrap.classList.remove("is-on");
+    setTimeout(() => wrap.remove(), still() ? 0 : 170);
+    back?.focus?.({ preventScroll: true });
+  };
+  const key = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+  addEventListener("keydown", key);
+  wrap.addEventListener("click", close);
+  return close;
+}
+
 export function CodeMotion({ rootId, mode, spec }: { rootId: string; mode: Mode; spec: SiteSpec }) {
   const live = mode === "live";
 
@@ -86,18 +151,23 @@ export function CodeMotion({ rootId, mode, spec }: { rootId: string; mode: Mode;
     const fold = innerHeight * 0.92;
     const secs = [...body.querySelectorAll<HTMLElement>(":scope > section")];
 
+    let heroSplit = false;
     secs.forEach((sec, i) => {
       if (isHeader(sec, i)) return;
-      // Main heading of the section: split into words (an h1 waits hidden for the kit, see MOTION_CSS).
-      const h = sec.querySelector<HTMLElement>("h1, h2");
+      // Only the hero headline is split into words (an h1 waits hidden for the kit, see MOTION_CSS). Every section
+      // heading doing the same word slide read as slimy; the rest come in with their section's reveal.
+      const h = heroSplit ? null : sec.querySelector<HTMLElement>("h1");
+      if (h) heroSplit = true;
       if (h && !h.hasAttribute("data-ss-split") && splittable(h)) h.setAttribute("data-ss-split", "");
       // Auto reveals only where the model wrote none, and only below the first screen.
       if (sec.querySelector("[data-ss-reveal]")) return;
       const kids = [...contentOf(sec).children].filter((k) => !SKIP_TAGS.has(k.tagName)) as HTMLElement[];
       let n = 0;
       for (const k of kids) {
-        const pos = getComputedStyle(k).position;
-        if (pos === "absolute" || pos === "fixed" || k.offsetHeight === 0) continue;
+        const cs = getComputedStyle(k);
+        if (cs.position === "absolute" || cs.position === "fixed" || k.offsetHeight === 0) continue;
+        // The model already animates it in: a second entrance on top would stutter.
+        if (cs.animationName && cs.animationName !== "none") continue;
         if (k.getBoundingClientRect().top < fold) continue;
         k.setAttribute("data-ss-reveal", "");
         k.style.setProperty("--i", String(Math.min(n++, 6)));
@@ -121,8 +191,8 @@ export function CodeMotion({ rootId, mode, spec }: { rootId: string; mode: Mode;
       const move = (e: PointerEvent) => {
         const r = el.getBoundingClientRect();
         const x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5;
-        el.style.setProperty("--ry", `${(x * 10).toFixed(2)}deg`);
-        el.style.setProperty("--rx", `${(-y * 10).toFixed(2)}deg`);
+        el.style.setProperty("--ry", `${(x * 6).toFixed(2)}deg`);
+        el.style.setProperty("--rx", `${(-y * 6).toFixed(2)}deg`);
       };
       const leave = () => { el.style.setProperty("--rx", "0deg"); el.style.setProperty("--ry", "0deg"); };
       el.addEventListener("pointermove", move);
@@ -152,6 +222,31 @@ export function CodeMotion({ rootId, mode, spec }: { rootId: string; mode: Mode;
       removeEventListener("scroll", onScroll);
       cancelAnimationFrame(raf);
     };
+  }, [rootId, live, spec.blocks]);
+
+  // Pictures open full size. Layouts crop banners into squares and shrink artwork into tiles, and models never wire
+  // up a viewer, so the kit does: any content image shown cropped or well below its own size opens on click.
+  useEffect(() => {
+    const body = document.getElementById(rootId);
+    if (!body || !live) return;
+    const mark = (img: HTMLImageElement) => { if (zoomable(img)) img.setAttribute("data-ss-zoom", ""); else img.removeAttribute("data-ss-zoom"); };
+    const imgs = [...body.querySelectorAll<HTMLImageElement>("img")];
+    const offs = imgs.map((img) => {
+      if (img.complete) mark(img);
+      const on = () => mark(img);
+      img.addEventListener("load", on);
+      return () => img.removeEventListener("load", on);
+    });
+    let close: (() => void) | null = null;
+    const click = (e: MouseEvent) => {
+      const img = (e.target as HTMLElement | null)?.closest?.("img");
+      if (!(img instanceof HTMLImageElement) || !body.contains(img) || !zoomable(img)) return;
+      e.preventDefault();
+      close?.();
+      close = openZoom(img);
+    };
+    body.addEventListener("click", click);
+    return () => { offs.forEach((off) => off()); body.removeEventListener("click", click); close?.(); };
   }, [rootId, live, spec.blocks]);
 
   // The market pulse: trades that arrive after the page opened.

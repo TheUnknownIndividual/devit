@@ -120,7 +120,11 @@ export const SITE_CSS = `
 .ss-coin-name b{font-size:15px}
 .ss-coin-name span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ss-coin-bal{font-family:var(--font-mono);font-size:13px;color:var(--muted);flex:none}
-.ss-coins{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;margin-top:6px}
+.ss-coins{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;margin-top:6px;max-height:min(460px,60vh);overflow-y:auto;overscroll-behavior:contain}
+.ss-coins .ss-coin{height:44px}
+.ss-coin-group{display:grid;gap:4px}
+.ss-coin-group .ss-wsep{margin:10px 0 2px}
+.ss-coin-group:first-child .ss-wsep{margin-top:4px}
 .ss-amt{display:flex;gap:8px;align-items:center;min-width:0}
 .ss-amt .ss-input{flex:1;min-width:0}
 .ss-amt .ss-btn{flex:none;height:48px}
@@ -198,7 +202,7 @@ export const SITE_CSS = `
 .ss-modal-x:hover{color:var(--text);background:var(--bg)}
 .ss-modal-back{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0;margin-bottom:8px;border:0;background:transparent;color:var(--muted);font-family:var(--font-body);font-size:13px;font-weight:600;cursor:pointer}
 .ss-modal .ss-ca{display:flex;width:100%}
-.ss-wallet{display:flex;align-items:center;gap:12px;width:100%;height:56px;padding:0 14px;margin-top:8px;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;font-weight:600;font-size:15px;font-family:var(--font-body);text-align:left;transition:border-color .15s}
+.ss-wallet{display:flex;align-items:center;gap:12px;width:100%;min-height:60px;padding:0 14px;margin-top:8px;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;font-weight:600;font-size:15px;font-family:var(--font-body);text-align:left;transition:border-color .15s}
 .ss-wallet:hover:not(:disabled){border-color:var(--accent)}
 .ss-wallet:disabled{cursor:progress;opacity:.75}
 .ss-wallet[aria-disabled=true]{pointer-events:none;opacity:.5}
@@ -206,7 +210,12 @@ export const SITE_CSS = `
 .ss-wallet .ss-wi,.ss-acct .ss-wi{display:grid;place-items:center;background:var(--surface);color:var(--muted);border:1px solid var(--border)}
 .ss-wallet small{margin-left:auto;color:var(--muted);font-weight:500;font-size:12px;white-space:nowrap}
 .ss-wallet small.on{color:var(--accent);font-weight:700}
-.ss-wsep{margin:16px 0 0;font-size:12px;color:var(--muted)}
+.ss-wsep{margin:18px 0 0;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.ss-msub{margin:2px 0 4px;font-size:13px;line-height:1.45;color:var(--muted);padding-right:32px}
+.ss-wallet .ss-wname{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1;line-height:1.2}
+.ss-wallet .ss-wname b{font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ss-wallet .ss-wname span{font-weight:400;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ss-wallet small{flex:none}
 .ss-qr{position:relative;margin:16px auto 0;width:100%;max-width:260px;aspect-ratio:1;display:grid;background:#fff;border-radius:var(--r-sm);padding:14px}
 .ss-qr-code,.ss-qr-code svg{display:block;width:100%;height:100%}
 .ss-qr img{position:absolute;left:50%;top:50%;width:46px;height:46px;transform:translate(-50%,-50%);background:#fff;border-radius:12px;padding:5px}

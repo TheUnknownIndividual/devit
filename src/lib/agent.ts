@@ -219,7 +219,7 @@ function offlineCopy(intent: Intent, token: TokenInfo | null, chain: Chain, r: R
     faq: [
       { q: `Where does $${ticker} trade?`, a: tradesAt(token, chainName) },
       ...curveFaq(token, ticker),
-      { q: `Can I buy without ${native}?`, a: "Yes. Choose \"Other chains\" in the buy box and pay from Ethereum, Solana, Bitcoin, NEAR and more. It arrives in your wallet as the token." },
+      { q: `Can I buy without ${native}?`, a: "Yes. In the buy box, pick the coin you hold under \"Pay with\": ETH, USDC, SOL, BTC and more. It arrives in your wallet as the token." },
       { q: "Where do the numbers come from?", a: `Price, market cap and holders are read live${token?.sources.length ? ` from ${token.sources.join(", ")}` : " from the chain"} each time the page opens.` },
     ],
     roadmap: [

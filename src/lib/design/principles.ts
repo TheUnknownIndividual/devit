@@ -70,9 +70,10 @@ THE CODE CONTRACT (a sanitiser enforces it; anything else is deleted):
 - Links: only the real URLs listed under LINKS (https only). Anchor links to sections use #ID.
 - Motion: CSS plus our motion hooks (the site must feel alive, never static; the hooks run on the live site and respect reduced motion):
   - data-ss-reveal on content blocks that should enter on scroll (cards, panels, rows, figures), style="--i:N" to stagger siblings. Values: "" (the archetype's own entrance), "mask" (wipes up), "scale", "left", "right".
-  - data-ss-split on the hero headline and other display headlines: they come in word by word. Every section's h1/h2 is split automatically unless it is painted with background-clip:text.
+  - data-ss-split on the hero headline (the h1 is split automatically): it comes in word by word. At most one other display line on the page; section headings ride their section's reveal instead.
   - data-ss-tilt on the hero art frame (follows the pointer; don't also put data-ss-reveal on it). data-ss-parallax="0.15" on a decorative layer or image that should drift with the scroll (0.05–0.3).
   - Hover states on every link, button and card, in the archetype's language (a stamp press, a scanline, an underline that draws, an invert, a shadow shift). Animate translate/scale/colour, not width/height.
+  - Crisp, never slimy: entrances 0.2–0.6s and at most 16px of travel, hovers 0.12–0.2s and at most 2px; ease-out curves that settle without overshoot (no cubic-bezier with a value above 1, no bounce or elastic, no wobble or jelly keyframes, no rotation on entrances). Cards change border, colour or shadow on hover rather than floating up. Never transition "all". Stagger siblings by 40–80ms, never longer than ~0.3s in total.
   - One orchestrated hero moment on load with @keyframes (the signature arriving), plus one ambient loop somewhere (a ticker crawl, a slow rotate, a blinking cursor) inside @media (prefers-reduced-motion: no-preference).
   - The market pulse: when the token really trades while someone is on the page, the root gets data-ss-pulse="buy" (or "sell") for ~1.4s. React to it in the archetype's language, e.g. .ss-code[data-ss-pulse=buy] .x-logo{animation:x-kick .6s} or a ticker strip flashing the accent. Buys should be felt.
 ${WIDGET_DOC}
@@ -103,6 +104,7 @@ LAYOUT DISCIPLINE (a reviewer measures the rendered page for these; get them rig
 - Side-by-side panels (chart beside trades, card rows, stat tiles) line up: same top, and equal heights when they are siblings of a row (align-items:stretch with the inner box height:100%). Never wrap a widget in a box with a fixed height.
 - Text never sits on text. Labels drawn with ::before/::after (tabs, stamps, "EVIDENCE" tags) and absolutely placed captions get space reserved for them (padding or margin on their parent), never overlapping a kicker, heading or other copy.
 - Picture frames use aspect-ratio + object-fit:cover so they never jump or distort; galleries keep one aspect ratio per row (vary rotation, not size, for a collage feel).
+- Show artwork whole where it matters: a banner (wide image) gets a wide frame at its own aspect ratio, never cropped into a square tile; a gallery of the project's art crops only lightly. Cropped or shrunken images open full size on click on the live site (the kit does this; don't wrap images in links of your own unless the link goes somewhere real).
 
 RESPONSIVE (it must never be wider than the screen):
 - Mobile first. Test mentally at 360px: grid-template-columns uses minmax(0,1fr); flex/grid children get min-width:0; addresses, URLs and long body words use overflow-wrap:anywhere, but never display headlines (a name must never break mid-word: size it so its longest word fits, e.g. font-size:min(clamp(…), calc(100cqi / N)) on a container with container-type:inline-size, or plain vw maths for the word length); images max-width:100%; no fixed widths above 100%; big type uses clamp() with vw so it fits at 360px.
