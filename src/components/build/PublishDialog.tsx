@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowUpRight, BarChart3, Check, CheckCircle2, ChevronDown, Copy, Crown, Globe, Info, Loader2, Rocket, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
 import { BrandIcon, BRANDS } from "@/components/brand";
@@ -19,6 +19,16 @@ export function PublishDialog({ open, onClose, project, onSaved }: { open: boole
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // What just succeeded ("Published", "Updated", a visibility change). Shown in the Live panel, which is scrolled into view.
+  const [done, setDone] = useState<string | null>(null);
+  const [privateLink, setPrivateLink] = useState<string | null>(null);
+  const top = useRef<HTMLDivElement>(null);
+  const announce = useCallback((what: string) => {
+    setDone(what);
+    // The dialog body scrolls; bring the panel up after it has rendered.
+    requestAnimationFrame(() => requestAnimationFrame(() => top.current?.scrollIntoView({ block: "start", behavior: "smooth" })));
+  }, []);
+  useEffect(() => { if (!open) setDone(null); }, [open]);
 
   useEffect(() => { if (open) setSlug(suggest(project)); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [open]);
   useEffect(() => {
@@ -39,23 +49,32 @@ export function PublishDialog({ open, onClose, project, onSaved }: { open: boole
     const j = await r.json();
     setBusy(false);
     if (!r.ok) { setErr(j.error ?? "Couldn't publish."); return; }
+    const first = !project.published;
     onSaved(j as PublicProject);
+    announce(first ? "Your site is live." : "The live site is updated. Visitors see it within a minute.");
   }
 
   const liveUrl = project.liveUrl ? (project.liveUrl.startsWith("/") ? `${typeof window !== "undefined" ? window.location.origin : ""}${project.liveUrl}` : project.liveUrl) : null;
+  // A private-link site only opens with its key, so Open and Copy use the private link.
+  const openUrl = (project.visibility === "link" && privateLink) || liveUrl;
   const suffix = project.sitesDomain ? `.${project.sitesDomain}` : ".devit";
   return (
     <Dialog open={open} onClose={onClose} title="Publish" icon={<Globe size={15} />} width={620}>
       <div className="space-y-4 p-5">
-        {liveUrl && (
-          <div className="flex animate-rise items-center gap-3 rounded-[12px] border border-lime/30 bg-lime/[0.06] p-3.5">
-            <CheckCircle2 size={18} className="shrink-0 text-lime" />
-            <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-medium text-white">Live</div>
-              <a href={ownVisit(liveUrl)} target="_blank" rel="noreferrer" className="block truncate font-mono text-[12.5px] text-lime hover:underline">{liveUrl}</a>
+        <div ref={top} className="scroll-mt-5" />
+        {liveUrl && openUrl && (
+          <div className={`animate-rise rounded-[12px] border p-3.5 ${done ? "border-lime/50 bg-lime/[0.1]" : "border-lime/30 bg-lime/[0.06]"}`} role={done ? "status" : undefined} aria-live="polite">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 size={18} className="shrink-0 text-lime" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-medium text-white">{done ? "Saved" : "Live"}{project.visibility === "link" ? <span className="font-normal text-zinc-400"> · private link</span> : project.visibility === "password" ? <span className="font-normal text-zinc-400"> · password</span> : null}</div>
+                <a href={ownVisit(openUrl)} target="_blank" rel="noreferrer" className="block truncate font-mono text-[12.5px] text-lime hover:underline">{liveUrl}</a>
+              </div>
+              <button type="button" className="btn btn-outline" onClick={() => { void navigator.clipboard?.writeText(openUrl); setCopied(true); setTimeout(() => setCopied(false), 1400); }}>{copied ? <Check size={15} /> : <Copy size={15} />} {copied ? "Copied" : "Copy"}</button>
+              <a className="btn btn-primary" href={ownVisit(openUrl)} target="_blank" rel="noreferrer">Open <ArrowUpRight size={14} /></a>
             </div>
-            <button type="button" className="btn btn-outline" onClick={() => { void navigator.clipboard?.writeText(liveUrl); setCopied(true); setTimeout(() => setCopied(false), 1400); }}>{copied ? <Check size={15} /> : <Copy size={15} />} {copied ? "Copied" : "Copy"}</button>
-            <a className="btn btn-primary" href={ownVisit(liveUrl)} target="_blank" rel="noreferrer">Open <ArrowUpRight size={14} /></a>
+            {done && <p className="mt-2 pl-[30px] text-[12.5px] text-zinc-300">{done}</p>}
+            {project.visibility === "link" && <p className="mt-2 pl-[30px] text-[12px] text-zinc-500">Private: the plain address shows a &ldquo;this site is private&rdquo; page. Open and Copy use the private link.</p>}
           </div>
         )}
 
@@ -79,7 +98,7 @@ export function PublishDialog({ open, onClose, project, onSaved }: { open: boole
 
         {project.published && <VisitsSection projectId={project.id} open={open} />}
 
-        <VisibilitySection projectId={project.id} open={open} />
+        <VisibilitySection projectId={project.id} open={open} onLink={setPrivateLink} onSaved={(m, mode) => { announce(m); onSaved({ ...project, visibility: mode }); }} />
         <DomainSection projectId={project.id} open={open} suggest={suggest(project)} />
         <ShareSection project={project} onSaved={onSaved} />
 

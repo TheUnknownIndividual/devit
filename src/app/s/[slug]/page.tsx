@@ -62,7 +62,8 @@ export default async function Published({ params, searchParams }: Props) {
   const l = await load(slug);
   if (!l) notFound();
   const gate = await siteGate(l.p, slug);
-  if (gate === "link") notFound();
+  // A private-link site opened without its link (or after the link changed): say so, rather than a bare 404.
+  if (gate === "link") return <LinkGate />;
   if (gate === "password") return <PasswordGate slug={slug} to={l.via ? "/" : `/s/${slug}`} error={(await searchParams).e} />;
   const spec = await withLivePosts(l.p, (l.p.publishedSpec ?? l.p.spec)!);
   // "Open" in the builder's Publish dialog adds ?from=builder, so the owner checking their own site isn't counted.
@@ -101,6 +102,20 @@ async function countVisit(projectId: string) {
   const host = ((secret && h.get("x-sitesmith-edge") === secret && h.get("x-sitesmith-host")) || h.get("host"))?.toLowerCase().split(":")[0] ?? null;
   const ip = h.get("cf-connecting-ip") || h.get("x-forwarded-for")?.split(",")[0].trim() || h.get("x-real-ip") || null;
   recordVisit({ projectId, ip, ua: h.get("user-agent"), referer, host });
+}
+
+function LinkGate() {
+  return (
+    <main className="grid min-h-screen place-items-center bg-ink-950 p-4">
+      <div className="w-full max-w-[360px] rounded-2xl border border-white/10 bg-ink-900 p-5">
+        <div className="flex items-center gap-2.5">
+          <span className="grid h-8 w-8 place-items-center rounded-lg bg-white/[0.06] text-zinc-300"><Lock size={15} /></span>
+          <h1 className="text-[15px] font-semibold text-white">This site is private</h1>
+        </div>
+        <p className="mt-3 text-[12.5px] leading-relaxed text-zinc-400">It opens only from its private link. Ask whoever sent you here for the full link. If you own it, open it from Publish in devit, or switch it to public there.</p>
+      </div>
+    </main>
+  );
 }
 
 function PasswordGate({ slug, to, error }: { slug: string; to: string; error?: string }) {

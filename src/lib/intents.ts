@@ -2,7 +2,8 @@ import type { Chain } from "./spec";
 
 // NEAR Intents 1-Click: pay from any chain. The buyer sends to a quote-specific deposit address and
 // receives the destination asset on the site's chain. If the token itself is listed on 1-Click we deliver
-// it directly; otherwise we deliver the chain's native coin and the site's buy box swaps it.
+// it directly; otherwise we deliver the chain's native coin (wNEAR on NEAR) and the buy box finishes with one swap
+// signed by the wallet it landed in (blocks/client/xbuy.tsx FinishSwap).
 
 const ONECLICK = process.env.ONECLICK_URL || "https://1click.chaindefuser.com";
 
@@ -71,6 +72,10 @@ export interface IntentQuote {
   amountOutUsd: string | null;
   timeEstimate: number | null;
   deliver: { symbol: string; direct: boolean };
+  /** Not direct, on NEAR: the wNEAR that lands is swapped for the token by the buyer's wallet (one signature); this prices it. */
+  then?: { out: number } | null;
+  /** The least that lands, in raw units (prices the swap that follows). */
+  minOutRaw?: string;
   dry: boolean;
   private: boolean;
 }
@@ -108,7 +113,7 @@ export async function intentQuote(opts: { pay: string; amount: number; chain: Ch
   if (process.env.ONECLICK_JWT) headers.authorization = `Bearer ${process.env.ONECLICK_JWT}`;
   try {
     const r = await fetch(`${ONECLICK}/v0/quote`, { method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(12_000) });
-    const j = (await r.json()) as { message?: string; quote?: { depositAddress?: string; amountInFormatted?: string; amountOutFormatted?: string; amountOutUsd?: string; timeEstimate?: number } };
+    const j = (await r.json()) as { message?: string; quote?: { depositAddress?: string; amountInFormatted?: string; amountOut?: string; minAmountOut?: string; amountOutFormatted?: string; amountOutUsd?: string; timeEstimate?: number } };
     if (!r.ok || !j.quote) return { error: /too low|minimum swap amount/i.test(j.message ?? "") ? "That amount is too small for this route. Try a bit more." : j.message || "No quote right now" };
     return {
       depositAddress: j.quote.depositAddress ?? null,
@@ -117,6 +122,7 @@ export async function intentQuote(opts: { pay: string; amount: number; chain: Ch
       amountOutUsd: j.quote.amountOutUsd ?? null,
       timeEstimate: j.quote.timeEstimate ?? null,
       deliver: { symbol: dest.asset.symbol, direct: dest.direct },
+      minOutRaw: j.quote.minAmountOut ?? j.quote.amountOut,
       dry: opts.dry,
       private: !!opts.private,
     };

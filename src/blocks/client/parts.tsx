@@ -7,7 +7,7 @@ import { venue } from "@/lib/venues";
 import { explorerTx, familyOf, nearInstalled, sendEvm, sendNear, sendSolana, short, useWallets, waitEvm } from "./wallet";
 import { XCOINS, fromUnits, xcoin } from "@/lib/xpay";
 import { WalletButton } from "./connect";
-import { CoinMark, WalletTrade, bestCoin, useXState } from "./xbuy";
+import { CoinMark, FinishSwap, WalletTrade, bestCoin, markPending, useXState } from "./xbuy";
 import type { BuiltTx } from "@/lib/swap";
 import { ago, num, pct, usd } from "../format";
 
@@ -314,7 +314,7 @@ export function Chart({ token, mode, dark }: { token: TokenInfo | null; mode: Mo
 // ---------- buy ----------
 
 interface PayOption { key: string; label: string; chain: string }
-interface IntentQuote { depositAddress: string | null; amountIn: string; amountOut: string; amountOutUsd: string | null; timeEstimate: number | null; deliver: { symbol: string; direct: boolean }; dry: boolean; private?: boolean }
+interface IntentQuote { depositAddress: string | null; amountIn: string; amountOut: string; amountOutUsd: string | null; timeEstimate: number | null; deliver: { symbol: string; direct: boolean }; then?: { out: number } | null; dry: boolean; private?: boolean }
 
 // One buy box, one choice: the coin you pay with. The coin decides the route, so nobody has to pick a "method" first:
 //  - the site's own coin: signed in a wallet of that chain (SameChain);
@@ -339,7 +339,10 @@ export function BuyBox({ chain, token, ticker, presets }: { chain: Chain; token:
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [open, setOpen] = useState(false);
   const [all, setAll] = useState(false);
+  // A deposit buy whose wNEAR is on its way to this account; the box finishes it with one swap (FinishSwap).
+  const [landing, setLanding] = useState<string | null>(null);
   const native = CHAINS[chain].native;
+  const myNear = fam === "evm" ? evmAddr!.toLowerCase() : fam === "near" ? connected!.address : null;
 
   useEffect(() => {
     if (!token || token.demo) { setIntentsList([{ key: "sol:SOL", label: "SOL", chain: "Solana" }, { key: "btc:BTC", label: "BTC", chain: "Bitcoin" }, { key: "eth:ETH", label: "ETH", chain: "Ethereum" }]); return; }
@@ -439,7 +442,8 @@ export function BuyBox({ chain, token, ticker, presets }: { chain: Chain; token:
         : coin.how === "evm" ? (evmAddr || token?.demo
           ? <WalletTrade token={token!} ticker={ticker} side={sideNow} coinKey={coin.key} st={st} reload={reload} />
           : <EvmConnect chain={chain} ticker={ticker} depositOk={intentsList.some((p) => p.key === coin.key)} onDeposit={() => setPicked(`dep:${coin.key}`)} />)
-        : <AnyChain chain={chain} token={token} ticker={ticker} payKey={coin.key} />)}
+        : <AnyChain chain={chain} token={token} ticker={ticker} payKey={coin.key} onLanding={setLanding} onUseNative={() => setPicked(NATIVE)} />)}
+      {nearToken && !token!.demo && !open && <FinishSwap token={token!} ticker={ticker} account={landing ?? myNear} waiting={!!landing} />}
     </div>
   );
 }
@@ -569,7 +573,7 @@ function SameChain({ chain, token, ticker, presets }: { chain: Chain; token: Tok
 const RELAY_CHAINS: Chain[] = ["ethereum", "base", "bsc", "robinhood", "solana"];
 const DEMO_USD: Record<string, number> = { ETH: 3400, SOL: 160, USDC: 1, USDT: 1, BNB: 600, BTC: 98000, NEAR: 3.2 };
 
-function AnyChain({ chain, token, ticker, payKey }: { chain: Chain; token: TokenInfo | null; ticker: string; payKey?: string }) {
+function AnyChain({ chain, token, ticker, payKey, onLanding, onUseNative }: { chain: Chain; token: TokenInfo | null; ticker: string; payKey?: string; onLanding?: (account: string) => void; onUseNative?: () => void }) {
   const relayOk = RELAY_CHAINS.includes(chain) && !!token;
   const [route, setRoute] = useState<"intents" | "relay">("intents");
   return (
@@ -583,12 +587,12 @@ function AnyChain({ chain, token, ticker, payKey }: { chain: Chain; token: Token
           ))}
         </div>
       )}
-      {route === "relay" && relayOk ? <RelayRoute chain={chain} token={token!} ticker={ticker} /> : <IntentsRoute key={payKey} chain={chain} token={token} ticker={ticker} payKey={payKey} />}
+      {route === "relay" && relayOk ? <RelayRoute chain={chain} token={token!} ticker={ticker} /> : <IntentsRoute key={payKey} chain={chain} token={token} ticker={ticker} payKey={payKey} onLanding={onLanding} onUseNative={onUseNative} />}
     </>
   );
 }
 
-function IntentsRoute({ chain, token, ticker, payKey }: { chain: Chain; token: TokenInfo | null; ticker: string; payKey?: string }) {
+function IntentsRoute({ chain, token, ticker, payKey, onLanding, onUseNative }: { chain: Chain; token: TokenInfo | null; ticker: string; payKey?: string; onLanding?: (account: string) => void; onUseNative?: () => void }) {
   const { connected } = useWallets();
   const [pays, setPays] = useState<PayOption[]>([]);
   const [canPrivate, setCanPrivate] = useState(false);
@@ -602,6 +606,7 @@ function IntentsRoute({ chain, token, ticker, payKey }: { chain: Chain; token: T
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [landed, setLanded] = useState(false);
 
   useEffect(() => {
     if (token?.demo) { setPays([{ key: "eth:ETH", label: "ETH", chain: "Ethereum" }, { key: "sol:SOL", label: "SOL", chain: "Solana" }, { key: "btc:BTC", label: "BTC", chain: "Bitcoin" }, { key: "base:USDC", label: "USDC", chain: "Base" }]); setCanPrivate(true); return; }
@@ -639,7 +644,10 @@ function IntentsRoute({ chain, token, ticker, payKey }: { chain: Chain; token: T
     if (!q?.depositAddress || q.dry) return;
     const h = setInterval(async () => {
       const r = await fetch(`/api/intents/status?depositAddress=${encodeURIComponent(q.depositAddress!)}`).catch(() => null);
-      if (r?.ok) setStatus(((await r.json()) as { status?: string }).status ?? null);
+      if (!r?.ok) return;
+      const j = (await r.json()) as { status?: string; code?: string };
+      setStatus(j.status ?? null);
+      if (j.code === "SUCCESS") setLanded(true);
     }, 6000);
     return () => clearInterval(h);
   }, [q?.depositAddress, q?.dry]);
@@ -650,7 +658,14 @@ function IntentsRoute({ chain, token, ticker, payKey }: { chain: Chain; token: T
     const r = await fetch("/api/intents", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pay, amount: Number(amount), chain, token: token?.address ?? null, recipient: recipient.trim(), refundTo: refund.trim(), private: priv || undefined }) }).catch(() => null);
     const j = r ? await r.json() : { error: "No quote right now" };
     setBusy(false);
-    if ("error" in j) setErr(j.error); else setQ(j);
+    if ("error" in j) { setErr(j.error); return; }
+    setQ(j);
+    // Not deliverable as the token: wNEAR lands, and the box swaps it with one signature from that account.
+    if (chain === "near" && token && !(j as IntentQuote).deliver.direct) {
+      const to = recipient.trim().toLowerCase();
+      markPending(token.address, to);
+      onLanding?.(to);
+    }
   }
 
   const payLabel = pays.find((p) => p.key === pay);
@@ -672,9 +687,16 @@ function IntentsRoute({ chain, token, ticker, payKey }: { chain: Chain; token: T
       )}
       {q && (
         <div className="ss-quote">
-          Arrives as <b>{q.amountOut}</b> {q.deliver.symbol}{q.amountOutUsd ? <span className="ss-muted"> (≈ ${Number(q.amountOutUsd).toFixed(2)})</span> : null}
+          {q.deliver.direct
+            ? <>Arrives as <b>{q.amountOut}</b> {q.deliver.symbol}</>
+            : q.then ? <>You get about <b>{num(q.then.out)}</b> ${ticker}</> : <>Arrives as <b>{q.amountOut}</b> {q.deliver.symbol}, then swapped for ${ticker}</>}
+          {q.amountOutUsd ? <span className="ss-muted"> (≈ ${Number(q.amountOutUsd).toFixed(2)})</span> : null}
           <div className="ss-note">
-            {q.deliver.direct ? `Delivered straight to your ${CHAINS[chain].name} wallet.` : `Delivered as ${q.deliver.symbol} on ${CHAINS[chain].name}; swap it for $${ticker} in the other tab.`}
+            {q.deliver.direct
+              ? `Delivered straight to your ${CHAINS[chain].name} wallet.`
+              : chain === "near"
+                ? `Lands as ${q.amountOut} wNEAR, then one signature from the wallet it lands in swaps it for $${ticker}. An Ethereum wallet can sign it, no NEAR wallet needed.`
+                : `Lands as ${q.amountOut} ${q.deliver.symbol} in your ${CHAINS[chain].name} wallet, then you buy $${ticker} with it here in one tap.`}
             {q.timeEstimate ? ` About ${q.timeEstimate < 90 ? `${Math.max(5, Math.round(q.timeEstimate / 5) * 5)} s` : `${Math.round(q.timeEstimate / 60)} min`}.` : ""} {q.private ? "Private, routed by NEAR Intents." : "Routed by NEAR Intents."}
           </div>
         </div>
@@ -710,6 +732,11 @@ function IntentsRoute({ chain, token, ticker, payKey }: { chain: Chain; token: T
           <div style={{ marginTop: 10 }}><CopyCA address={q.depositAddress!} /></div>
           <div className="ss-note">Status: {status ?? "waiting for your deposit"}. This address is for this quote only.</div>
         </div>
+      )}
+      {live && landed && !q.deliver.direct && chain !== "near" && onUseNative && (
+        <button type="button" className="ss-btn" style={{ width: "100%", marginTop: 12 }} onClick={onUseNative}>
+          <ArrowRightLeft size={16} /> Buy ${ticker} with your {q.deliver.symbol}
+        </button>
       )}
       {err && <div className="ss-err">{err}</div>}
     </>

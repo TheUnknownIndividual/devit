@@ -106,6 +106,12 @@ async function listed(token: string) {
   return { list, hit: list.find((x) => x.blockchain === "near" && x.assetId === `nep141:${token}`) ?? null };
 }
 
+/** What a NEAR account holds for finishing a buy: its wNEAR, and whether the token needs the swap at all. */
+export async function legState(account: string, token: string): Promise<{ account: string; wnear: string; direct: boolean; decimals: number }> {
+  const [{ hit }, wn, decimals] = await Promise.all([listed(token), ftBalance(WNEAR, account), ftDecimals(token)]);
+  return { account, wnear: wn.toString(), direct: !!hit, decimals: hit?.decimals ?? decimals };
+}
+
 export async function xState(evm: string, token: string): Promise<XState> {
   const account = evm.toLowerCase();
   const pad = account.slice(2).padStart(64, "0");
@@ -167,7 +173,7 @@ export async function submitDeposit(depositAddress: string, txHash: string): Pro
 
 interface NtQuote { venue: string; expectedOut: string; minOut: string; tokenDecimals: number | null; transactions: NearTx[] }
 
-async function ntQuote(token: string, side: "buy" | "sell", amount: string, account: string): Promise<NtQuote | { error: string }> {
+export async function ntQuote(token: string, side: "buy" | "sell", amount: string, account: string): Promise<NtQuote | { error: string }> {
   const key = process.env.NEARTRADE_API_KEY?.trim();
   try {
     const r = await fetch(`${NT}/v1/quote`, { method: "POST", headers: { "content-type": "application/json", ...(key ? { "x-api-key": key } : {}) }, body: JSON.stringify({ account, token, side, amount, slippageBps: 300 }), cache: "no-store", signal: AbortSignal.timeout(TIMEOUT) });
@@ -282,13 +288,14 @@ export async function xQuote(o: { side: "buy" | "sell"; pay: string; amount: str
   return { route: "swap", depositAddress: q.depositAddress ?? null, out: Number(q.amountOutFormatted), outUsd: q.amountOutUsd ? Number(q.amountOutUsd) : null, timeEstimate: q.timeEstimate ?? null, transactions };
 }
 
-/** Buy, second leg: swap the wNEAR the bridge delivered for the token, signed by the Ethereum wallet. */
+/** Buy, second leg: swap the wNEAR the bridge delivered for the token, signed by the wallet it landed in (an Ethereum
+ *  wallet's 0x account, or a NEAR wallet's own account). Starter NEAR is only ever fronted to 0x accounts. */
 export async function xSwapLeg(evm: string, token: string): Promise<{ transactions: NearTx[]; out: number } | { error: string }> {
   const account = evm.toLowerCase();
   const w = await ftBalance(WNEAR, account);
   if (w <= 0n) return { error: "The bridged wNEAR hasn't arrived yet." };
   // Starter NEAR fronted for this buy is paid back first, out of the bridged wNEAR.
-  const owed = await takeOwed(account);
+  const owed = isEthAccount(account) ? await takeOwed(account) : 0n;
   if (w <= owed) { await restoreOwed(account, owed); return { error: "Too little wNEAR arrived to swap." }; }
   const nt = await ntQuote(token, "buy", (w - owed).toString(), account);
   if ("error" in nt) { await restoreOwed(account, owed); return nt; }

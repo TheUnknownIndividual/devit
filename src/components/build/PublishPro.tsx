@@ -69,9 +69,12 @@ const MODES: { id: Access["mode"]; label: string; icon: typeof Globe }[] = [
   { id: "password", label: "Password", icon: KeyRound },
 ];
 
-export function VisibilitySection({ projectId, open }: { projectId: string; open: boolean }) {
+export function VisibilitySection({ projectId, open, onLink, onSaved }: { projectId: string; open: boolean; onLink?: (link: string | null) => void; onSaved?: (what: string, mode: Access["mode"]) => void }) {
   const url = `/api/projects/${projectId}/access`;
   const [s, apply] = useEndpoint<Access>(url, open);
+  // The dialog's Open button needs the private link (a bare address is closed to everyone but the key holder).
+  const link = s.kind === "ok" ? s.v.link : null;
+  useEffect(() => { onLink?.(link ? absolute(link) : null); }, [link, onLink]);
   const [pick, setPick] = useState<Access["mode"] | null>(null);
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
@@ -83,7 +86,11 @@ export function VisibilitySection({ projectId, open }: { projectId: string; open
     const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
     setErr(await apply(r));
     setBusy(false);
-    if (r?.ok) { setPick(null); setPw(""); }
+    if (r?.ok) {
+      setPick(null); setPw("");
+      const m = body.mode as Access["mode"];
+      onSaved?.(body.rotate ? "New private link made. The old one no longer opens the site." : m === "public" ? "Now public: anyone with the address can open it." : m === "link" ? "Now private: only people with the private link can open it." : "Password saved. Visitors type it once per browser.", m);
+    }
   }
 
   if (s.kind === "loading") return null;

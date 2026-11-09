@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { CHAIN_IDS } from "@/lib/spec";
 import { intentQuote, PAY_WITH, privateOn } from "@/lib/intents";
+import { ftDecimals, ntQuote } from "@/lib/xbuy";
+import { fromUnits } from "@/lib/xpay";
 
 // Stand-in addresses for preview quotes, before the buyer has connected a wallet. Never used for a real deposit.
 const DRY_ADDR: Record<string, string> = {
@@ -47,5 +49,11 @@ export async function POST(req: Request) {
     recipient: b.recipient || DRY_ADDR[CHAIN_KEY[b.chain]],
     refundTo: b.refundTo || DRY_ADDR[b.pay.split(":")[0]] || DRY_ADDR.eth,
   });
-  return NextResponse.json(q, { status: "error" in q ? 502 : 200 });
+  if ("error" in q) return NextResponse.json(q, { status: 502 });
+  // Not listed on 1-Click: wNEAR lands and the buyer's wallet swaps it. Price that swap so the buyer sees tokens, not wNEAR.
+  if (b.chain === "near" && b.token && !q.deliver.direct && q.minOutRaw && /^\d+$/.test(q.minOutRaw)) {
+    const nt = await ntQuote(b.token, "buy", q.minOutRaw, b.recipient && /^0x[0-9a-f]{40}$/i.test(b.recipient) ? b.recipient.toLowerCase() : b.recipient || "near").catch(() => null);
+    q.then = nt && !("error" in nt) ? { out: fromUnits(nt.expectedOut, nt.tokenDecimals ?? (await ftDecimals(b.token))) } : null;
+  }
+  return NextResponse.json(q);
 }

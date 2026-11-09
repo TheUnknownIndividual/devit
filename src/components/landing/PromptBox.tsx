@@ -91,7 +91,7 @@ export function PromptBox() {
   const [address, setAddress] = useState("");
   // The address field was filled from the prompt (not typed or pasted), so the prompt may change or clear it.
   const [autoAddr, setAutoAddr] = useState(false);
-  const [chain, setChain] = useState<Chain>("solana");
+  const [chain, setChain] = useState<Chain>("near");
   const [style, setStyle] = useState<Style>("auto");
   const [kind, setKind] = useState<Kind>("memecoin");
   const [plan, setPlan] = useState(false);

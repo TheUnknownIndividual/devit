@@ -6,7 +6,7 @@ import type { TokenInfo } from "@/lib/spec";
 import type { NearTx } from "@/lib/swap";
 import { NEAR_EVM, onboardTx, toEthTxs } from "@/lib/ethnear";
 import { XCOINS, addChainParams, chainOfCoin, xcoin, fromUnits, toUnits, unitsToInput } from "@/lib/xpay";
-import { evmSession, familyOf, short, switchEvm, useWallets } from "./wallet";
+import { evmSession, familyOf, sendNear, short, switchEvm, useWallets } from "./wallet";
 import { num } from "../format";
 
 // "Your wallet" on a NEAR token's site: buy or sell with ETH/USDC already in a connected Ethereum wallet, without
@@ -288,6 +288,8 @@ export function WalletTrade({ token, ticker, side, coinKey, st, reload }: { toke
       void load();
     } finally {
       setBusy(false);
+      // Any wNEAR left by a step that didn't finish shows up as a one-signature swap below the box (FinishSwap).
+      window.dispatchEvent(new Event("ss-xbuy"));
     }
   }
 
@@ -395,5 +397,138 @@ export function WalletTrade({ token, ticker, side, coinKey, st, reload }: { toke
       </button>
       {!token.demo && <div className="ss-note">Every step is signed in your own wallet. The coins stay in your account.</div>}
     </>
+  );
+}
+
+// ---------- finishing a buy that landed as wNEAR ----------
+
+const MIN_WNEAR = 10n ** 22n; // 0.01 NEAR: below this a swap costs more than it's worth
+const pendingKey = (token: string, account: string) => `ss-finish:${token}:${account}`;
+
+/** Remember that a deposit buy for this token is on its way to this account, so the swap step is offered even after a reload. */
+export function markPending(token: string, account: string) {
+  try { localStorage.setItem(pendingKey(token, account.toLowerCase()), String(Date.now())); } catch { /* storage blocked */ }
+}
+function isPending(token: string, account: string): boolean {
+  try { return !!localStorage.getItem(pendingKey(token, account)); } catch { return false; }
+}
+function clearPending(token: string, account: string) {
+  try { localStorage.removeItem(pendingKey(token, account)); } catch { /* storage blocked */ }
+}
+
+/**
+ * A NEAR token 1-Click can't deliver lands as wNEAR; this swaps it for the token with one signature from the wallet it
+ * landed in: an Ethereum wallet's 0x account (signed on chain 397, no NEAR wallet) or a NEAR wallet's own account.
+ * Shown while a deposit is on its way (`waiting`), and whenever wNEAR is sitting in the connected account from an
+ * earlier buy (a closed tab, a step that failed), so no buy ever ends as wNEAR.
+ */
+export function FinishSwap({ token, ticker, account, waiting = false }: { token: TokenInfo; ticker: string; account: string | null; waiting?: boolean }) {
+  const { connected } = useWallets();
+  const acct = account?.toLowerCase() ?? null;
+  const fam = connected ? familyOf(connected.wallet) : null;
+  const mine = !!acct && !!connected && connected.address.toLowerCase() === acct && (fam === "evm" || fam === "near");
+  const [wn, setWn] = useState<bigint>(0n);
+  const [direct, setDirect] = useState(true);
+  const [steps, setSteps] = useState<Step[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!acct || token.demo) return;
+    const r = await fetch(`/api/xbuy?near=${encodeURIComponent(acct)}&token=${encodeURIComponent(token.address)}`).catch(() => null);
+    if (!r?.ok) return;
+    const j = (await r.json()) as { wnear: string; direct: boolean };
+    setWn(BigInt(j.wnear || "0"));
+    setDirect(j.direct);
+  }, [acct, token.address, token.demo]);
+  useEffect(() => {
+    void load();
+    const on = () => void load();
+    window.addEventListener("ss-xbuy", on);
+    return () => window.removeEventListener("ss-xbuy", on);
+  }, [load]);
+  // While a deposit is on its way, watch for the wNEAR to land.
+  useEffect(() => {
+    if (!waiting && !(acct && isPending(token.address, acct))) return;
+    const h = setInterval(() => void load(), 6000);
+    return () => clearInterval(h);
+  }, [waiting, acct, token.address, load]);
+
+  // A 0x account's wNEAR on a NEAR site is ours to finish; a named account's only if a buy here sent it.
+  const ready = !!acct && !direct && wn >= MIN_WNEAR && (waiting || /^0x[0-9a-f]{40}$/.test(acct) || isPending(token.address, acct));
+  if (!acct || direct || (!ready && !done && !waiting)) return null;
+
+  async function swap() {
+    if (!acct || !connected) return;
+    setBusy(true); setErr(null); setDone(null);
+    const evm = fam === "evm";
+    let cur: Step[] = (evm ? ["Starter NEAR deposit, paid back from this trade", `Swap for $${ticker} on NEAR`] : [`Swap for $${ticker} on NEAR`]).map((text) => ({ text, state: "todo" as StepState }));
+    setSteps(cur);
+    const set = (i: number, state: StepState, sub?: string) => { cur = cur.map((s, j) => (j === i ? { ...s, state, sub } : s)); setSteps(cur); };
+    let at = 0;
+    try {
+      let out = 0;
+      if (evm) {
+        set(0, "now");
+        const r = await fetch(`/api/xbuy?evm=${connected.address}&token=${encodeURIComponent(token.address)}`);
+        if (!r.ok) throw new Error("Couldn't read your NEAR account. Try again.");
+        const st = (await r.json()) as XState;
+        await post({ op: "gas", token: token.address, evm: connected.address });
+        set(0, "done"); at = 1;
+        set(1, "now", "Building the swap");
+        const leg = await post<{ transactions: NearTx[]; out: number }>({ op: "leg", token: token.address, evm: connected.address });
+        out = leg.out;
+        await signOnNear(leg.transactions, st, (t) => set(1, "now", t));
+        set(1, "done");
+      } else {
+        set(0, "now", "Building the swap");
+        const leg = await post<{ transactions: NearTx[]; out: number }>({ op: "leg", token: token.address, evm: acct });
+        out = leg.out;
+        set(0, "now", "Confirm in your wallet");
+        await sendNear(connected.address, leg.transactions);
+        set(0, "done");
+      }
+      clearPending(token.address, acct);
+      setDone(`About ${num(out)} $${ticker} is in ${short(acct)}.`);
+      void load();
+    } catch (e) {
+      set(at, "fail");
+      setErr(cancelled(e) ? "You cancelled in the wallet. The wNEAR is still in your account; swap it from here any time." : (e as Error).message || "The swap didn't go through. The wNEAR is still in your account.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const amt = num(fromUnits(wn, 24));
+  return (
+    <div className="ss-quote" style={{ borderColor: "var(--accent)" }}>
+      {done ? (
+        <><Check size={15} style={{ display: "inline", verticalAlign: -2, marginRight: 6 }} />{done}
+          <div className="ss-note"><a href={`https://nearblocks.io/address/${acct}`} target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>See the account</a></div></>
+      ) : wn < MIN_WNEAR ? (
+        <>Last step once it lands: swap the wNEAR for <b>${ticker}</b> with one signature from {short(acct)}. The button shows up here when it arrives.</>
+      ) : (
+        <><b>{amt} wNEAR</b> landed in {short(acct)}. One more signature swaps it for <b>${ticker}</b>.</>
+      )}
+      {steps && !done && (
+        <ol className="ss-steps">
+          {steps.map((s, i) => (
+            <li key={i} data-state={s.state}>
+              <span className="ss-step-ic" aria-hidden>{s.state === "done" ? <Check size={13} /> : s.state === "now" ? <Loader2 size={13} className="ss-spin" /> : i + 1}</span>
+              <span className="ss-step-tx">{s.text}{s.sub && <span>{s.sub}</span>}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+      {err && <div className="ss-err">{err}</div>}
+      {!done && wn >= MIN_WNEAR && (mine ? (
+        <button type="button" className="ss-btn" style={{ width: "100%", marginTop: 12 }} disabled={busy} onClick={() => void swap()}>
+          {busy ? <Loader2 size={16} className="ss-spin" /> : <ArrowRightLeft size={16} />} {busy ? "Working…" : `Swap ${amt} wNEAR for $${ticker}`}
+        </button>
+      ) : (
+        <div className="ss-note">Connect the wallet for {short(acct)} to swap it. An Ethereum wallet works when that&apos;s its 0x address.</div>
+      ))}
+    </div>
   );
 }
