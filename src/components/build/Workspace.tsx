@@ -45,6 +45,9 @@ const MODES: Array<{ id: Mode; label: string; hint: string }> = [
   { id: "ask", label: "Ask", hint: "Answers questions, changes nothing" },
 ];
 
+/** A message sent from the composer that isn't in the saved chat yet. */
+interface Outgoing { id: string; kind: "chat" | "apply"; text: string; images: string[]; mode?: Mode; body?: unknown; comments?: PendingComment[]; targets?: Array<{ blockId: string; label: string; element?: string; text: string }> }
+
 export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, canEdit = true, viewNote, share }: { initial: PublicProject; heliusOnServer: boolean; alchemyOnServer?: boolean; canEdit?: boolean; viewNote?: string; share?: string }) {
   const [p, setP] = useState(initial);
   const q = share ? `?share=${encodeURIComponent(share)}` : "";
@@ -67,6 +70,9 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
   // Pictures uploaded for the next message, and text files read in the browser.
   const [attached, setAttached] = useState<Array<{ id: string; url: string; name: string }>>([]);
   const [docs, setDocs] = useState<Doc[]>([]);
+  // Sent messages show in the chat at once; one sent while the agent is still working waits here and goes next.
+  const [outbox, setOutbox] = useState<Outgoing[]>([]);
+  const running = useRef<string | null>(null);
   const [uploading, setUploading] = useState(0);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -147,7 +153,7 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
     return () => clearInterval(h);
   }, [building, p.id, q]);
 
-  useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight, behavior: "smooth" }); }, [p.messages.length, p.steps.length, comments.length]);
+  useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight, behavior: "smooth" }); }, [p.messages.length, p.steps.length, comments.length, outbox.length]);
 
   const send = useCallback((m: FromBuilder) => frame.current?.contentWindow?.postMessage(m, window.location.origin), []);
 
@@ -286,35 +292,58 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
 
   const dictation = useDictation((said) => setText((t) => (t ? `${t.trimEnd()} ${said}` : said)));
 
-  async function call(path: string, body: unknown, kind: NonNullable<typeof busy>, method = "POST") {
+  // `after` runs in the same update as the new project, so a sent message never shows twice for a frame.
+  async function call(path: string, body: unknown, kind: NonNullable<typeof busy>, method = "POST", after?: (ok: boolean) => void) {
     setBusy(kind);
+    let ok = false;
     try {
       const r = await fetch(`/api/projects/${p.id}${path}`, { method, headers: { "content-type": "application/json", ...modelHeader() }, body: JSON.stringify(body) });
       const j = await r.json().catch(() => null);
       if (r.ok && j?.id) setP(j as PublicProject);
       // Refusals (out of AI credits, the hourly cap) say why, with a way to top up when that's the fix.
       if (!r.ok) { setNotice(j?.error ?? "That didn't go through. Try again."); setNoticeTopup(!!j?.topup); }
+      ok = r.ok;
       return r.ok;
     } finally {
+      after?.(ok);
       setBusy(null);
     }
   }
 
-  // Enter sends: with blocks picked it applies the change to them right away (with any changes that failed before).
+  // Enter sends: the message shows in the chat at once. With blocks picked it applies the change to them (with any
+  // changes that failed before). While the agent is still working, it waits its turn and goes next.
   function submit() {
     const t = text.trim();
-    if (!t || busy || building || uploading || !canEdit) return;
+    if (!t || building || uploading || !canEdit) return;
     const assets = attached.map((a) => a.id);
+    const images = attached.map((a) => a.url);
     setText(""); setAttached([]); setDocs([]); setAttachError(null); setBeforeEnhance(null);
     if (picks.length) {
       const fresh = picks.map((s) => ({ id: newId(), blockId: s.blockId, blockLabel: s.element ? `${s.label} · ${s.element}` : s.label, element: s.element ?? undefined, text: t, ...(assets.length ? { assets } : {}) }));
       // Sent: the selection clears at once (a change that fails comes back in the "didn't apply" tray to retry).
       setPicks([]);
-      void apply([...comments, ...fresh]);
+      setOutbox((o) => [...o, { id: newId(), kind: "apply", text: t, images, comments: fresh, targets: picks.map((s) => ({ blockId: s.blockId, label: s.label, element: s.element ?? undefined, text: t })) }]);
       return;
     }
-    void call("/chat", { text: t, ...(assets.length ? { assets } : {}), ...(docs.length ? { docs } : {}), ...(mode !== "edit" ? { mode } : {}) }, "chat").then((ok) => { if (!ok) setText((cur) => cur || t); });
+    const m = mode !== "edit" ? mode : undefined;
+    setOutbox((o) => [...o, { id: newId(), kind: "chat", text: t, images, mode: m, body: { text: t, ...(assets.length ? { assets } : {}), ...(docs.length ? { docs } : {}), ...(m ? { mode: m } : {}) } }]);
   }
+
+  // Sends the oldest waiting message whenever the agent is free.
+  useEffect(() => {
+    const next = outbox[0];
+    if (!next || busy || building || running.current === next.id) return;
+    running.current = next.id;
+    const drop = () => setOutbox((o) => o.filter((x) => x.id !== next.id));
+    if (next.kind === "apply") {
+      const all = [...comments, ...(next.comments ?? [])];
+      setApplying(all.length);
+      void call("/apply", { comments: all }, "apply", "POST", (ok) => { drop(); setComments(ok ? [] : all); });
+    } else {
+      void call("/chat", next.body, "chat", "POST", (ok) => { drop(); if (!ok) setText((cur) => cur || next.text); });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outbox, busy, building]);
 
   // "Update live site" from the chat: republish at the same address, no dialog.
   async function quickUpdate() {
@@ -339,6 +368,29 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
     const ok = await call("/apply", { comments: all }, "apply");
     if (ok) setComments([]); else setComments(all);
   }
+
+  // One look for a sent message, whether it's saved or still on its way (`note` says it's waiting its turn).
+  const userBubble = (m: { text: string; mode?: string; targets?: Array<{ blockId: string; label: string; element?: string; text: string }>; assets?: string[] }, note?: string) => (
+                  <div className="ml-8 whitespace-pre-line break-words [overflow-wrap:anywhere] rounded-[14px] rounded-tr-md border border-white/[0.07] bg-ink-850 px-3.5 py-2.5 text-[13.5px] leading-relaxed text-zinc-100">
+                    {note && <span className="mb-1 block text-[11px] font-medium text-zinc-500">{note}</span>}
+                    {m.mode && <span className="mb-1 flex items-center gap-1 text-[11px] font-medium text-zinc-500">{m.mode === "plan" ? <Lightbulb size={11} /> : <MessageCircleQuestion size={11} />} {m.mode === "plan" ? "Plan" : "Ask"}</span>}
+                    {m.targets?.length ? (
+                      m.targets.every((t) => t.text === m.targets![0].text) ? (
+                        <>
+                          <TargetChips targets={m.targets} onFocus={(id) => send({ type: "ss:focus", blockId: id })} />
+                          <span className="mt-1.5 block">{m.targets[0].text}</span>
+                        </>
+                      ) : (
+                        <ul className="space-y-2">
+                          {m.targets.map((t, k) => (
+                            <li key={k}><TargetChips targets={[t]} onFocus={(id) => send({ type: "ss:focus", blockId: id })} /><span className="mt-1 block">{t.text}</span></li>
+                          ))}
+                        </ul>
+                      )
+                    ) : m.text}
+                    {!!m.assets?.length && <div className="mt-2 flex flex-wrap gap-1.5">{m.assets.map((u) => <img key={u} src={u} alt="" className="h-12 w-12 rounded-md border border-white/10 object-cover" />)}</div>}
+                  </div>
+  );
 
   const ready = !!p.spec;
   const chain = p.network.chain;
@@ -441,24 +493,7 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
             {p.messages.map((m, i) => (
               <div key={m.id} className="animate-rise">
                 {m.role === "user" ? (
-                  <div className="ml-8 whitespace-pre-line break-words [overflow-wrap:anywhere] rounded-[14px] rounded-tr-md border border-white/[0.07] bg-ink-850 px-3.5 py-2.5 text-[13.5px] leading-relaxed text-zinc-100">
-                    {m.mode && <span className="mb-1 flex items-center gap-1 text-[11px] font-medium text-zinc-500">{m.mode === "plan" ? <Lightbulb size={11} /> : <MessageCircleQuestion size={11} />} {m.mode === "plan" ? "Plan" : "Ask"}</span>}
-                    {m.targets?.length ? (
-                      m.targets.every((t) => t.text === m.targets![0].text) ? (
-                        <>
-                          <TargetChips targets={m.targets} onFocus={(id) => send({ type: "ss:focus", blockId: id })} />
-                          <span className="mt-1.5 block">{m.targets[0].text}</span>
-                        </>
-                      ) : (
-                        <ul className="space-y-2">
-                          {m.targets.map((t, k) => (
-                            <li key={k}><TargetChips targets={[t]} onFocus={(id) => send({ type: "ss:focus", blockId: id })} /><span className="mt-1 block">{t.text}</span></li>
-                          ))}
-                        </ul>
-                      )
-                    ) : m.text}
-                    {!!m.assets?.length && <div className="mt-2 flex flex-wrap gap-1.5">{m.assets.map((u) => <img key={u} src={u} alt="" className="h-12 w-12 rounded-md border border-white/10 object-cover" />)}</div>}
-                  </div>
+                  userBubble(m)
                 ) : (
                   <div className="flex gap-2.5">
                     <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/[0.07] bg-ink-900"><LogoMark size={13} /></span>
@@ -484,9 +519,11 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
                 {i === 0 && (p.steps.length > 0 || building) && <div className="mt-4"><BuildSteps steps={p.steps} building={building} progress={progress} /></div>}
               </div>
             ))}
+            {outbox.map((o, k) => (k === 0 && busy ? <div key={o.id} className="animate-rise">{userBubble({ text: o.text, mode: o.mode, targets: o.targets, assets: o.images })}</div> : null))}
             {busy === "apply" || busy === "chat" ? (
               <div className="flex items-center gap-2.5 text-[13px] text-zinc-400"><Loader2 size={14} className="animate-spin text-sel" /> {busy === "apply" ? `Applying ${applying} change${applying === 1 ? "" : "s"}…` : mode === "plan" ? "Drafting a plan…" : mode === "ask" ? "Thinking…" : "Working on it…"}</div>
             ) : null}
+            {outbox.map((o, k) => (k === 0 && busy ? null : <div key={o.id} className="animate-rise">{userBubble({ text: o.text, mode: o.mode, targets: o.targets, assets: o.images }, busy ? "Queued, goes when this one's done" : undefined)}</div>))}
             {canEdit && p.published && p.publishedIsCurrent === false && !busy && !building && p.messages[p.messages.length - 1]?.role === "agent" && (
               <div className="flex animate-rise flex-wrap items-center gap-x-3 gap-y-2 rounded-[12px] border border-sel/30 bg-sel/[0.06] px-3 py-2.5">
                 <Globe size={14} className="shrink-0 text-sel" />
@@ -620,8 +657,8 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
                 ) : (
                   <span className="ml-1 hidden text-[11.5px] text-zinc-500 lg:inline">{selected ? "Enter applies · Esc clears" : ""}</span>
                 )}
-                <button type="button" className="btn btn-primary btn-icon ml-auto h-8 w-8" disabled={!canEdit || !text.trim() || !!busy || building || uploading > 0} onClick={submit} aria-label={selected ? "Apply" : "Send"}>
-                  {busy === "chat" ? <Loader2 size={15} className="animate-spin" /> : <ArrowUp size={15} />}
+                <button type="button" className="btn btn-primary btn-icon ml-auto h-8 w-8" disabled={!canEdit || !text.trim() || building || uploading > 0} onClick={submit} aria-label={selected ? "Apply" : "Send"} title={busy ? "Sends when the current change is done" : undefined}>
+                  <ArrowUp size={15} />
                 </button>
               </div>
             </div>

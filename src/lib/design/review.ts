@@ -30,6 +30,8 @@ export interface Inspection {
   /** Plain-language faults, each naming the section id. */
   issues: string[];
   shots: LocalImage[];
+  /** The live widgets actually visible at desktop width (one entry per slot), so an edit that hides one is caught. */
+  widgets: string[];
 }
 
 /** Runs in the page. Returns faults found at this width. Kept free of closures so it serialises. */
@@ -468,6 +470,7 @@ export async function inspect(html: string, opts: { shots?: boolean; full?: bool
   try { browser = await chromium.launch({ headless: true }); } catch { return null; }
   const issues: string[] = [];
   const shots: LocalImage[] = [];
+  let widgets: string[] = [];
   try {
     // One page, loaded once and resized for the phone pass: loading fonts and pictures twice was most of the time.
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -489,6 +492,17 @@ export async function inspect(html: string, opts: { shots?: boolean; full?: bool
         }).catch(() => {});
         await page.waitForTimeout(w === 1280 ? 300 : 200);
         issues.push(...(await page.evaluate(lint, w)));
+        if (w === 1280) {
+          widgets = await page.evaluate(() => [...document.querySelectorAll(".ss-code-body [data-ss-widget]")].filter((el) => {
+            const r = el.getBoundingClientRect();
+            if (r.width < 2 || r.height < 2) return false;
+            for (let n: Element | null = el; n; n = n.parentElement) {
+              const cs = getComputedStyle(n);
+              if (cs.display === "none" || cs.visibility === "hidden" || cs.opacity === "0" || cs.contentVisibility === "hidden") return false;
+            }
+            return true;
+          }).map((el) => el.getAttribute("data-ss-widget") ?? "")).catch(() => []);
+        }
         if (!wantShots) continue;
         const first = await page.screenshot({ type: "jpeg", quality: 70 });
         shots.push({ media: "image/jpeg", data: first.toString("base64"), label: `Review screenshot: the first screen at ${w}×${h}` });
@@ -508,7 +522,7 @@ export async function inspect(html: string, opts: { shots?: boolean; full?: bool
   } finally {
     await browser.close().catch(() => {});
   }
-  return { issues: [...new Set(issues)].slice(0, 14), shots };
+  return { issues: [...new Set(issues)].slice(0, 14), shots, widgets };
 }
 
 /** What the editor is told when it reviews the build. */

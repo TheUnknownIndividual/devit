@@ -32,6 +32,14 @@ const WHOLE = /\b(whole|entire|every|all|site|page|overall|everything|darker|lig
 /** Requests that are too big for the fast lane: structure, several places, the overall look, new pictures. */
 const BIG = /\b(add|new|another|insert|remove|delete|drop|move|reorder|rearrange|swap|redesign|rebuild|redo|restyle|rewrite|layout|section|animat\w*|motion|gallery|carousel|grid|columns?|whole|entire|every|all|site|page|overall|everything|darker|lighter|palette|fonts?|typeface|vibe|look|feel|theme|style)\b/i;
 
+/** What the live widgets already do on their own, so the editor can tell a request about them apart from a design change. */
+const WIDGET_BEHAVIOUR = `WHAT THE LIVE WIDGETS ALREADY DO (devit's code; you can't change their insides, only their container's spacing and size):
+- buy: the swap box. Its "Connect wallet" button opens a wallet popup (a sheet over the page with a dimmed backdrop, the wallet list inside; a bottom sheet on phones) and never expands inside the page. "Pay with" opens a coin list inside the box. It shows the quote, the amount, buy/sell and the connected account itself.
+- wallet: a connect-wallet button that opens the same wallet popup.
+- ca: the contract address with a Copy button.
+- chart, trades, stats, leaderboard, milestones, whatif, signup, toasts: live data the widget draws and refreshes itself.
+A request about any of these behaviours ("make connect a popup", "show the wallets in a modal", "make the quote update") is about the widget: answer with <nochange/> and say what it already does. Restyling the site around a widget (its spacing, size, the section's look) is still yours to do.`;
+
 function system(spec: SiteSpec, knowledge: string | undefined, quick: boolean): string {
   const b = spec.code?.brief;
   return `You edit a one-page token website that devit designed and wrote as HTML + CSS. Keep its art direction unless the request changes it.
@@ -50,6 +58,12 @@ ${quick ? "" : `<css mode="append">…only new or overriding rules…</css>     
 
 Change only what the request asks for. Never remove, reword or move other text or elements, even when they seem redundant after the change; if you think something else should change too, say so in the summary instead.
 
+Read the request for the smallest thing it names and why. "Make connect wallet a popup" is about how that one button behaves, not about the box around it; "make the price bigger" is the price, not its card. When a request names one element (or the person selected one), change that element and nothing around it. If meeting it would mean rebuilding, hiding or wrapping a container, a section or a widget, it isn't what they meant: make the smallest change that does it, or none, and say why.
+
+${WIDGET_BEHAVIOUR}
+
+When the request is already true, or only devit's widget code could change it, change nothing and answer <edit><summary>what the widget already does, or that this lives inside the widget and can't be changed from the site, in plain words</summary><nochange/></edit>. Never imitate a widget's behaviour with your own HTML/CSS (no :target or checkbox modals, no hiding a widget behind your own button, no copies of its parts).
+
 How to change things, smallest first:
 - Text, a link, an attribute, one element, a class: a <patch> on that section.
 - A colour, size, spacing or one rule: a <patch target="css"> on the rule${quick ? "" : `, or <css mode="append"> with an overriding rule`}. Site-wide colour changes go through the tokens (.ss-code{--bg:…;--text:…;--accent:…}) so the widgets follow.
@@ -63,7 +77,7 @@ ${knowledge?.trim() ? `The team's standing instructions (always follow): ${knowl
 
 export interface CodeEditResult { spec: SiteSpec; message: string; via: string }
 
-interface Attempt { spec: SiteSpec; message: string; via: string; failed: Array<{ target: string; find: string }>; changed: number }
+interface Attempt { spec: SiteSpec; message: string; via: string; failed: Array<{ target: string; find: string }>; changed: number; /** The editor answered that nothing should change (already true, or inside a widget). */ none?: boolean }
 
 interface AttemptOpts {
   whole: boolean;
@@ -90,14 +104,31 @@ export function applyPatch(src: string, find: string, replace: string): string |
   return src.slice(0, i) + replace + src.slice(i + hits[0][0].length);
 }
 
+/** Selected elements that are live widgets (data-el names the widgets use). */
+const WIDGET_EL = /^(buybox|buy|wallet|ca|chart|trades|stats|leaderboard|milestones|whatif|signup|toasts)\b/i;
+
+/** Widget kinds that were visible before and have fewer visible slots after. */
+function lostWidgets(before: string[], after: string[]): string[] {
+  const n = (xs: string[], k: string) => xs.filter((x) => x === k).length;
+  return [...new Set(before)].filter((k) => k !== "toasts" && n(after, k) < n(before, k));
+}
+/** Whether a request asks for a widget to go (remove/hide/delete…, naming it or the box it's in). */
+function asksToRemove(comments: PendingComment[], kind: string): boolean {
+  const names: Record<string, string> = { buy: "buy|swap|trade|purchase", ca: "contract|address|\\bca\\b", wallet: "wallet|connect", chart: "chart", trades: "trades|feed", stats: "stats|numbers" };
+  const what = new RegExp(names[kind] ?? kind, "i");
+  return comments.some((c) => /\b(remove|delete|drop|hide|get rid of|take out|without)\b/i.test(c.text) && what.test(c.text));
+}
+
 function requestsText(comments: PendingComment[]): string {
-  return comments.map((c) => `- on "${c.blockLabel}" (${c.blockId})${c.element ? `, element ${c.element}` : ""}: ${c.text}${c.context ? `\n  context from their connectors: ${c.context}` : ""}`).join("\n");
+  return comments.map((c) => `- on "${c.blockLabel}" (${c.blockId})${c.element ? `, element ${c.element}${WIDGET_EL.test(c.element) ? " (a live widget: see what it already does)" : ""}` : ""}: ${c.text}${c.context ? `\n  context from their connectors: ${c.context}` : ""}`).join("\n");
 }
 
 async function attempt(project: Project, spec: SiteSpec, comments: PendingComment[], o: AttemptOpts): Promise<Attempt | null> {
   const code = spec.code!;
   const assets = new Map((project.assets ?? []).map((a) => [a.id, a]));
   const ids = new Set(comments.map((c) => c.blockId));
+  // A targeted request may only change the sections it was about (plus the stylesheet and new sections it adds).
+  const inScope = (id: string) => o.whole || !!o.review || (o.only ? o.only.has(id) : ids.has(id));
   const shown = spec.blocks.filter((b) => b.type === "html" && (o.only ? o.only.has(b.id) : o.whole || ids.has(b.id)));
   const pics = comments.flatMap((c) => (c.assets ?? []).map((id) => assets.get(id)).filter((a): a is Asset => !!a));
   const images = [...new Set([...code.images, ...pics.map((a) => a.url)])];
@@ -147,6 +178,7 @@ ${o.review ? o.review.request : ""}${requestsText(comments)}${o.note ? `\n\n${o.
         else { css = out; cssTouched = true; }
         continue;
       }
+      if (!inScope(target)) continue;
       const block = next.blocks.find((b) => b.id === target && b.type === "html");
       const src = patched.get(target) ?? (block ? String(block.props.html) : null);
       const out = src == null ? null : applyPatch(src, find, replace);
@@ -170,7 +202,7 @@ ${o.review ? o.review.request : ""}${requestsText(comments)}${o.note ? `\n\n${o.
   if (!o.quick) {
     for (const m of body.matchAll(/<remove\s+id\s*=\s*["']([^"']+)["']\s*\/?>/gi)) {
       const i = next.blocks.findIndex((b) => b.id === m[1]);
-      if (i >= 0) { next.blocks.splice(i, 1); changed++; }
+      if (i >= 0 && inScope(m[1])) { next.blocks.splice(i, 1); changed++; }
     }
     // parseSite wants a stylesheet before sections; give it an empty one so only the edit's sections are read.
     const { sections } = parseSite(`<style></style>${body.replace(/<css\b[\s\S]*?<\/css>/i, "")}`);
@@ -178,6 +210,7 @@ ${o.review ? o.review.request : ""}${requestsText(comments)}${o.note ? `\n\n${o.
       const id = (openAttr(raw, "data-block-id") ?? "").replace(/[^a-z0-9-]/gi, "").toLowerCase();
       if (!id) continue;
       const at = next.blocks.findIndex((b) => b.id === id);
+      if (at >= 0 && !inScope(id)) continue;
       if (at >= 0) {
         const label = String(next.blocks[at].props.label ?? "Section");
         next.blocks[at] = { ...next.blocks[at], props: { ...next.blocks[at].props, html: sanitizeSection(normalizeSection(raw, id, label), ctx) } };
@@ -198,6 +231,7 @@ ${o.review ? o.review.request : ""}${requestsText(comments)}${o.note ? `\n\n${o.
   if (failed.length) console.warn(`[edit] ${failed.length} patch(es) didn't match (${[...new Set(failed.map((f) => f.target))].join(", ")}) via ${res.via}`);
   if (process.env.DEVIT_EDIT_DEBUG) console.log(`[edit] ${o.quick ? "quick" : "full"} reply:\n${text}`);
   const summary = /<summary>([\s\S]*?)<\/summary>/i.exec(text)?.[1]?.trim() || "Done.";
+  if (/<nochange\s*\/?>/i.test(text)) return { spec, message: summary, via: res.via, failed: [], changed: 0, none: true };
   return { spec: next, message: summary, via: res.via, failed, changed };
 }
 
@@ -228,11 +262,13 @@ export async function editCode(project: Project, comments: PendingComment[], who
 
   if (isQuick(comments, wholePage, hasPics)) {
     const q = await attempt(project, spec, comments, { whole, quick: true });
+    if (q?.none) return { spec, message: q.message, via: `${q.via} · no change` };
     if (q && q.changed && !q.failed.length) { done = q; lane = " · quick edit"; }
   }
   if (!done) {
     const full = await attempt(project, spec, comments, { whole, quick: false });
     if (!full) return null;
+    if (full.none) return { spec, message: full.message, via: `${full.via} · no change` };
     done = full;
     // Patches that didn't match: ask once more for just those parts, on top of what did apply.
     if (full.failed.length) {
@@ -249,7 +285,25 @@ export async function editCode(project: Project, comments: PendingComment[], who
 
   const tModel = Date.now() - t0;
   // The check: measure the edited page; if the edit added layout faults, one fix pass with screenshots.
-  const [before, after] = await Promise.all([beforeP, inspect(staticPage(done.spec.code!, done.spec.blocks), { shots: false }).catch(() => null)]);
+  const before = await beforeP;
+  let after = await inspect(staticPage(done.spec.code!, done.spec.blocks), { shots: false }).catch(() => null);
+  // A widget that was on show and isn't any more, when nobody asked to remove it: the edit hid, wrapped or replaced it
+  // (e.g. "make connect a popup" answered by hiding the whole buy box behind a CSS modal). Asked once more, then refused.
+  const lost = (a: typeof after) => (before && a ? lostWidgets(before.widgets, a.widgets) : []).filter((k) => !asksToRemove(comments, k));
+  if (lost(after).length) {
+    const gone = lost(after);
+    const again = await attempt(project, spec, comments, {
+      whole, quick: false,
+      note: `Your previous answer hid or replaced the ${gone.join(", ")} widget${gone.length > 1 ? "s" : ""} (no longer visible on the page), which the request didn't ask for. Answer again: keep every widget visible where it is, unwrapped and unhidden, and change only what was asked. If the request is about what a widget does inside itself, answer with <nochange/> and say what it already does.`,
+    });
+    if (again?.none) return { spec, message: again.message, via: `${again.via} · no change` };
+    const check = again?.changed ? await inspect(staticPage(again.spec.code!, again.spec.blocks), { shots: false }).catch(() => null) : null;
+    if (!again || !again.changed || !check || lost(check).length) {
+      return { spec, message: `I left the site as it was: the change I came up with hid the ${gone.join(", ")} widget, which you didn't ask for. ${gone.includes("buy") || gone.includes("wallet") ? "The Connect wallet button already opens the wallet list in a popup over the page. " : ""}Tell me what should look or work differently and I'll change just that.`, via: `${done.via} · refused` };
+    }
+    done = { ...again, message: again.message };
+    after = check;
+  }
   if (before && after && after.issues.length > before.issues.length) {
     const fresh = after.issues.filter((x) => !before.issues.includes(x));
     const seen = await inspect(staticPage(done.spec.code!, done.spec.blocks), { full: false }).catch(() => null);
