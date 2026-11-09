@@ -245,7 +245,7 @@ function venueFor(token: TokenInfo | null, prompt: string) {
   };
 }
 
-async function writeCopy(prompt: string, intent: Intent, token: TokenInfo | null, chain: Chain, r: Research | null, refs: RefRead[] = []): Promise<{ copy: Copy; via: string; theme: ThemeId; accent: string | null; fx?: Partial<ThemeFx> }> {
+async function writeCopy(prompt: string, intent: Intent, token: TokenInfo | null, chain: Chain, r: Research | null, refs: RefRead[] = [], backup = false): Promise<{ copy: Copy; via: string; theme: ThemeId; accent: string | null; fx?: Partial<ThemeFx> }> {
 
   const fallback = offlineCopy(intent, token, chain, r);
   if (!llmAvailable()) return { copy: fallback, via: "offline writer", theme: intent.theme, accent: intent.accent };
@@ -280,7 +280,7 @@ async function writeCopy(prompt: string, intent: Intent, token: TokenInfo | null
   const res = await askJson(system, user, (v) => {
     const p = CopySchema.safeParse(v);
     return p.success ? p.data : null;
-  });
+  }, backup ? "light" : "heavy", backup ? "backup" : "build");
   if (!res) return { copy: fallback, via: "offline writer", theme: intent.theme, accent: intent.accent };
   const { theme, accent, fx, ...copy } = res.value;
   return { copy: { ...copy, story: copy.story ?? null, ticker: copy.ticker.replace(/^\$/, "").toUpperCase() }, via: res.via, theme: theme ?? intent.theme, accent: intent.accent ?? accent ?? null, fx };
@@ -494,7 +494,7 @@ export async function runBuild(id: string): Promise<void> {
   if (libRefs.length && !start.style && !themeNamed(prompt) && !themeFromResearch(found)) intent = { ...intent, theme: themeOfPicks(libRefs, intent.theme) };
 
   await run(id, "copy", "Writing the copy", async () => {
-    copyRes = await writeCopy(prompt, intent, token, chain, found, refs);
+    copyRes = await writeCopy(prompt, intent, token, chain, found, refs, designing);
     if (start.style) copyRes = { ...copyRes, theme: start.style };
     return `${copyRes.copy.headline} (${copyRes.via})`;
   });

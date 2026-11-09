@@ -97,14 +97,14 @@ const claude: Call = async (system, user, timeoutMs, tier, key, picked) => {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model, max_tokens: MAX_OUT[tier], system, messages: [{ role: "user", content: user }] }),
+      body: JSON.stringify({ model, max_tokens: MAX_OUT[tier], system: cachedSystem(system), messages: [{ role: "user", content: user }] }),
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!r.ok) return null;
     const j = (await r.json()) as { content?: { type: string; text?: string }[]; usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } };
     const text = j.content?.find((c) => c.type === "text")?.text;
     const u = j.usage;
-    return text ? { text, via: `Claude · ${model}`, model, usage: u ? { in: (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0), out: u.output_tokens ?? 0 } : undefined } : null;
+    return text ? { text, via: `Claude · ${model}`, model, usage: anthUsage(u) } : null;
   } catch {
     return null;
   }
@@ -181,9 +181,10 @@ function parse<T>(text: string, validate: (v: unknown) => T | null): T | null {
  * Ask for JSON. Returns the parsed object and which provider and model answered, or null if nobody could. A light
  * call that comes back unusable is retried on that provider's heavy model before the next provider is tried.
  */
-export async function askJson<T>(system: string, user: string, validate: (v: unknown) => T | null, tier: Tier = "heavy", use: "build" | "edit" = "build"): Promise<{ value: T; via: string } | null> {
+export async function askJson<T>(system: string, user: string, validate: (v: unknown) => T | null, tier: Tier = "heavy", use: "build" | "edit" | "backup" = "build"): Promise<{ value: T; via: string } | null> {
   const sys = system + "\nReply with one JSON object only, no prose, no code fences.";
-  const ours: Tier = priorityModels() ? "heavy" : use === "edit" ? "light" : tier;
+  // "backup": work nobody sees unless the main path fails (the quiet fallback site), so it runs small on any plan.
+  const ours: Tier = use === "backup" ? "light" : priorityModels() ? "heavy" : use === "edit" ? "light" : tier;
   for (const { call, key, own, model } of providers()) {
     // A picked model runs as picked, once; the rest size themselves to the job.
     const tiers = model ? (["heavy"] as const) : (own ? tier : ours) === "light" ? (["light", "heavy"] as const) : (["heavy"] as const);
@@ -229,7 +230,18 @@ export interface RichAsk {
 }
 
 type AnthropicUsage = { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
-const anthUsage = (u?: AnthropicUsage) => (u ? { in: (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0), out: u.output_tokens ?? 0 } : undefined);
+/** Input in full-price token equivalents: cache reads bill at 0.1x, cache writes at 1.25x (Anthropic list prices). */
+function anthUsage(u?: AnthropicUsage) {
+  return u ? { in: (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) * 0.1 + (u.cache_creation_input_tokens ?? 0) * 1.25, out: u.output_tokens ?? 0 } : undefined;
+}
+/**
+ * The system prompt as a cacheable block. Our design rules are the same few thousand tokens on every build, so a
+ * second build within the cache window reads them at a tenth of the price; the reply is identical either way.
+ * Prompts under ~1k tokens can't be cached and are sent as-is.
+ */
+function cachedSystem(system: string): string | { type: "text"; text: string; cache_control: { type: "ephemeral" } }[] {
+  return system.length > 4000 ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }] : system;
+}
 
 /** Reads an SSE body, handing each `data:` payload to `on`. */
 async function sse(body: ReadableStream<Uint8Array>, on: (data: string) => void): Promise<void> {
@@ -271,17 +283,26 @@ async function richClaude(a: RichAsk, key: string, model: string, withImages: bo
     ...files.flatMap((f) => [{ type: "text", text: f.label }, { type: "image", source: { type: "base64", media_type: f.media, data: f.data } }]),
     { type: "text", text: a.user },
   ];
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
+  const send = () => fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
     // No temperature: current Claude models reject it. "between_tools" is how Sonnet turns thinking off; Haiku
     // rejects that value (400) and doesn't think unless asked, so it's simply left out there.
     body: JSON.stringify({
-      model, max_tokens: a.maxOut, stream: true, system: a.system, messages: [{ role: "user", content }],
+      model, max_tokens: a.maxOut, stream: true, system: cachedSystem(a.system), messages: [{ role: "user", content }],
       ...(a.think === "off" ? (/haiku/i.test(model) ? {} : { thinking: { type: "between_tools" } }) : { thinking: { type: "adaptive" }, output_config: { effort: a.think ?? "medium" } }),
     }),
     signal: AbortSignal.timeout(a.timeoutMs),
   });
+  let r = await send();
+  // Busy or overloaded is refused before any token is written, so one retry costs nothing and keeps the build on
+  // the best model instead of dropping to the next provider (that is how one site ended up written by a weaker one).
+  if ([429, 500, 502, 503, 529].includes(r.status)) {
+    console.warn(`[llm] anthropic ${model} ${r.status}, retrying once`);
+    void r.body?.cancel();
+    await new Promise((ok) => setTimeout(ok, 2500));
+    r = await send();
+  }
   if (!r.ok || !r.body) {
     // Status and the API's own error message only (never prompt text), so a failing provider is visible in the logs.
     console.warn(`[llm] anthropic ${model} ${r.status} ${(await r.text().catch(() => "")).slice(0, 200)}`);
@@ -293,6 +314,7 @@ async function richClaude(a: RichAsk, key: string, model: string, withImages: bo
     try {
       const j = JSON.parse(d) as { type: string; delta?: { type?: string; text?: string; stop_reason?: string }; message?: { usage?: AnthropicUsage }; usage?: AnthropicUsage };
       if (j.type === "message_delta" && j.delta?.stop_reason === "max_tokens") console.warn(`[llm] anthropic ${model} hit max_tokens (${a.maxOut})`);
+      if (j.type === "error") console.warn(`[llm] anthropic ${model} stream error ${JSON.stringify((j as { error?: unknown }).error ?? {}).slice(0, 200)} after ${text.length} chars`);
       if (j.type === "content_block_delta" && j.delta?.type === "text_delta" && j.delta.text) { text += j.delta.text; a.onText?.(text); }
       else if (j.type === "message_start" && j.message?.usage) Object.assign(usage, j.message.usage);
       else if (j.type === "message_delta" && j.usage) Object.assign(usage, j.usage);

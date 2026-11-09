@@ -81,9 +81,33 @@ function buyFallback(ticker: string): string {
   return `<section data-block-id="buy" data-block-label="Buy"><div style="max-width:560px;margin:0 auto;padding:clamp(56px,8vw,96px) 20px;display:grid;gap:18px"><h2 data-el="headline" style="font-family:var(--font-display);font-size:clamp(32px,6vw,56px);line-height:1;margin:0">Get $${ticker}</h2><div data-ss-widget="buy"></div><div data-ss-widget="ca"></div></div></section>`;
 }
 
+const WALLET_SLOT = /<div\b[^>]*data-ss-widget=["']wallet["'][^>]*>\s*<\/div>/gi;
+
+/**
+ * One action in the header: a Buy link. A wallet button beside it made two competing calls to action (and the buy
+ * box connects wallets anyway), so it goes; a header with only a wallet button gets a Buy link in its place.
+ */
+export function oneHeaderAction(blocks: Block[]): Block[] {
+  const header = blocks.find((b, i) => i === 0 && (/head|nav|signal|top/i.test(`${b.id} ${String(b.props.label ?? "")}`) || /<nav\b/i.test(String(b.props.html ?? ""))));
+  if (!header) return blocks;
+  const html = String(header.props.html ?? "");
+  if (!WALLET_SLOT.test(html)) return blocks;
+  WALLET_SLOT.lastIndex = 0;
+  const hasCta = /data-el=["']cta["']/i.test(html);
+  const buyAt = blocks.find((b) => hasWidget(String(b.props.html ?? ""), "buy"))?.id;
+  const link = buyAt && !hasCta
+    ? `<a href="#${buyAt}" data-el="cta" style="display:inline-flex;align-items:center;padding:.65em 1.15em;background:var(--accent);color:var(--accent-text);border-radius:var(--r-sm,8px);font-weight:700;text-decoration:none">Buy</a>`
+    : "";
+  if (!hasCta && !link) return blocks; // nothing to buy with: the wallet button is the only action, keep it
+  let first = true;
+  header.props.html = html.replace(WALLET_SLOT, () => { const out = first ? link : ""; first = false; return out; });
+  return blocks;
+}
+
 /** Makes sure the live parts a token site needs are there. Mutates and returns blocks. */
 export function repair(blocks: Block[], hasToken: boolean, ticker: string, images: string[]): Block[] {
   if (!hasToken) return blocks;
+  oneHeaderAction(blocks);
   const all = () => blocks.map((b) => String(b.props.html ?? "")).join("\n");
   if (!hasWidget(all(), "buy")) {
     const [b] = toBlocks([buyFallback(ticker)], { sections: [] } as unknown as DesignBrief, images);

@@ -21,7 +21,7 @@ export function addressUrl(chain: Chain, who: string): string {
 }
 
 /** Recent trades gathered while the page is open (the feed only carries the latest few), newest first. */
-function useTrades(token: TokenInfo | null, mode: Mode): Trade[] | null {
+export function useTrades(token: TokenInfo | null, mode: Mode): Trade[] | null {
   const [trades, setTrades] = useState<Trade[] | null>(null);
   const seen = useRef(new Map<string, Trade>());
   useEffect(() => {

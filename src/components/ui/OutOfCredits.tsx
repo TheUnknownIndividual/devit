@@ -76,7 +76,7 @@ export function OutOfCredits({ open, onClose, info }: { open: boolean; onClose: 
               action={<Link href="/pricing#topup" className="btn btn-primary h-8 px-3 text-[12.5px]">Top up <ArrowUpRight size={13} /></Link>} />
           )}
           {free && (
-            <Option icon={<Sparkles size={16} />} title="Go Pro" body="800 credits a month, priority models and build queue, and a custom domain."
+            <Option icon={<Sparkles size={16} />} title="Go Pro" body="800 credits a month (about 20 full builds), priority build queue, and a custom domain."
               action={<Link href="/pricing#pro" className="btn btn-outline h-8 px-3 text-[12.5px]">See Pro <ArrowUpRight size={13} /></Link>} />
           )}
           {info.signedIn && (

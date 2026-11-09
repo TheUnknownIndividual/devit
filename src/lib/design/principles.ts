@@ -29,13 +29,13 @@ export const ARCHETYPES = [
 export type ArchetypeId = (typeof ARCHETYPES)[number]["id"];
 
 /** The live widgets a section can hold, with what they need. Shown to the art director and the code writer. */
-export const WIDGET_DOC = `Live widgets (our code mounts them into an empty <div data-ss-widget="…"></div> you place; style the container, not the inside):
+export const WIDGET_DOC = `Live widgets (our code mounts them into an empty <div data-ss-widget="…"></div> you place). Style a widget's container only for spacing and size (width, max-width, margin, min-height); never give it display, grid, flex or columns (the widget lays out its own inside), and never style inside it:
 - buy: the swap box (wallet connect, amount, quote, buy/sell). Needs a container 320–560px wide. REQUIRED once when there is a token.
 - chart: live price chart. Full container width, give the container min-height:380px.
 - trades: live trades feed (needs ~300px height).
 - stats: 4 live stat tiles. Optional data-items="price,marketCap,holders,liquidity,volume24h,change24h,supply,curve" (pick up to 4).
 - ca: the contract address with a copy button. REQUIRED once when there is a token (the hero or the buy area).
-- wallet: a connect-wallet button (good in a header).
+- wallet: a connect-wallet button. Never in the header (the buy box connects wallets itself); only where a page needs a wallet without buying, e.g. beside a signup.
 - signup: email/wallet list form. data-fields="email|wallet|both" data-button="Join" data-success="You're in.".
 - whatif: "what if you bought $X at launch" calculator. data-amount="100".
 - leaderboard: top holders. data-count="10".
@@ -68,7 +68,13 @@ THE CODE CONTRACT (a sanitiser enforces it; anything else is deleted):
 - Define the design tokens first, exactly from the brief palette: .ss-code{--bg:…;--surface:…;--text:…;--muted:…;--border:…;--accent:…;--accent-text:…;--radius:…px;} and build every other colour from them (color-mix(in oklab, var(--accent) 30%, var(--bg)) etc.). Widgets read these tokens, so they must be right.
 - Images: only the URLs listed under IMAGES, used as <img src> or CSS background url(). Everything else visual you draw yourself: inline SVG (shapes, patterns, the mascot's silhouette, ornaments, icons, feTurbulence grain), CSS gradients, borders, type.
 - Links: only the real URLs listed under LINKS (https only). Anchor links to sections use #ID.
-- Motion: CSS only. Put data-ss-reveal on elements that should rise in on scroll (add style="--i:N" to stagger). Use @keyframes for one orchestrated hero moment on load. Wrap motion in @media (prefers-reduced-motion: no-preference) where it moves a lot.
+- Motion: CSS plus our motion hooks (the site must feel alive, never static; the hooks run on the live site and respect reduced motion):
+  - data-ss-reveal on content blocks that should enter on scroll (cards, panels, rows, figures), style="--i:N" to stagger siblings. Values: "" (the archetype's own entrance), "mask" (wipes up), "scale", "left", "right".
+  - data-ss-split on the hero headline and other display headlines: they come in word by word. Every section's h1/h2 is split automatically unless it is painted with background-clip:text.
+  - data-ss-tilt on the hero art frame (follows the pointer; don't also put data-ss-reveal on it). data-ss-parallax="0.15" on a decorative layer or image that should drift with the scroll (0.05–0.3).
+  - Hover states on every link, button and card, in the archetype's language (a stamp press, a scanline, an underline that draws, an invert, a shadow shift). Animate translate/scale/colour, not width/height.
+  - One orchestrated hero moment on load with @keyframes (the signature arriving), plus one ambient loop somewhere (a ticker crawl, a slow rotate, a blinking cursor) inside @media (prefers-reduced-motion: no-preference).
+  - The market pulse: when the token really trades while someone is on the page, the root gets data-ss-pulse="buy" (or "sell") for ~1.4s. React to it in the archetype's language, e.g. .ss-code[data-ss-pulse=buy] .x-logo{animation:x-kick .6s} or a ticker strip flashing the accent. Buys should be felt.
 ${WIDGET_DOC}
 
 CONTENT RULES:
@@ -84,6 +90,7 @@ DESIGN RULES (what separates a designed site from a generated one):
 - Atmosphere: backgrounds are never flat filler. Use texture appropriate to the archetype: grain (SVG feTurbulence), halftone, grids, scanlines, paper, gradient meshes, big faded type, pattern built from the motif.
 - Colour: dominant base + one sharp accent beats an even spread. Use the accent sparingly and on purpose.
 - Readable text, always (checked in a browser after you write): every text colour against what is directly behind it must reach 4.5:1 for body and small text, 3:1 for headings 24px and up. A section on the accent or any bright or light colour uses var(--accent-text) or a dark text colour for ALL its text, including small print, labels and buttons, never the page's light text colour. Don't fade readable text with opacity or translucent colours below that ratio. Purely decorative ghost words may be faint only if they carry aria-hidden="true".
+- The header/nav holds the logo, at most four section links, and exactly ONE action: a short "Buy" (or "Buy $TICKER") link (data-el="cta") to the buy section. Never two buttons side by side, never a wallet button there.
 - Details: custom list markers, rules and dividers in the archetype's language, hover states on links/buttons, focus-visible outlines, ::selection colour, a considered footer.
 - Banned: purple-to-blue gradient heroes, glassmorphism everywhere, generic "Feature 1/2/3" cards, centred-everything layouts, emoji as icons, Inter/Roboto/Arial look, lorem ipsum, stock-photo descriptions.
 
@@ -94,6 +101,7 @@ LAYOUT DISCIPLINE (a reviewer measures the rendered page for these; get them rig
 - Split heroes: display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) (or the ratio the brief wants); align-items:center; gap:clamp(32px,5vw,80px). Both columns share one vertical centre. The art sits in a frame inside its column (an element with aspect-ratio and position:relative); the shape behind the art (circle, blob, halo, spotlight) is a ::before of that frame, centred on it and sized from it (inset:-8% or similar), never positioned against the section, the page or the viewport. On mobile the columns stack: text first, art after, art max-width ~420px and centred.
 - The first screen works: at 1280×900 the hero's headline, subhead and main action are fully visible; hero min-height at most min(100svh, 920px).
 - Side-by-side panels (chart beside trades, card rows, stat tiles) line up: same top, and equal heights when they are siblings of a row (align-items:stretch with the inner box height:100%). Never wrap a widget in a box with a fixed height.
+- Text never sits on text. Labels drawn with ::before/::after (tabs, stamps, "EVIDENCE" tags) and absolutely placed captions get space reserved for them (padding or margin on their parent), never overlapping a kicker, heading or other copy.
 - Picture frames use aspect-ratio + object-fit:cover so they never jump or distort; galleries keep one aspect ratio per row (vary rotation, not size, for a collage feel).
 
 RESPONSIVE (it must never be wider than the screen):

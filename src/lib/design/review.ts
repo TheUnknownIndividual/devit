@@ -208,6 +208,118 @@ function lint(vw: number): string[] {
     if (broken) out.push(`At ${vw}px in #${hd.closest("section")?.getAttribute("data-block-id")}, the headline word "${broken}" breaks in the middle across two lines. Size the headline so its longest word fits the column (no overflow-wrap/word-break on display type).`);
   }
 
+  // 5c. Boxes squeezed so narrow that ordinary words break letter by letter (a grid track or flex item collapsed to a
+  // sliver: "P / r / i / c / e" stacked down a tile).
+  {
+    const seen = new Set<string>();
+    const walker = document.createTreeWalker(document.querySelector(".ss-code-body") ?? document.body, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const host = n.parentElement;
+      const sid = host?.closest("section")?.getAttribute("data-block-id");
+      if (!host || !sid || seen.has(sid) || host.closest("h1,h2,[data-el=headline]") || !visible(host)) continue;
+      for (const m of (n.textContent ?? "").matchAll(/[A-Za-z]{4,20}/g)) {
+        const range = document.createRange();
+        range.setStart(n, m.index ?? 0);
+        range.setEnd(n, (m.index ?? 0) + m[0].length);
+        const lines = new Set([...range.getClientRects()].filter((r) => r.width > 0.5).map((r) => Math.round(r.top)));
+        if (lines.size >= 3) {
+          seen.add(sid);
+          const box = host.getBoundingClientRect();
+          out.push(`At ${vw}px in #${sid}, ${name(host)} is squeezed to ${Math.round(box.width)}px wide, so the word "${m[0]}" breaks letter by letter over ${lines.size} lines. Its grid track or flex item has collapsed: give it a real width (minmax(<min>,1fr), flex-basis, or fewer columns).`);
+          break;
+        }
+      }
+    }
+  }
+
+  // 5d. Text drawn on top of other text: two pieces of copy (including ::before/::after labels such as an
+  // "EVIDENCE" tab pulled up with a negative top) whose lines overlap. Faint or aria-hidden ghost words don't count.
+  {
+    type Box = { l: number; t: number; r: number; b: number; label: string; el: Element };
+    const faint = (el: Element) => {
+      if (el.closest("[aria-hidden=true]")) return true;
+      let o = 1;
+      for (let a: Element | null = el; a; a = a.parentElement) o *= Number(getComputedStyle(a).opacity) || 0;
+      const m = /rgba?\(([^)]+)\)/.exec(getComputedStyle(el).color);
+      const alpha = m ? Number(m[1].split(/[ ,/]+/).filter(Boolean)[3] ?? 1) : 1;
+      return o * alpha < 0.4;
+    };
+    const bySection = new Map<string, Box[]>();
+    // A text rect is the font's whole content area, much taller than the glyphs (and than the line, when display
+    // type is set tight), so each line counts only as a band of 0.7em around its middle: stacked headlines with
+    // leading under 1 pass, a label sitting on a kicker doesn't.
+    const add = (sid: string, b: Box, fs: number) => {
+      const c = (b.t + b.b) / 2;
+      const l = bySection.get(sid) ?? [];
+      l.push({ ...b, t: c - fs * 0.35, b: c + fs * 0.35 });
+      bySection.set(sid, l);
+    };
+    // A stamp or sticker turned at an angle is meant to sit over the copy.
+    const tilted = (el: Element) => {
+      for (let a: Element | null = el, i = 0; a && i < 3; a = a.parentElement, i++) {
+        const m = /matrix\(([^)]+)\)/.exec(getComputedStyle(a).transform);
+        if (m && Math.abs(Number(m[1].split(",")[1])) > 0.02) return true;
+        if (getComputedStyle(a).rotate !== "none" && getComputedStyle(a).rotate !== "0deg") return true;
+      }
+      return false;
+    };
+    // What part of the page an element can show through: its overflow-clipping ancestors' boxes intersected.
+    const window_ = (el: Element) => {
+      let l = -1e9, t = -1e9, r = 1e9, b = 1e9;
+      for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+        const cs = getComputedStyle(a);
+        if (!/(hidden|clip|auto|scroll)/.test(cs.overflow + cs.overflowX + cs.overflowY)) continue;
+        const ar = a.getBoundingClientRect();
+        l = Math.max(l, ar.left); t = Math.max(t, ar.top); r = Math.min(r, ar.right); b = Math.min(b, ar.bottom);
+      }
+      return { l, t, r, b };
+    };
+    for (const el of document.querySelectorAll(".ss-code-body section[data-block-id] *")) {
+      const sid = el.closest("section")?.getAttribute("data-block-id");
+      if (!sid || el.closest("[data-ss-widget]") || getComputedStyle(el).position === "fixed" || !visible(el) || faint(el) || tilted(el)) continue;
+      // Answers inside a closed <details> aren't on the page.
+      const shut = el.closest("details:not([open])");
+      if (shut && !el.closest("summary")) continue;
+      const win = window_(el);
+      // The element's own text, line by line.
+      for (const t of el.childNodes) {
+        if (t.nodeType !== 3 || !(t.textContent ?? "").trim()) continue;
+        const range = document.createRange();
+        range.selectNodeContents(t);
+        const fs = parseFloat(getComputedStyle(el).fontSize) || 16;
+        for (const r of range.getClientRects()) if (r.width > 2 && r.height > 2 && r.right > win.l + 2 && r.left < win.r - 2 && r.bottom > win.t + 2 && r.top < win.b - 2) add(sid, { l: r.left, t: r.top, r: r.right, b: r.bottom, label: `"${(t.textContent ?? "").trim().slice(0, 32)}" (${name(el).split(">")[0]}>)`, el }, fs);
+      }
+      // Text in its ::before / ::after, placed from the pseudo-element's own offsets.
+      for (const ps of ["::before", "::after"]) {
+        const cs = getComputedStyle(el, ps);
+        const txt = /^["'](.+)["']$/.exec(cs.content)?.[1]?.trim();
+        if (!txt || cs.display === "none" || Number(cs.opacity) < 0.4) continue;
+        const er = el.getBoundingClientRect();
+        const fsz = parseFloat(cs.fontSize) || 12;
+        const w = txt.length * fsz * 0.62 + (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+        const h = (parseFloat(cs.lineHeight) || fsz * 1.25) + (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+        let l = er.left, t = er.top;
+        if (cs.position === "absolute" || cs.position === "fixed") {
+          if (cs.left !== "auto") l = er.left + parseFloat(cs.left);
+          else if (cs.right !== "auto") l = er.right - parseFloat(cs.right) - w;
+          if (cs.top !== "auto") t = er.top + parseFloat(cs.top);
+          else if (cs.bottom !== "auto") t = er.bottom - parseFloat(cs.bottom) - h;
+        } else continue; // in-flow pseudo text pushes its neighbours; it can't overlap them
+        add(sid, { l, t, r: l + w, b: t + h, label: `"${txt.slice(0, 32)}" (a ${ps} label on ${name(el).split(">")[0]}>)`, el }, fsz);
+      }
+    }
+    for (const [sid, boxes] of bySection) {
+      let hit: string | null = null;
+      for (let a = 0; a < boxes.length && !hit; a++) for (let b = a + 1; b < boxes.length; b++) {
+        const A = boxes[a], B = boxes[b];
+        if (A.el === B.el) continue;
+        const ox = Math.min(A.r, B.r) - Math.max(A.l, B.l), oy = Math.min(A.b, B.b) - Math.max(A.t, B.t);
+        if (ox > 4 && oy > 1) { hit = `${A.label} and ${B.label}`; break; }
+      }
+      if (hit) out.push(`At ${vw}px in #${sid}, text is drawn on top of other text: ${hit} overlap. Give the label its own space (padding or margin on its parent, or move it) so no copy sits on other copy.`);
+    }
+  }
+
   // 6. Hero fits the first screen at desktop.
   const hero = sections.find((s) => /hero/i.test(s.getAttribute("data-block-id") ?? "")) ?? sections[1];
   if (hero && vw >= 900) {

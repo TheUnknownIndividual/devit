@@ -14,6 +14,7 @@ import { BuyToasts, Leaderboard, Milestones, WhatIf } from "./fomo";
 
 export const WIDGETS = ["buy", "chart", "trades", "stats", "ca", "wallet", "signup", "whatif", "leaderboard", "milestones", "toasts"] as const;
 export type WidgetKind = (typeof WIDGETS)[number];
+const NUMERIC_BINDS = new Set(["price", "mcap", "marketCap", "liquidity", "volume", "holders", "change24h"]);
 const STAT_KEYS = new Set(["price", "marketCap", "holders", "liquidity", "volume24h", "change24h", "supply", "curve"]);
 
 interface Slot { el: HTMLElement; kind: WidgetKind; data: DOMStringMap }
@@ -42,6 +43,30 @@ function widget(s: Slot, spec: SiteSpec, mode: Mode, walletconnect: string | nul
   }
 }
 
+/** The number inside a formatted value ("$12.4K" -> 12.4), with what's around it. */
+function numberIn(text: string): { pre: string; n: number; post: string; dec: number; commas: boolean } | null {
+  const m = /^(\D*?)(-?\d[\d,]*(?:\.\d+)?)(.*)$/.exec(text.trim());
+  if (!m) return null;
+  const raw = m[2];
+  const n = Number(raw.replace(/,/g, ""));
+  return Number.isFinite(n) ? { pre: m[1], n, post: m[3], dec: (raw.split(".")[1] ?? "").length, commas: raw.includes(",") } : null;
+}
+
+/** Counts a live number up from zero the first time it appears, then lands on the exact text. */
+function countUp(el: HTMLElement, final: string): void {
+  const p = numberIn(final);
+  if (!p || p.n === 0) { el.textContent = final; return; }
+  const start = performance.now(), dur = 900;
+  const fmt = (v: number) => p.pre + (p.commas ? v.toLocaleString("en-US", { minimumFractionDigits: p.dec, maximumFractionDigits: p.dec }) : v.toFixed(p.dec)) + p.post;
+  const step = (now: number) => {
+    const t = Math.min(1, (now - start) / dur);
+    if (t >= 1) { el.textContent = final; return; }
+    el.textContent = fmt(p.n * (1 - (1 - t) ** 3));
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
 /** Mounts the live widgets into a generated site's slots and keeps data-ss-bind numbers current. */
 export function CodeIslands({ rootId, spec, mode, walletconnect, privy }: { rootId: string; spec: SiteSpec; mode: Mode; walletconnect: string | null; privy: string | null }) {
   const [slots, setSlots] = useState<Slot[]>([]);
@@ -62,15 +87,7 @@ export function CodeIslands({ rootId, spec, mode, walletconnect, privy }: { root
     return () => mo.disconnect();
   }, [rootId, spec.blocks]);
 
-  // Scroll reveal for [data-ss-reveal] (live view only).
-  useEffect(() => {
-    const root = document.getElementById(rootId);
-    if (!root || mode !== "live") return;
-    const els = [...root.querySelectorAll<HTMLElement>("[data-ss-reveal]")];
-    const io = new IntersectionObserver((es) => { for (const e of es) if (e.isIntersecting) { e.target.classList.add("is-in"); io.unobserve(e.target); } }, { rootMargin: "0px 0px -8% 0px" });
-    els.forEach((el) => io.observe(el));
-    return () => io.disconnect();
-  }, [rootId, mode, spec.blocks]);
+  // Scroll reveals and the rest of the motion live in CodeMotion (client/motion.tsx).
 
   // Live numbers written straight into the model's own markup.
   useEffect(() => {
@@ -82,11 +99,24 @@ export function CodeIslands({ rootId, spec, mode, walletconnect, privy }: { root
       holders: num(t?.holders), change24h: t?.change24h != null ? `${t.change24h >= 0 ? "+" : ""}${t.change24h.toFixed(2)}%` : "—",
       symbol: `$${spec.ticker}`, name: spec.name, ca: t?.address ?? "",
     };
+    const moving = mode === "live" && !matchMedia("(prefers-reduced-motion: reduce)").matches;
     for (const el of root.querySelectorAll<HTMLElement>("[data-ss-bind]")) {
       const k = el.dataset.ssBind ?? "";
-      if (k in val && el.textContent !== val[k]) el.textContent = val[k];
+      if (!(k in val) || el.textContent === val[k]) continue;
+      const numeric = NUMERIC_BINDS.has(k);
+      const before = numeric ? numberIn(el.textContent ?? "") : null;
+      const after = numeric ? numberIn(val[k]) : null;
+      if (moving && after && !el.dataset.ssCounted && val[k] !== "—") { el.dataset.ssCounted = "1"; countUp(el, val[k]); continue; }
+      el.textContent = val[k];
+      // A number that moved flashes green or red, like a terminal tick.
+      if (moving && before && after && before.n !== after.n) {
+        const cls = after.n > before.n ? "ss-flash-up" : "ss-flash-down";
+        el.classList.remove("ss-flash-up", "ss-flash-down");
+        void el.offsetWidth;
+        el.classList.add(cls);
+      }
     }
-  }, [rootId, live, spec.ticker, spec.name, spec.blocks]);
+  }, [rootId, live, mode, spec.ticker, spec.name, spec.blocks]);
 
   return <>{slots.map((s, i) => createPortal(widget(s, spec, mode, walletconnect, privy), s.el, `${s.kind}:${i}`))}</>;
 }

@@ -23,17 +23,18 @@ export interface Plan {
   perks: string[];
 }
 
-/** Rough sizes, for the copy: a site build is 3-8 credits, a chat edit well under 1 on small models. */
-export const TYPICAL = { buildLow: 3, buildHigh: 8, edit: 0.5 };
+/** Rough sizes, for the copy, measured from real builds (Nov 2026): a fully designed site is 30-45 credits on Claude,
+ *  a chat edit or comment a few. */
+export const TYPICAL = { buildLow: 30, buildHigh: 45, edit: 3 };
 
 export const PLANS: Plan[] = [
   {
     id: "free", name: "Free", blurb: "Launch a site and see it live.", monthly: 0, yearly: 0, credits: 15, per: "day", seats: 1,
-    perks: ["15 AI credits a day (about 3 builds plus edits)", "Hosting on a devit.lol subdomain", "“Built with devit” footer", "Unlimited use on your own model key"],
+    perks: ["15 AI credits a day (one full site build a day)", "Hosting on a devit.lol subdomain", "“Built with devit” footer", "Unlimited use on your own model key"],
   },
   {
     id: "pro", name: "Pro", blurb: "For teams shipping a token for real.", monthly: 20, yearly: 16, credits: 800, per: "month", seats: 1,
-    perks: ["800 AI credits a month (100+ builds, or thousands of edits)", "Custom domain, or buy one in the builder", "No devit footer", "Private projects", "Priority models and build queue"],
+    perks: ["800 AI credits a month (about 20 full builds, or a few hundred edits)", "Custom domain, or buy one in the builder", "No devit footer", "Private projects", "Priority models and build queue"],
   },
   {
     id: "team", name: "Team", blurb: "One workspace for the whole crew.", monthly: 49, yearly: 39, credits: 2000, per: "month", seats: 5,
@@ -73,7 +74,7 @@ export const START_CREDITS = { build: 4, edit: 0.5 };
 /** Rows of the comparison table: a label and each plan's value (true = included, false = not, text = the detail). */
 export const COMPARE: Array<{ label: string; values: Record<PlanId, string | boolean> }> = [
   { label: "AI credits", values: { free: "15 a day", pro: "800 a month", team: "2,000 a month, shared" } },
-  { label: "Site builds", values: { free: "About 3 a day", pro: "100+ a month", team: "250+ a month" } },
+  { label: "Site builds", values: { free: "1 a day", pro: "About 20 a month", team: "About 50 a month" } },
   { label: "Edits and comments", values: { free: "Use credits", pro: "Use credits", team: "Use credits" } },
   { label: "On your own model key", values: { free: "Unlimited", pro: "Unlimited", team: "Unlimited" } },
   { label: "Credit packs", values: { free: true, pro: true, team: true } },
@@ -86,7 +87,7 @@ export const COMPARE: Array<{ label: string; values: Record<PlanId, string | boo
 ];
 
 export const FAQ: Array<{ q: string; a: string }> = [
-  { q: "What's an AI credit?", a: "One credit is one cent of what the AI models cost us, counted from each reply. Writing a whole site takes about 3 to 8 credits, depending on the model; a chat edit or a comment usually takes well under one. Publishing, domains, restyles from the menu, undo and the live data on your site never use credits." },
+  { q: "What's an AI credit?", a: "One credit is one cent of what the AI models cost us, counted from each reply. Writing a whole designed site takes about 30 to 45 credits; a chat edit or a comment usually takes a few. Publishing, domains, restyles from the menu, undo and the live data on your site never use credits." },
   { q: "Why credits and not unlimited?", a: "So the price stays honest. Unlimited plans either cap you quietly or charge everyone for the few who script them. With credits you see exactly what's left, the bigger models simply use a little more, and nothing gets throttled behind your back." },
   { q: "What if I run out?", a: "Free credits come back every day (UTC). Pro and Team credits come back every 30 days of your plan. In between, a credit pack tops you up, or add your own model key in Settings and keep going for free." },
   { q: "How do I pay?", a: "In crypto through NEAR Intents: ETH, SOL, BTC, USDC, NEAR and more, 18 coins on 13 chains. You get a one-time deposit address; send the amount shown and the plan turns on once it lands. No card, no subscription to cancel." },
