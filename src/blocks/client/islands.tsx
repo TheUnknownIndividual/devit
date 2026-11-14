@@ -102,12 +102,16 @@ export function CodeIslands({ rootId, spec, mode, walletconnect, privy }: { root
     const moving = mode === "live" && !matchMedia("(prefers-reduced-motion: reduce)").matches;
     for (const el of root.querySelectorAll<HTMLElement>("[data-ss-bind]")) {
       const k = el.dataset.ssBind ?? "";
-      if (!(k in val) || el.textContent === val[k]) continue;
+      if (!(k in val)) continue;
+      // The value carries its own "$" ($0.0002, $BATMAN); a site that wrote "$" just before the slot showed "$$0.0002".
+      const prev = el.previousSibling;
+      const v = prev?.nodeType === Node.TEXT_NODE && /\$\s*$/.test(prev.textContent ?? "") ? val[k].replace(/^\$/, "") : val[k];
+      if (el.textContent === v) continue;
       const numeric = NUMERIC_BINDS.has(k);
       const before = numeric ? numberIn(el.textContent ?? "") : null;
-      const after = numeric ? numberIn(val[k]) : null;
-      if (moving && after && !el.dataset.ssCounted && val[k] !== "—") { el.dataset.ssCounted = "1"; countUp(el, val[k]); continue; }
-      el.textContent = val[k];
+      const after = numeric ? numberIn(v) : null;
+      if (moving && after && !el.dataset.ssCounted && v !== "—") { el.dataset.ssCounted = "1"; countUp(el, v); continue; }
+      el.textContent = v;
       // A number that moved flashes green or red, like a terminal tick.
       if (moving && before && after && before.n !== after.n) {
         const cls = after.n > before.n ? "ss-flash-up" : "ss-flash-down";

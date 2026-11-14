@@ -305,10 +305,48 @@ export function Chart({ token, mode, dark }: { token: TokenInfo | null; mode: Mo
   // A pool only GeckoTerminal lists (a launchpad curve DexScreener doesn't index) has no DexScreener link: use its embed.
   if (!token.pairUrl) {
     const net = { ethereum: "eth", solana: "solana", near: "near", base: "base", bsc: "bsc", robinhood: "robinhood" }[token.chain];
-    return <div className="ss-chart"><iframe src={`https://www.geckoterminal.com/${net}/pools/${token.pairAddress}?embed=1&info=0&swaps=0&light_chart=${dark ? 0 : 1}`} title={`${token.symbol} chart`} loading="lazy" /></div>;
+    return <ChartFrame src={`https://www.geckoterminal.com/${net}/pools/${token.pairAddress}?embed=1&info=0&swaps=0&light_chart=${dark ? 0 : 1}`} title={`${token.symbol} chart`} />;
   }
   const src = `https://dexscreener.com/${token.chain}/${token.pairAddress}?embed=1&loadChartSettings=0&trades=0&tabs=0&info=0&chartLeftToolbar=0&chartTheme=${dark ? "dark" : "light"}&theme=${dark ? "dark" : "light"}&chartStyle=1&chartType=usd&interval=15`;
-  return <div className="ss-chart"><iframe src={src} title={`${token.symbol} chart`} loading="lazy" /></div>;
+  return <ChartFrame src={src} title={`${token.symbol} chart`} />;
+}
+
+/**
+ * The live chart embed is a whole trading app (about 140 requests, 50 MB, close to a second of main-thread work while it
+ * starts). With loading="lazy" it started exactly while the visitor scrolled towards it, and the page stuttered. It now
+ * starts once the chart is on screen and the scrolling has stopped (or on a tap), in an idle moment.
+ */
+function ChartFrame({ src, title }: { src: string; title: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || on) return;
+    let seen = false;
+    let still: ReturnType<typeof setTimeout> | undefined;
+    const go = () => {
+      const idle = (window as Window & { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+      if (idle) idle(() => setOn(true), { timeout: 1200 });
+      else setOn(true);
+    };
+    const settle = () => { clearTimeout(still); if (seen) still = setTimeout(go, 350); };
+    const io = new IntersectionObserver(([e]) => { seen = e.isIntersecting; settle(); }, { threshold: 0.25 });
+    io.observe(el);
+    addEventListener("scroll", settle, { passive: true });
+    return () => { io.disconnect(); removeEventListener("scroll", settle); clearTimeout(still); };
+  }, [on]);
+  return (
+    <div className="ss-chart" ref={box}>
+      {on ? <iframe src={src} title={title} /> : (
+        <button type="button" className="ss-chart-ph" onClick={() => setOn(true)} style={{ width: "100%", border: 0, background: "transparent", cursor: "pointer", font: "inherit" }}>
+          <svg viewBox="0 0 400 140" preserveAspectRatio="none" style={{ position: "absolute", inset: "20% 0 20%", width: "100%", height: "60%", opacity: 0.35 }} aria-hidden="true">
+            <path d="M0 110 L40 96 L80 104 L120 70 L160 80 L200 52 L240 64 L280 30 L320 44 L360 18 L400 26" fill="none" stroke="var(--accent)" strokeWidth="3" />
+          </svg>
+          <span style={{ position: "relative" }}>Loading the live chart…</span>
+        </button>
+      )}
+    </div>
+  );
 }
 
 // ---------- buy ----------
@@ -424,7 +462,9 @@ export function BuyBox({ chain, token, ticker, presets }: { chain: Chain; token:
   const sub = (c: PayCoin) => (c.how === "intents" ? `on ${c.chain}, by deposit` : `on ${c.chain}`);
 
   return (
-    <div className="ss-card ss-buy" data-el="buybox" onInputCapture={() => { if (!held0 && !picked) setHeld0(autoNow); }}>
+    // Settling the auto pick when the buyer first touches the box, not on their first keystroke: a state change on the
+    // box during that input event dropped the keystroke (typing "5" left "1"; the first Backspace did nothing).
+    <div className="ss-card ss-buy" data-el="buybox" onFocusCapture={() => { if (!held0 && !picked) setHeld0(autoNow); }}>
       {/* Which wallet is connected, with Switch account and Disconnect behind it. Also resumes a returning wallet. */}
       <div className="ss-buy-acct"><WalletButton chain={chain} quiet /></div>
       {canSell && (
@@ -599,7 +639,8 @@ function SameChain({ chain, token, ticker, presets, onUseEvm }: { chain: Chain; 
       )}
       {handoff && (
         <a className={q?.swap || (!connected && !viaPad) ? "ss-note" : "ss-btn"} style={q?.swap || (!connected && !viaPad) ? { display: "block", marginTop: 10, textAlign: "center", textDecoration: "underline" } : { width: "100%", marginTop: 14 }} href={handoff} target="_blank" rel="noreferrer">
-          {!q?.swap && <ArrowRightLeft size={16} />} {q?.swap || !connected ? `Or buy on ${handoffName}` : `Buy $${ticker} on ${handoffName}`}
+          {/* The icon belongs to the button form only: in the small text link it sat alone on a line of its own. */}
+          {!q?.swap && (connected || viaPad) && <ArrowRightLeft size={16} />} {q?.swap || !connected ? `Or buy on ${handoffName}` : `Buy $${ticker} on ${handoffName}`}
         </a>
       )}
     </>

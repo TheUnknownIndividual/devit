@@ -151,6 +151,7 @@ export const SITE_CSS = `
 .ss-chart-ph{height:100%;display:grid;place-items:center;color:var(--muted);font-size:14px;position:relative}
 .ss-trades{width:100%;border-collapse:collapse;font-size:14px}
 .ss-trades td{padding:12px 8px;border-top:1px solid var(--border)}
+.ss-trades td:last-child{white-space:nowrap}
 .ss-trades tr:first-child td{border-top:0}
 
 /* how, roadmap, faq */

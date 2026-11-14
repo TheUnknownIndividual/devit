@@ -41,7 +41,7 @@ export const WIDGET_DOC = `Live widgets (our code mounts them into an empty <div
 - leaderboard: top holders. data-count="10".
 - milestones: market-cap milestones progress.
 - toasts: small live buy notifications in a corner (place once, anywhere).
-Live numbers inline: <span data-ss-bind="price|mcap|liquidity|volume|holders|change24h|symbol|name|ca">fallback</span> (text is replaced live).`;
+Live numbers inline: <span data-ss-bind="price|mcap|liquidity|volume|holders|change24h|symbol|name|ca">fallback</span> (text is replaced live; money values and symbol already start with "$", so never write a "$" in front of the slot).`;
 
 /** The code writer's system prompt. */
 export function codegenSystem(): string {
@@ -88,7 +88,7 @@ DESIGN RULES (what separates a designed site from a generated one):
 - One signature element (from the brief) that someone would screenshot. Make it big and make it good: real SVG or CSS craft, not an emoji.
 - Typography carries the design: a dramatic scale with clamp() (hero headline often 12–20vw on mobile, up to 9–14rem desktop where the concept allows), tight leading on display, deliberate letter-spacing, real hierarchy. Never the same size for everything.
 - Layout: vary rhythm section to section (full-bleed, split, offset grid, overlap, edge-to-edge type, framed panel). Avoid rows of three identical rounded cards; when content is a list, find the archetype's own form (index table, numbered plates, ticker, panels, receipts, specimen labels…).
-- Atmosphere: backgrounds are never flat filler. Use texture appropriate to the archetype: grain (SVG feTurbulence), halftone, grids, scanlines, paper, gradient meshes, big faded type, pattern built from the motif.
+- Atmosphere: backgrounds are never flat filler. Use texture appropriate to the archetype: grain (SVG feTurbulence), halftone, grids, scanlines, paper, gradient meshes, big faded type, pattern built from the motif. Texture must stay cheap to scroll: never put mix-blend-mode on a position:fixed layer or on .ss-code::before/::after (the browser re-blends the whole page every frame; devit strips it), never backdrop-filter on anything bigger than a header bar, no infinite animations on large areas. Grain goes on a section (position:absolute inside it) or as a plain see-through fixed layer; an inline SVG in url() is percent-encoded (url("data:image/svg+xml,%3Csvg …%3E")).
 - Colour: dominant base + one sharp accent beats an even spread. Use the accent sparingly and on purpose.
 - Readable text, always (checked in a browser after you write): every text colour against what is directly behind it must reach 4.5:1 for body and small text, 3:1 for headings 24px and up. A section on the accent or any bright or light colour uses var(--accent-text) or a dark text colour for ALL its text, including small print, labels and buttons, never the page's light text colour. Don't fade readable text with opacity or translucent colours below that ratio. Purely decorative ghost words may be faint only if they carry aria-hidden="true".
 - The header/nav holds the logo, at most four section links, and exactly ONE action: a short "Buy" (or "Buy $TICKER") link (data-el="cta") to the buy section. Never two buttons side by side, never a wallet button there.

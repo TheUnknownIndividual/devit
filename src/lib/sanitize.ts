@@ -100,7 +100,34 @@ function cleanUrls(css: string, ctx: SanitizeCtx): string {
   return css.replace(/url\(\s*(['"]?)(.*?)\1\s*\)/gi, (m, _q, u: string) => {
     if (/^#[A-Za-z0-9_-]+$/.test(u)) return m; // SVG filter/clip references
     if (/^https:\/\/fonts\.gstatic\.com\//i.test(u)) return m;
-    return imageOk(u, ctx) ? `url("${u.replace(/["\\\n]/g, "")}")` : "none";
+    if (!imageOk(u, ctx)) return "none";
+    // An inline SVG (grain, halftone, a pattern) keeps its markup: the stylesheet pass turned "<" into the CSS escape
+    // "\3c ", which the strip below would break into "3c " and leave a picture that never draws. Percent-encode it.
+    // Stylesheets saved before this fix hold the broken "3c svg" form: mend it too.
+    if (/^data:image\/svg\+xml/i.test(u.trim())) {
+      u = u.replace(/\\3c ?/gi, "%3C").replace(/</g, "%3C").replace(/>/g, "%3E").replace(/#/g, "%23").replace(/"/g, "'")
+        .replace(/(,|%3E)3c ?(?=[a-z/!?])/gi, "$1%3C").replace(/%(?![0-9a-f]{2})/gi, "%25");
+    }
+    return `url("${u.replace(/["\\\n]/g, "")}")`;
+  });
+}
+
+/**
+ * Layers that blend with everything under them while staying put on screen (a fixed grain or glow overlay with
+ * mix-blend-mode, or one hung on the page root) make the browser re-blend the whole page on every scrolled frame:
+ * measured on a grain overlay, 20% of frames dropped while scrolling, 0% with the blend off. They keep their texture as a
+ * plain see-through layer (at half the opacity, about what the blend showed).
+ */
+function calmLayers(css: string): string {
+  return css.replace(/([^{}]*)\{([^{}]*)\}/g, (m, sel: string, body: string) => {
+    if (!/mix-blend-mode\s*:\s*(?!normal\b)[a-z-]+/i.test(body)) return m;
+    const fixed = /(^|;)\s*position\s*:\s*fixed\b/i.test(body);
+    const root = sel.split(",").some((x) => /^\s*\.ss-code\s*:{1,2}(before|after)\s*$/i.test(x));
+    if (!fixed && !root) return m;
+    const calm = body
+      .replace(/(^|;)\s*mix-blend-mode\s*:[^;]*/gi, "$1")
+      .replace(/(^|;)(\s*opacity\s*:\s*)(\d*\.?\d+)/i, (_x, a: string, b: string, v: string) => `${a}${b}${+(Number(v) * 0.5).toFixed(3)}`);
+    return `${sel}{${calm}}`;
   });
 }
 
@@ -127,6 +154,7 @@ export function sanitizeCss(css: string, ctx: SanitizeCtx = {}): string {
   // Declarations, wherever they sit: drop the dangerous ones whole.
   out = out.replace(/([{;])\s*([^{};]*?(expression\s*\(|javascript:|vbscript:|-moz-binding|behavior\s*:)[^{};]*)(?=[;}])/gi, "$1");
   out = cleanUrls(out, ctx);
+  out = calmLayers(out);
   return out.slice(0, 120_000);
 }
 
