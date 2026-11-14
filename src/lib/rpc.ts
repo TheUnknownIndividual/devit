@@ -60,9 +60,15 @@ export function chainUrls(chain: Chain): string[] {
   return [...list.filter((u) => !coolingNow(u)), ...list.filter(coolingNow)];
 }
 
-/** A failure that another provider won't have: the call itself is wrong (a revert, a bad param). */
-const callError = (e: { code?: number; message?: string }) =>
-  !/limit|capacity|exceeded|rate|too many|unauthori[sz]ed|forbidden|api key|credits|quota|timeout|unavailable|internal/i.test(e.message ?? "") && e.code !== 429 && e.code !== -32005;
+/**
+ * A failure that another provider won't fix: the call itself is wrong (a revert, a bad param, a NEAR account or key
+ * that doesn't exist). Anything else (over a limit, network not enabled on that key, a server fault) tries the next one.
+ */
+const callError = (e: { code?: number; message?: string }) => {
+  const t = JSON.stringify(e);
+  return /revert|out of gas|invalid (argument|param)|HANDLER_ERROR|UNKNOWN_(ACCOUNT|ACCESS_KEY|TOKEN)|does not exist/i.test(t)
+    && !/limit|capacity|exceeded|too many|not enabled|unauthori[sz]ed|forbidden|api key|quota/i.test(t);
+};
 
 /**
  * One JSON-RPC call, tried on each endpoint in turn until one answers. Returns the result, or undefined when none
