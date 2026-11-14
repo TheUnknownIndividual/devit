@@ -445,7 +445,8 @@ export function BuyBox({ chain, token, ticker, presets }: { chain: Chain; token:
     if (c.how !== "evm" || !st) return null;
     const row = st.coins.find((x) => x.key === c.key);
     const x = xcoin(c.key);
-    return row && x ? fromUnits(row.balance, x.decimals) : 0;
+    if (!row || !x) return 0;
+    return row.balance == null ? null : fromUnits(row.balance, x.decimals);
   };
   const usdOf = (c: PayCoin) => (bal(c) ?? 0) * (st?.coins.find((x) => x.key === c.key)?.price ?? 0);
   // Coins the wallet holds come first; then the list in order. Selling lists only what can be received back.

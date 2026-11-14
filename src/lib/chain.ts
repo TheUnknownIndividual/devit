@@ -42,12 +42,34 @@ export const DEFAULT_RPC: Record<Chain, string> = {
   robinhood: process.env.ROBINHOOD_RPC_URL || "https://rpc.mainnet.chain.robinhood.com",
 };
 
-/** The RPC for a read: the project owner's own (Settings → API keys) when set, else ours. */
+// Public endpoints for when every keyed one is over its limit (see lib/rpc.ts, which benches those).
+const PUBLIC_RPC: Record<Chain, string> = {
+  near: "https://free.rpc.fastnear.com",
+  solana: "https://api.mainnet-beta.solana.com",
+  ethereum: "https://ethereum-rpc.publicnode.com",
+  base: "https://base-rpc.publicnode.com",
+  bsc: "https://bsc-rpc.publicnode.com",
+  robinhood: "https://rpc.mainnet.chain.robinhood.com",
+};
+const benched = (url: string) => ((globalThis as unknown as { __devitRpcCool?: Map<string, number> }).__devitRpcCool?.get(url) ?? 0) > Date.now();
+
+/** The RPC for a read: the project owner's own (Settings → API keys) when set, else ours; one that's over its limit is skipped. */
 export function rpcFor(chain: Chain): string {
   const k = ownerKeys();
-  if (k.rpc?.[chain]) return k.rpc[chain]!;
-  if (chain === "solana" && k.helius) return `https://mainnet.helius-rpc.com/?api-key=${k.helius}`;
-  return alchemyUrl(chain, k.alchemy) ?? DEFAULT_RPC[chain];
+  const list = [
+    k.rpc?.[chain],
+    chain === "solana" && k.helius ? `https://mainnet.helius-rpc.com/?api-key=${k.helius}` : null,
+    alchemyUrl(chain, k.alchemy),
+    DEFAULT_RPC[chain],
+    PUBLIC_RPC[chain],
+  ].filter((u): u is string => !!u);
+  return list.find((u) => !benched(u)) ?? list[0];
+}
+
+/** Every configured RPC for a chain, best first (lib/rpc.ts adds public ones and tries them in turn). */
+export function rpcsFor(chain: Chain): string[] {
+  const k = ownerKeys();
+  return [...new Set([k.rpc?.[chain], chain === "solana" && k.helius ? `https://mainnet.helius-rpc.com/?api-key=${k.helius}` : null, alchemyUrl(chain, k.alchemy), DEFAULT_RPC[chain], PUBLIC_RPC[chain]].filter((u): u is string => !!u))];
 }
 
 const isHelius = (url: string) => /\.helius-rpc\.com\//.test(url);

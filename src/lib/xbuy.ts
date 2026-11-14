@@ -1,4 +1,4 @@
-import { rpcFor } from "./chain";
+import { chainUrls, evmUrls, rpcCall } from "./rpc";
 import { oneClickTokens } from "./intents";
 import { b58encode } from "./solana";
 import type { NearTx } from "./swap";
@@ -22,13 +22,7 @@ export const isEthAccount = (a: string) => /^0x[0-9a-f]{40}$/.test(a);
 // ---------- NEAR reads ----------
 
 async function nearRpc<T>(method: string, params: unknown): Promise<T | null> {
-  try {
-    const r = await fetch(rpcFor("near"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }), cache: "no-store", signal: AbortSignal.timeout(TIMEOUT) });
-    const j = (await r.json()) as { result?: T; error?: unknown };
-    return j.result ?? null;
-  } catch {
-    return null;
-  }
+  return (await rpcCall<T>(chainUrls("near"), method, params, TIMEOUT)) ?? null;
 }
 
 export async function nearView<T>(contract: string, method: string, args: Record<string, unknown>): Promise<T | null> {
@@ -77,26 +71,22 @@ async function onboarded(account: string, hex: string | null): Promise<boolean> 
 
 // ---------- Ethereum-side balances ----------
 
-async function evmCall(rpc: string, method: string, params: unknown[]): Promise<string | null> {
-  try {
-    const r = await fetch(rpc, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }), cache: "no-store", signal: AbortSignal.timeout(5000) });
-    return ((await r.json()) as { result?: string }).result ?? null;
-  } catch {
-    return null;
-  }
-}
-function rpcOf(chainId: string, fallback: string): string {
-  if (chainId === "0x1") return rpcFor("ethereum");
-  if (chainId === "0x2105") return rpcFor("base");
-  if (chainId === "0x1237") return rpcFor("robinhood");
-  return fallback;
+/** A wallet's balance of one Pay-with coin, from whichever provider answers; null when none could (never a made-up 0). */
+async function coinBalance(c: (typeof XCOINS)[number], account: string, pad: string): Promise<string | null> {
+  const urls = evmUrls(c.chainId, c.rpc);
+  const v = c.contract
+    ? await rpcCall<string>(urls, "eth_call", [{ to: c.contract, data: "0x70a08231" + pad }, "latest"])
+    : await rpcCall<string>(urls, "eth_getBalance", [account, "latest"]);
+  if (v === undefined) return null;
+  try { return v && v !== "0x" ? BigInt(v).toString() : "0"; } catch { return null; }
 }
 
 // ---------- state ----------
 
 export interface XState {
   account: string;
-  coins: Array<{ key: string; balance: string; price: number }>;
+  /** balance is null when no provider could read it: show "couldn't read", not 0. */
+  coins: Array<{ key: string; balance: string | null; price: number }>;
   token: { direct: boolean; decimals: number; price: number | null };
   near: { native: string; token: string; wnear: string; onboarded: boolean; relayerKey: string | null };
 }
@@ -118,11 +108,7 @@ export async function xState(evm: string, token: string): Promise<XState> {
   const [{ list, hit }, rk, coins, native, tok, wn, decimals] = await Promise.all([
     listed(token),
     relayerKey(),
-    Promise.all(XCOINS.map(async (c) => {
-      const rpc = rpcOf(c.chainId, c.rpc);
-      const v = c.contract ? await evmCall(rpc, "eth_call", [{ to: c.contract, data: "0x70a08231" + pad }, "latest"]) : await evmCall(rpc, "eth_getBalance", [account, "latest"]);
-      return { key: c.key, balance: v && v !== "0x" ? BigInt(v).toString() : "0" };
-    })),
+    Promise.all(XCOINS.map(async (c) => ({ key: c.key, balance: await coinBalance(c, account, pad) }))),
     nativeBalance(account),
     ftBalance(token, account),
     ftBalance(WNEAR, account),

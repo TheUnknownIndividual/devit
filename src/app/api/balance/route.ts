@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { DEFAULT_RPC } from "@/lib/chain";
+import { chainUrls, rpcCall } from "@/lib/rpc";
 import { CHAINS, type Chain } from "@/lib/spec";
 
 // The connected visitor's native balance, for the wallet chip on a generated site. Read on the server so the site
@@ -15,43 +15,16 @@ const VALID: Record<Chain, RegExp> = {
   near: /^(?=.{2,64}$)([a-z\d]+[-_])*[a-z\d]+(\.([a-z\d]+[-_])*[a-z\d]+)*$/,
 };
 
-async function rpc<T>(url: string, method: string, params: unknown): Promise<T> {
-  const r = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-    cache: "no-store",
-    signal: AbortSignal.timeout(6000),
-  });
-  const j = (await r.json()) as { result?: T; error?: { message?: string } };
-  if (j.error || j.result === undefined) throw new Error(j.error?.message || "no result");
-  return j.result;
-}
-
-// Public endpoints to fall back on when the configured RPC is down or out of credit.
-const FALLBACK: Record<Chain, string> = {
-  ethereum: "https://ethereum-rpc.publicnode.com",
-  base: "https://base-rpc.publicnode.com",
-  bsc: "https://bsc-rpc.publicnode.com",
-  robinhood: "https://robinhood-rpc.publicnode.com",
-  solana: "https://api.mainnet-beta.solana.com",
-  near: "https://free.rpc.fastnear.com",
-};
-
+// Every provider for the chain in turn (owner key, our Alchemy, public), skipping ones that are over their limit.
 async function read(chain: Chain, address: string): Promise<number> {
-  try { return await readFrom(DEFAULT_RPC[chain], chain, address); } catch (e) {
-    if (DEFAULT_RPC[chain] === FALLBACK[chain]) throw e;
-    return readFrom(FALLBACK[chain], chain, address);
-  }
-}
-
-async function readFrom(url: string, chain: Chain, address: string): Promise<number> {
-  if (chain === "solana") return (await rpc<{ value: number }>(url, "getBalance", [address, { commitment: "confirmed" }])).value / 1e9;
+  const urls = chainUrls(chain);
+  const got = <T,>(method: string, params: unknown) => rpcCall<T>(urls, method, params, 6000).then((v) => { if (v === undefined) throw new Error("no result"); return v; });
+  if (chain === "solana") return (await got<{ value: number }>("getBalance", [address, { commitment: "confirmed" }])).value / 1e9;
   if (chain === "near") {
-    const r = await rpc<{ amount: string }>(url, "query", { request_type: "view_account", finality: "final", account_id: address });
+    const r = await got<{ amount: string }>("query", { request_type: "view_account", finality: "final", account_id: address });
     return Number(BigInt(r.amount) / 10n ** 18n) / 1e6;
   }
-  return Number(BigInt(await rpc<string>(url, "eth_getBalance", [address, "latest"])) / 10n ** 12n) / 1e6;
+  return Number(BigInt(await got<string>("eth_getBalance", [address, "latest"])) / 10n ** 12n) / 1e6;
 }
 
 export async function GET(req: Request) {

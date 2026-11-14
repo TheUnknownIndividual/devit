@@ -17,7 +17,8 @@ import { Result, Review, Sheet, StepList, useFlow, Working, type Step, type Step
 
 export interface XState {
   account: string;
-  coins: Array<{ key: string; balance: string; price: number }>;
+  /** balance is null when the server couldn't read it (every provider down): show "—", never 0. */
+  coins: Array<{ key: string; balance: string | null; price: number }>;
   token: { direct: boolean; decimals: number; price: number | null };
   near: { native: string; token: string; wnear: string; onboarded: boolean; relayerKey: string | null };
   sponsor: boolean;
@@ -184,8 +185,9 @@ export function useXState(evm: string | null, token: TokenInfo | null): { st: XS
 
 /** The coin a connected Ethereum wallet would pay with: what it holds most of (by dollar value), else ETH on its chain. */
 export function bestCoin(st: XState | null, chainId: string | undefined): string {
-  const best = st ? [...st.coins].sort((a, b) => fromUnits(b.balance, xcoin(b.key)!.decimals) * b.price - fromUnits(a.balance, xcoin(a.key)!.decimals) * a.price)[0] : null;
-  if (best && BigInt(best.balance) > 0n) return best.key;
+  const usd = (c: XState["coins"][number]) => fromUnits(c.balance ?? "0", xcoin(c.key)!.decimals) * c.price;
+  const best = st ? [...st.coins].sort((a, b) => usd(b) - usd(a))[0] : null;
+  if (best && BigInt(best.balance ?? "0") > 0n) return best.key;
   return XCOINS.find((c) => c.symbol === c.native && c.chainId === chainId)?.key ?? "eth:ETH";
 }
 
@@ -228,9 +230,11 @@ export function WalletTrade({ token, ticker, side, coinKey, st, reload }: { toke
     const n = a / unitPrice;
     return toUnits(n.toFixed(Math.min(unitDec, n < 1 ? 12 : 6)), unitDec);
   }, [amount, inUsd, unitDec, unitPrice]);
+  // Unknown (no provider answered) is not zero: no "More than you hold", no Max, a "—" instead of a number.
+  const known = side === "sell" || (coinRow != null && coinRow.balance != null);
   const balance = side === "buy" ? BigInt(coinRow?.balance ?? "0") : BigInt(st?.near.token ?? "0");
   const spendable = side === "buy" && coin?.reserve ? (balance > toUnits(coin.reserve, coin.decimals) ? balance - toUnits(coin.reserve, coin.decimals) : 0n) : balance;
-  const tooMuch = raw > 0n && st && raw > balance;
+  const tooMuch = raw > 0n && st && known && raw > balance;
   const other = raw > 0n && unitPrice ? (inUsd ? `${num(fromUnits(raw, unitDec))} ${unitSym}` : usdFmt(fromUnits(raw, unitDec) * unitPrice)) : null;
 
   // Dry quote as you type.
@@ -363,9 +367,13 @@ export function WalletTrade({ token, ticker, side, coinKey, st, reload }: { toke
       <div className="ss-note" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
         <span>{other ? `≈ ${other}` : " "}</span>
         {st && (
-          <button type="button" className="ss-link-btn" disabled={busy || spendable <= 0n} onClick={() => { setInUsd(false); setAmount(unitsToInput(spendable, unitDec, 8)); reset(); }}>
-            Balance {num(fromUnits(balance, unitDec))} {unitSym} · Max
-          </button>
+          known ? (
+            <button type="button" className="ss-link-btn" disabled={busy || spendable <= 0n} onClick={() => { setInUsd(false); setAmount(unitsToInput(spendable, unitDec, 8)); reset(); }}>
+              Balance {num(fromUnits(balance, unitDec))} {unitSym} · Max
+            </button>
+          ) : (
+            <span title="Couldn't read this balance right now; your wallet shows the real one.">Balance — {unitSym}</span>
+          )
         )}
       </div>
 
