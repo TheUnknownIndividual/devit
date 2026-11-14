@@ -13,7 +13,7 @@ import { editable } from "@/lib/access";
 import { hasOwnLlm, runWithKeys } from "@/lib/keyscope";
 import { modelFrom } from "@/lib/models";
 import { projectEntitled } from "@/lib/entitlements";
-import { startJob, wantsJob } from "@/lib/agent-jobs";
+import { jobCancelled, startJob, stoppedResponse, wantsJob } from "@/lib/agent-jobs";
 
 const Body = z.object({
   comments: z.array(z.object({
@@ -60,6 +60,7 @@ async function work(
 ): Promise<Response> {
   const m = await metered(payer, "edit", hasOwnLlm(keys, model), () => runWithKeys(keys, () => applyComments(p, comments), priority, model));
   if ("refused" in m) return m.refused;
+  if (jobCancelled()) return stoppedResponse();
   const res = m.value;
   const out = await updateProject(id, (q) => {
     if (!q.spec) return;

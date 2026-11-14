@@ -20,7 +20,7 @@ export type FromBuilder =
   | { type: "ss:focus"; blockId: string; element?: string; smooth?: boolean; flash?: boolean }
   /** The agent at work: its cursor moves over what it's on (focus), labelled with what it's doing. follow: false
    *  leaves the scrolling to the builder. */
-  | { type: "ss:agent"; on: boolean; label?: string; focus?: Array<{ blockId: string; element?: string }>; follow?: boolean };
+  | { type: "ss:agent"; on: boolean; label?: string; focus?: Array<{ blockId: string; element?: string; text?: string }>; follow?: boolean };
 
 export type FromPreview =
   | { type: "ss:ready" }

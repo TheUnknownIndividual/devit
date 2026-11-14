@@ -1,13 +1,14 @@
 // The agent's cursor in the builder preview: a small labelled pointer that glides to what the agent is working on,
-// outlines the part it's on, clicks now and then, and moves on to the next part, like a person working on the page.
+// outlines it, and stays there (a small drift, the odd click) until the agent moves on to something else.
 // It never takes input (pointer-events: none) and is plain DOM driven by one rAF loop, so it costs React nothing.
 
-interface Focus { blockId: string; element?: string }
+interface Focus { blockId: string; element?: string; text?: string }
 export interface AgentState { label: string; focus: Focus[]; follow: boolean }
 
 const ACCENT = "#C6F24E";
 const INK = "#0A0B0D";
-const PARTS = "[data-el], h1, h2, h3, h4, p, img, a, button, li, figure, svg, input";
+const ANCHOR = "[data-el], h1, h2, h3";
+const norm = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase();
 
 /** A spot to work on: an element and where on it the pointer rests (fractions of its box). */
 interface Spot { el: Element; fx: number; fy: number }
@@ -22,8 +23,8 @@ export class AgentCursor {
   private box: HTMLDivElement;
   private state: AgentState | null = null;
   private spot: Spot | null = null;
-  private x = innerWidth * 0.72;
-  private y = innerHeight * 0.78;
+  private x = innerWidth * 0.5;
+  private y = innerHeight * 0.45;
   private shown = 0;
   private nextAt = 0;
   private arrivedAt = 0;
@@ -98,38 +99,52 @@ export class AgentCursor {
     this.root.remove();
   }
 
-  /** The elements the agent is on: its focus, or (with none) the page itself. */
+  /**
+   * The one thing the agent is on: the words a patch is changing when we know them, else the named part, else the
+   * section's main heading. Several focuses (a multi-pick) take turns, a few seconds each.
+   */
+  private turn = 0;
   private targets(): Element[] {
     const out: Element[] = [];
     for (const f of this.state?.focus ?? []) {
       const block = document.querySelector(`[data-block-id="${CSS.escape(f.blockId)}"]`);
-      const el = (f.element && block?.querySelector(`[data-el="${CSS.escape(f.element)}"]`)) || block;
-      if (el) out.push(el);
+      if (!block) continue;
+      const exact = (f.element ? block.querySelector(`[data-el="${CSS.escape(f.element)}"]`) : null) ?? (f.text ? this.byText(block, f.text) : null);
+      // The page just re-rendered (the edit landed) and the words changed: stay on whatever is now under the pointer.
+      const under = !exact && this.spot && !this.spot.el.isConnected ? document.elementFromPoint(this.x, this.y) : null;
+      out.push(exact ?? (under && block.contains(under) ? under : null) ?? this.anchor(block));
     }
     return out;
   }
+  /** The smallest element in the section whose words contain `text` (the start of what a patch finds). */
+  private byText(block: Element, text: string): Element | null {
+    const want = norm(text).slice(0, 40);
+    if (want.length < 3) return null;
+    let best: Element | null = null;
+    let size = Infinity;
+    for (const el of block.querySelectorAll("*")) {
+      const t = norm(el.textContent ?? "");
+      if (t.length < size && t.includes(want)) { best = el; size = t.length; }
+    }
+    return best;
+  }
+  /** Where a person would point in a section: its first named part or heading that's on screen, else the section. */
+  private anchor(block: Element): Element {
+    for (const el of block.querySelectorAll(ANCHOR)) {
+      const r = el.getBoundingClientRect();
+      if (r.width > 8 && r.height > 8) return el;
+    }
+    return block;
+  }
 
-  /** The next spot: a visible part inside what it's working on (or anywhere on screen while it reads the page). */
+  /** The next spot: the same target with a small drift, or the next one when there are several. */
   private pick(): Spot | null {
     const targets = this.targets();
-    const pool: Element[] = [];
-    const scopes = targets.length ? targets : [document.body];
-    for (const t of scopes) {
-      for (const el of t.querySelectorAll(PARTS)) {
-        if (el.closest("[data-ss-agent]")) continue;
-        const r = el.getBoundingClientRect();
-        // Parts, not whole panels: something a person would point at.
-        if (visible(r) && r.width * r.height < innerWidth * innerHeight * 0.3 && r.height < innerHeight * 0.6) pool.push(el);
-      }
-      const r = t.getBoundingClientRect();
-      if (t !== document.body && visible(r) && !pool.length) pool.push(t);
-    }
-    if (!pool.length) return null;
-    // Prefer the named parts (data-el) and not the one it was just on.
-    const named = pool.filter((el) => el.hasAttribute("data-el") && el !== this.spot?.el);
-    const from = named.length && Math.random() < 0.7 ? named : pool.filter((el) => el !== this.spot?.el);
-    const el = (from.length ? from : pool)[Math.floor(Math.random() * (from.length || pool.length))];
-    return { el, fx: rand(0.25, 0.75), fy: rand(0.35, 0.7) };
+    if (!targets.length) return this.spot;
+    this.turn = (this.turn + 1) % targets.length;
+    const el = targets[targets.length > 1 ? this.turn : 0];
+    if (el === this.spot?.el) return { el, fx: Math.max(0.15, Math.min(0.85, this.spot.fx + rand(-0.12, 0.12))), fy: Math.max(0.3, Math.min(0.75, this.spot.fy + rand(-0.1, 0.1))) };
+    return { el, fx: rand(0.3, 0.6), fy: rand(0.45, 0.65) };
   }
 
   private ripple(x: number, y: number) {
@@ -148,11 +163,11 @@ export class AgentCursor {
     if (!on && this.shown < 0.02) { this.raf = 0; return; }
 
     if (on && (now >= this.nextAt || !this.spot?.el.isConnected)) {
+      const was = this.spot?.el;
       this.spot = this.pick();
-      this.clicked = false;
-      this.arrivedAt = 0;
-      this.box.style.opacity = "0";
-      this.nextAt = now + rand(1700, 2900);
+      // Only a new target gets a fresh outline and click; a drift on the same one keeps them.
+      if (this.spot?.el !== was) { this.clicked = false; this.arrivedAt = 0; this.box.style.opacity = "0"; }
+      this.nextAt = now + rand(2600, 4200);
     }
 
     let tx = this.x, ty = this.y;

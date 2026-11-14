@@ -6,7 +6,7 @@ import { WIDGET_DOC } from "./principles";
 import { normalizeSection, openAttr, parseSite } from "./stream";
 import { repair } from "./codegen";
 import { inspect, staticPage } from "./review";
-import { agentFocus, agentStage } from "../agent-jobs";
+import { agentFocus, agentStage, jobCancelled } from "../agent-jobs";
 
 // Edits on a generated-code site. The editor sees the brief, the facts it may use, the stylesheet and the sections
 // the comments are about (every section for a whole-page request), and answers in the same tag format the site was
@@ -154,13 +154,19 @@ ${o.review ? o.review.request : ""}${requestsText(comments)}${o.note ? `\n\n${o.
   // The agent's cursor in the preview follows the section the model is writing as its answer streams in.
   const known = new Set(spec.blocks.map((b) => b.id));
   let seen = 0;
+  let at: string | null = null;
   const onText = (soFar: string) => {
     if (seen === 0) agentStage(o.review ? "Fixing what the check found" : "Writing the change");
     const tail = soFar.slice(Math.max(0, seen - 60));
     seen = soFar.length;
     let last: string | null = null;
     for (const m of tail.matchAll(/(?:<patch\s+target|data-block-id)\s*=\s*["']([a-z0-9-]+)["']/gi)) if (known.has(m[1].toLowerCase())) last = m[1].toLowerCase();
-    if (last) agentFocus([{ blockId: last }]);
+    if (last) at = last;
+    // The exact words a patch is changing, so the cursor can point at them rather than the whole section.
+    const finds = [...soFar.matchAll(/<patch\s+target\s*=\s*["']([a-z0-9-]+)["']\s*>[\s\S]*?<find>([\s\S]*?)<\/find>/gi)];
+    const f = finds[finds.length - 1];
+    const words = f && known.has(f[1].toLowerCase()) && f[1].toLowerCase() === at ? f[2].replace(/<[^>]*>/g, " ").replace(/&[a-z#0-9]+;/gi, " ").replace(/\s+/g, " ").trim().slice(0, 60) : "";
+    if (at) agentFocus([{ blockId: at, ...(words.length >= 3 ? { text: words } : {}) }]);
   };
   const res = await askRich(
     { system: system(spec, project.knowledge, o.quick), user, images: pics.map((a) => a.url), files: o.review?.shots, onText, ...lane },
@@ -316,6 +322,7 @@ export async function editCode(project: Project, comments: PendingComment[], who
     if (q?.none) return { spec, message: q.message, via: `${q.via} · no change` };
     if (q && q.changed && !q.failed.length) { done = q; lane = " · quick edit"; }
   }
+  if (!done && jobCancelled()) return null;
   if (!done) {
     let full = await attempt(project, spec, comments, { ...scope, quick: false });
     // Scoped and it changed nothing: the request reached further than we thought, so the whole page goes.
@@ -336,6 +343,8 @@ export async function editCode(project: Project, comments: PendingComment[], who
     if (!done.changed) return null;
   }
 
+  // Stopped: skip the browser check and the fix pass; the route saves nothing.
+  if (jobCancelled()) return null;
   const tModel = Date.now() - t0;
   agentStage("Checking it in a real browser");
   // The check: measure the edited page; if the edit added layout faults, one fix pass with screenshots.

@@ -11,6 +11,7 @@
 // comments run on the small one, and builds keep the big one.
 
 import { hasOwnLlm, ownerKeys, pickedModel, priorityModels } from "./keyscope";
+import { jobTimeout } from "./agent-jobs";
 import { COMPAT, isCompat, parsePick, type CompatId, type LlmProviderId } from "./llm-providers";
 import type { BuiltInModel } from "./models";
 import { addCost, costOf, oursAllowed } from "./meter";
@@ -81,7 +82,7 @@ const nearAi: Call = async (system, user, timeoutMs, tier, key, picked) => {
         max_tokens: MAX_OUT[tier],
         response_format: { type: "json_object" },
       }),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: jobTimeout(timeoutMs),
     });
     if (!r.ok) return null;
     const j = (await r.json()) as { choices?: { message?: { content?: string } }[]; usage?: OaiUsage };
@@ -99,7 +100,7 @@ const claude: Call = async (system, user, timeoutMs, tier, key, picked) => {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({ model, max_tokens: MAX_OUT[tier], system: cachedSystem(system), messages: [{ role: "user", content: user }] }),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: jobTimeout(timeoutMs),
     });
     if (!r.ok) return null;
     const j = (await r.json()) as { content?: { type: string; text?: string }[]; usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } };
@@ -126,7 +127,7 @@ const openai: Call = async (system, user, timeoutMs, tier, key, picked) => {
         max_completion_tokens: MAX_OUT[tier] * 2,
         ...(effort ? { reasoning_effort: effort } : {}),
       }),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: jobTimeout(timeoutMs),
     });
     if (!r.ok) return null;
     const j = (await r.json()) as { choices?: { message?: { content?: string } }[]; usage?: OaiUsage };
@@ -144,7 +145,7 @@ const openrouter: Call = async (system, user, timeoutMs, tier, key, picked) => {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${key}`, "x-title": "devit" },
       body: JSON.stringify({ model, messages: [{ role: "system", content: system }, { role: "user", content: user }], response_format: { type: "json_object" } }),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: jobTimeout(timeoutMs),
     });
     if (!r.ok) return null;
     const j = (await r.json()) as { model?: string; choices?: { message?: { content?: string } }[] };
@@ -163,7 +164,7 @@ const compat = (id: CompatId): Call => async (system, user, timeoutMs, tier, key
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
       body: JSON.stringify({ model: picked, messages: [{ role: "system", content: system }, { role: "user", content: user }], max_tokens: MAX_OUT[tier] * 2 }),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: jobTimeout(timeoutMs),
     });
     if (!r.ok) { console.warn(`[llm] ${id} ${picked} ${r.status}`); return null; }
     const j = (await r.json()) as { choices?: { message?: { content?: string } }[]; usage?: OaiUsage };
@@ -320,7 +321,7 @@ async function richClaude(a: RichAsk, key: string, model: string, withImages: bo
       model, max_tokens: a.maxOut, stream: true, system: cachedSystem(a.system), messages: [{ role: "user", content }],
       ...(a.think === "off" ? (/haiku/i.test(model) ? {} : { thinking: { type: "between_tools" } }) : { thinking: { type: "adaptive" }, output_config: { effort: a.think ?? "medium" } }),
     }),
-    signal: AbortSignal.timeout(a.timeoutMs),
+    signal: jobTimeout(a.timeoutMs),
   });
   let r = await send();
   // Busy or overloaded is refused before any token is written, so one retry costs nothing and keeps the build on
@@ -368,7 +369,7 @@ async function richOpenAiShape(a: RichAsk, url: string, key: string, model: stri
       messages: [{ role: "system", content: a.system }, { role: "user", content: user }],
       ...(opts.reasoning ? { max_completion_tokens: a.maxOut * 2 } : { max_tokens: a.maxOut, temperature: a.temperature ?? 0.8 }),
     }),
-    signal: AbortSignal.timeout(a.timeoutMs),
+    signal: jobTimeout(a.timeoutMs),
   });
   if (!r.ok || !r.body) {
     console.warn(`[llm] ${label} ${model} ${r.status} ${(await r.text().catch(() => "")).slice(0, 200)}`);

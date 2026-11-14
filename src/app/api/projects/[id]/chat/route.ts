@@ -20,7 +20,7 @@ import { hasOwnLlm, runWithKeys } from "@/lib/keyscope";
 import { modelFrom } from "@/lib/models";
 import { projectEntitled } from "@/lib/entitlements";
 import { redactLeaks, removedNote } from "@/lib/leaks";
-import { agentFocus, agentStage, buffered, startJob, wantsJob } from "@/lib/agent-jobs";
+import { agentStage, buffered, jobCancelled, startJob, stoppedResponse, wantsJob } from "@/lib/agent-jobs";
 
 const Body = z.object({
   text: z.string().trim().min(1).max(1200),
@@ -101,6 +101,7 @@ async function chat(req: Request, ctx: { params: Promise<{ id: string }> }) {
     const plan = mode === "plan";
     const res = plan ? await planChange(p, withReply(text)) : await askAbout(p, withReply(text));
     const steps: string[] = "steps" in res ? (res.steps as string[]) : [];
+    if (jobCancelled()) return stoppedResponse();
     const out = await updateProject(id, (q) => {
       q.messages.push({ id: newId(), role: "user", text, at: Date.now(), mode, ...replied });
       q.messages.push({ id: newId(), role: "agent", text: res.reply, at: Date.now(), via: res.via, ...(plan && steps.length ? { plan: { request: text, steps } } : {}) });
@@ -113,6 +114,7 @@ async function chat(req: Request, ctx: { params: Promise<{ id: string }> }) {
   if (refs.length) {
     const read = (await Promise.all(refs.map((u) => readReference(u).catch(() => null)))).filter((x) => !!x);
     const rest = withoutRefs(text).trim();
+    if (jobCancelled()) return stoppedResponse();
     const out = await updateProject(id, async (q) => {
       q.messages.push({ id: newId(), role: "user", text, at: Date.now(), ...(assetUrls.length ? { assets: assetUrls } : {}) });
       if (!q.spec || !read.length) {
@@ -143,6 +145,7 @@ async function chat(req: Request, ctx: { params: Promise<{ id: string }> }) {
     const token = addr ? await tokenContext(addr, p.network.chain, p.network.rpcUrl) : p.spec.token;
     const given = { ...(p.socials ?? {}), ...socials };
     const r = addr && !token ? null : await research(token, given);
+    if (jobCancelled()) return stoppedResponse();
     const out = await updateProject(id, (q) => {
       q.messages.push({ id: newId(), role: "user", text, at: Date.now() });
       if (!q.spec || (addr && !token)) {
@@ -181,11 +184,11 @@ async function chat(req: Request, ctx: { params: Promise<{ id: string }> }) {
 
   const target = p.spec.blocks.find((b) => b.type === "hero") ?? p.spec.blocks[0];
   agentStage("Reading the page");
-  agentFocus([{ blockId: target.id }]);
   const context = docs?.length ? `\n\nFrom the files they added:\n${docs.map((d) => `--- ${d.name}\n${d.text}`).join("\n")}` : "";
   const cx = await connectorContext(p, text);
   const res = await applyComments(p, [{ id: newId(), blockId: target.id, blockLabel: "Whole page", text: text + context, assets, ...(cx.text ? { context: cx.text } : {}), ...(replyTo ? { reply: replyTo.context } : {}) }], true);
   if (cx.used.length) res.via = `${res.via} · read ${cx.used.join(", ")}`;
+  if (jobCancelled()) return stoppedResponse();
   const out = await updateProject(id, (q) => {
     if (!q.spec) return;
     snapshot(q, text);

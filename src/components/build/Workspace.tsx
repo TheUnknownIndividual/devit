@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowUp, BookOpen, Check, HelpCircle, ChevronDown, Code2, Crosshair, Eye, ExternalLink, Globe, History, Lightbulb, Link2, Loader2, MessageCircleQuestion, MessageSquare, Mic, Reply, MicOff, Monitor, MousePointer2, Palette, Pencil, Plug, Server, FileText, ImagePlus, Smartphone, Tablet, Trash2, Undo2, X, Database, Hammer, Wand2,
+  ArrowUp, BookOpen, Check, HelpCircle, ChevronDown, Code2, Crosshair, Eye, ExternalLink, Globe, History, Lightbulb, Link2, Loader2, MessageCircleQuestion, MessageSquare, Mic, Reply, MicOff, Monitor, MousePointer2, Palette, Pencil, Plug, Server, FileText, ImagePlus, Smartphone, Tablet, Trash2, Undo2, X, Database, Hammer, Wand2, Square,
 } from "lucide-react";
 import { HistoryPanel, KnowledgeDialog, useDictation } from "./BuilderExtras";
 import { CodePanel } from "./CodePanel";
@@ -46,7 +46,7 @@ const MODES: Array<{ id: Mode; label: string; hint: string }> = [
 ];
 
 /** A message sent from the composer that isn't in the saved chat yet. */
-interface AgentFocusView { blockId: string; element?: string }
+interface AgentFocusView { blockId: string; element?: string; text?: string }
 interface AgentJobView { id: string; kind: "chat" | "apply"; stage: string; focus: AgentFocusView[]; startedAt: number; done: boolean; result?: unknown }
 
 /** Seconds since the agent started, shown once a change takes a while. */
@@ -227,7 +227,7 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
   // writes sections it sits on the newest one.
   const designing = building && p.steps.find((s) => s.id === "design")?.state === "running";
   const lastLabel = p.spec?.blocks[p.spec.blocks.length - 1]?.props.label;
-  const agentKey = agent ? `${agent.stage}|${agent.focus.map((f) => `${f.blockId}:${f.element ?? ""}`).join()}` : busy === "apply" || busy === "chat" ? "start" : designing && lastBlock ? `build|${lastBlock}` : "";
+  const agentKey = agent ? `${agent.stage}|${agent.focus.map((f) => `${f.blockId}:${f.element ?? ""}:${f.text ?? ""}`).join()}` : busy === "apply" || busy === "chat" ? "start" : designing && lastBlock ? `build|${lastBlock}` : "";
   useEffect(() => {
     if (!frameReady || viewing !== null) return;
     if (agent) send({ type: "ss:agent", on: true, label: agent.stage, focus: agent.focus });
@@ -340,30 +340,70 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
   const dictation = useDictation((said) => setText((t) => (t ? `${t.trimEnd()} ${said}` : said)));
 
   // `after` runs in the same update as the new project, so a sent message never shows twice for a frame.
-  async function call(path: string, body: unknown, kind: NonNullable<typeof busy>, method = "POST", after?: (ok: boolean) => void) {
+  async function call(path: string, body: unknown, kind: NonNullable<typeof busy>, method = "POST", after?: (ok: boolean, stopped: boolean) => void) {
     setBusy(kind);
     let ok = false;
+    let stopped = false;
+    jobRef.current = { id: null, stop: false };
     try {
       // Edits (chat, apply) run as a background job on the server and are polled: a slow model can take minutes, and
       // a request left waiting that long gets cut off by the proxy in front of the server.
-      const job = path === "/chat" || path === "/apply";
-      let r: { ok: boolean; status: number } | null = await fetch(`/api/projects/${p.id}${path}`, { method, headers: { "content-type": "application/json", ...modelHeader(), ...(job ? { "x-devit-async": "1" } : {}) }, body: JSON.stringify(body) }).catch(() => null);
+      const asJob = path === "/chat" || path === "/apply";
+      let r: { ok: boolean; status: number } | null = await fetch(`/api/projects/${p.id}${path}`, { method, headers: { "content-type": "application/json", ...modelHeader(), ...(asJob ? { "x-devit-async": "1" } : {}) }, body: JSON.stringify(body) }).catch(() => null);
       let j = r ? await (r as Response).json().catch(() => null) : null;
       if (r?.status === 202 && j?.job) {
+        jobRef.current.id = j.job as string;
+        // Stop was pressed before the server said which job this is.
+        if (jobRef.current.stop) void fetch(`/api/projects/${p.id}/agent?job=${encodeURIComponent(j.job)}`, { method: "DELETE" }).catch(() => null);
         const res = await waitJob(j.job as string);
         r = res ? { ok: res.status < 400, status: res.status } : null;
         j = res?.body ?? { error: "The change was interrupted (the server restarted). Send it again." };
       }
+      stopped = r?.status === 499 || !!j?.cancelled;
       if (r?.ok && j?.id) setP(j as PublicProject);
       // Refusals (out of AI credits, the hourly cap) say why, with a way to top up when that's the fix.
-      if (!r?.ok) { setNotice(j?.error ?? "That didn't go through. Try again."); setNoticeTopup(!!j?.topup); }
+      if (!r?.ok && !stopped) { setNotice(j?.error ?? "That didn't go through. Try again."); setNoticeTopup(!!j?.topup); }
       ok = !!r?.ok;
       return ok;
     } finally {
-      after?.(ok);
+      jobRef.current = { id: null, stop: false };
+      after?.(ok, stopped);
       setBusy(null);
     }
   }
+
+  // Stop (the square button, or Esc): ends the running edit on the server; nothing it was doing is saved.
+  const jobRef = useRef<{ id: string | null; stop: boolean }>({ id: null, stop: false });
+  const sendingNow = useRef(false);
+  const working = busy === "chat" || busy === "apply";
+  function stop() {
+    if (!working) return;
+    jobRef.current.stop = true;
+    setAgent((a) => (a ? { ...a, stage: "Stopping" } : a));
+    if (jobRef.current.id) void fetch(`/api/projects/${p.id}/agent?job=${encodeURIComponent(jobRef.current.id)}`, { method: "DELETE" }).catch(() => null);
+  }
+  // "Send now" on a queued message: it jumps the queue, and the running edit stops to make way.
+  function sendNow(id: string) {
+    setOutbox((o) => {
+      const at = o.findIndex((x) => x.id === id);
+      if (at < 0) return o;
+      const rest = o.filter((x) => x.id !== id);
+      rest.splice(working ? 1 : 0, 0, o[at]);
+      return rest;
+    });
+    if (working) { sendingNow.current = true; stop(); }
+  }
+  const unqueue = (id: string) => setOutbox((o) => o.filter((x, k) => x.id !== id || (k === 0 && working)));
+  useEffect(() => {
+    if (!working) return;
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || dialog || picks.length || slash.length) return;
+      e.preventDefault();
+      stop();
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  });
 
   // Polls an edit job until it's done; meanwhile `agent` says what it's on, which drives its cursor in the preview.
   async function waitJob(jobId: string): Promise<{ status: number; body: { id?: string; error?: string; topup?: boolean } } | null> {
@@ -416,9 +456,20 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
     if (next.kind === "apply") {
       const all = [...comments, ...(next.comments ?? [])];
       setApplying(all.length);
-      void call("/apply", { comments: all, ...(next.replyTo ? { replyTo: next.replyTo } : {}) }, "apply", "POST", (ok) => { drop(); setComments(ok ? [] : all); });
+      void call("/apply", { comments: all, ...(next.replyTo ? { replyTo: next.replyTo } : {}) }, "apply", "POST", (ok, stopped) => {
+        drop();
+        if (!stopped) { setComments(ok ? [] : all); return; }
+        // Stopped: the selection and the words go back in the box, unless it stopped to send another message now.
+        if (sendingNow.current) { sendingNow.current = false; return; }
+        if (next.targets?.length) setPicks(next.targets.map((t) => ({ blockId: t.blockId, label: t.label, element: t.element ?? null })));
+        setText((cur) => cur || next.text);
+      });
     } else {
-      void call("/chat", next.body, "chat", "POST", (ok) => { drop(); if (!ok) setText((cur) => cur || next.text); });
+      void call("/chat", next.body, "chat", "POST", (ok, stopped) => {
+        drop();
+        if (stopped && sendingNow.current) { sendingNow.current = false; return; }
+        if (!ok) setText((cur) => cur || next.text);
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outbox, busy, building]);
@@ -632,7 +683,17 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
             {busy === "apply" || busy === "chat" ? (
               <div className="flex items-center gap-2.5 text-[13px] text-zinc-400"><Loader2 size={14} className="animate-spin text-sel" /> {busy === "apply" ? `Applying ${applying} change${applying === 1 ? "" : "s"}…` : mode === "plan" ? "Drafting a plan…" : mode === "ask" ? "Thinking…" : "Working on it…"}{agent && agent.stage !== "Done" && <span className="truncate text-zinc-500">· {agent.stage}</span>}<Elapsed since={agent?.startedAt} /></div>
             ) : null}
-            {outbox.map((o, k) => (k === 0 && busy ? null : <div key={o.id} className="animate-rise">{userBubble({ text: o.text, mode: o.mode, targets: o.targets, assets: o.images, replyTo: o.replyTo }, busy ? "Queued, goes when this one's done" : undefined)}</div>))}
+            {outbox.map((o, k) => (k === 0 && busy ? null : (
+              <div key={o.id} className="animate-rise">
+                {userBubble({ text: o.text, mode: o.mode, targets: o.targets, assets: o.images, replyTo: o.replyTo }, busy ? "Queued, goes when this one's done" : undefined)}
+                {busy && (
+                  <div className="mt-1 flex justify-end gap-1">
+                    <button type="button" className="rounded-md px-2 py-1 text-[11.5px] text-zinc-300 hover:bg-white/[0.06] hover:text-white" onClick={() => sendNow(o.id)} title={working ? "Stop the current change and send this now" : "Send this now"}><ArrowUp size={11} className="mr-1 inline" />Send now</button>
+                    <button type="button" className="rounded-md px-2 py-1 text-[11.5px] text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200" onClick={() => { setText((cur) => cur || o.text); unqueue(o.id); }} title="Take it out of the queue and back into the box">Edit</button>
+                  </div>
+                )}
+              </div>
+            )))}
             {canEdit && p.published && p.publishedIsCurrent === false && !busy && !building && p.messages[p.messages.length - 1]?.role === "agent" && (
               <div className="flex animate-rise flex-wrap items-center gap-x-3 gap-y-2 rounded-[12px] border border-sel/30 bg-sel/[0.06] px-3 py-2.5">
                 <Globe size={14} className="shrink-0 text-sel" />
@@ -776,9 +837,16 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
                 ) : (
                   <span className="ml-1 hidden text-[11.5px] text-zinc-500 lg:inline">{selected ? "Enter applies · Esc clears" : ""}</span>
                 )}
-                <button type="button" className="btn btn-primary btn-icon ml-auto h-8 w-8" disabled={!canEdit || !text.trim() || building || uploading > 0} onClick={submit} aria-label={selected ? "Apply" : "Send"} title={busy ? "Sends when the current change is done" : undefined}>
-                  <ArrowUp size={15} />
-                </button>
+                {/* While the agent works and the box is empty, the button stops it; typing turns it back into Send (queued). */}
+                {working && !text.trim() ? (
+                  <button type="button" className="btn btn-icon ml-auto h-8 w-8 bg-white text-ink-950 hover:bg-zinc-200" onClick={stop} aria-label="Stop" title="Stop (Esc)">
+                    <Square size={11} fill="currentColor" strokeWidth={0} />
+                  </button>
+                ) : (
+                  <button type="button" className="btn btn-primary btn-icon ml-auto h-8 w-8" disabled={!canEdit || !text.trim() || building || uploading > 0} onClick={submit} aria-label={selected ? "Apply" : "Send"} title={busy ? "Queues it: sends when the current change is done" : undefined}>
+                    <ArrowUp size={15} />
+                  </button>
+                )}
               </div>
             </div>
           </div>
