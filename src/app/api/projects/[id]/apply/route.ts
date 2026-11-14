@@ -13,6 +13,7 @@ import { editable } from "@/lib/access";
 import { hasOwnLlm, runWithKeys } from "@/lib/keyscope";
 import { modelFrom } from "@/lib/models";
 import { projectEntitled } from "@/lib/entitlements";
+import { startJob, wantsJob } from "@/lib/agent-jobs";
 
 const Body = z.object({
   comments: z.array(z.object({
@@ -46,7 +47,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const urls = (p.assets ?? []).filter((a) => comments.some((c) => c.assets?.includes(a.id))).map((a) => a.url);
   const keys = await ownerKeysFor(p.ownerId);
   const priority = await projectEntitled(p, "priorityModels");
-  const m = await metered(isOperator(req) ? operatorPayer() : await payerForProject(p.ownerId, clientIp(req)), "edit", hasOwnLlm(keys, modelFrom(req)), () => runWithKeys(keys, () => applyComments(p, comments), priority, modelFrom(req)));
+  const payer = isOperator(req) ? operatorPayer() : await payerForProject(p.ownerId, clientIp(req));
+  const model = modelFrom(req);
+  const run = () => work(id, payer, keys, priority, model, p, comments, urls, replyTo);
+  // The builder's edits run in the background and are polled, so a slow model can't time the request out.
+  return wantsJob(req) ? startJob(id, "apply", comments.map((c) => ({ blockId: c.blockId, ...(c.element ? { element: c.element } : {}) })), run) : run();
+}
+
+async function work(
+  id: string, payer: Parameters<typeof metered>[0], keys: Awaited<ReturnType<typeof ownerKeysFor>>, priority: boolean, model: ReturnType<typeof modelFrom>,
+  p: Parameters<typeof applyComments>[0], comments: Parameters<typeof applyComments>[1], urls: string[], replyTo: z.infer<typeof Body>["replyTo"],
+): Promise<Response> {
+  const m = await metered(payer, "edit", hasOwnLlm(keys, model), () => runWithKeys(keys, () => applyComments(p, comments), priority, model));
   if ("refused" in m) return m.refused;
   const res = m.value;
   const out = await updateProject(id, (q) => {

@@ -20,6 +20,7 @@ import { hasOwnLlm, runWithKeys } from "@/lib/keyscope";
 import { modelFrom } from "@/lib/models";
 import { projectEntitled } from "@/lib/entitlements";
 import { redactLeaks, removedNote } from "@/lib/leaks";
+import { agentFocus, agentStage, buffered, startJob, wantsJob } from "@/lib/agent-jobs";
 
 const Body = z.object({
   text: z.string().trim().min(1).max(1200),
@@ -55,8 +56,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   // the owner's AI credits at what it really cost.
   const keys = await ownerKeysFor(g.p.ownerId);
   const priority = await projectEntitled(g.p, "priorityModels");
-  const r = await metered(isOperator(req) ? operatorPayer() : await payerForProject(g.p.ownerId, clientIp(req)), "edit", hasOwnLlm(keys, modelFrom(req)), () => runWithKeys(keys, () => chat(req, ctx), priority, modelFrom(req)));
-  return "refused" in r ? r.refused : r.value;
+  const payer = isOperator(req) ? operatorPayer() : await payerForProject(g.p.ownerId, clientIp(req));
+  const copy = await buffered(req);
+  const run = async () => {
+    const r = await metered(payer, "edit", hasOwnLlm(keys, modelFrom(copy)), () => runWithKeys(keys, () => chat(copy, ctx), priority, modelFrom(copy)));
+    return "refused" in r ? r.refused : r.value;
+  };
+  // The builder's edits run in the background and are polled, so a slow model can't time the request out.
+  return wantsJob(req) ? startJob(id, "chat", [], run) : run();
 }
 
 async function chat(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -173,6 +180,8 @@ async function chat(req: Request, ctx: { params: Promise<{ id: string }> }) {
   }
 
   const target = p.spec.blocks.find((b) => b.type === "hero") ?? p.spec.blocks[0];
+  agentStage("Reading the page");
+  agentFocus([{ blockId: target.id }]);
   const context = docs?.length ? `\n\nFrom the files they added:\n${docs.map((d) => `--- ${d.name}\n${d.text}`).join("\n")}` : "";
   const cx = await connectorContext(p, text);
   const res = await applyComments(p, [{ id: newId(), blockId: target.id, blockLabel: "Whole page", text: text + context, assets, ...(cx.text ? { context: cx.text } : {}), ...(replyTo ? { reply: replyTo.context } : {}) }], true);

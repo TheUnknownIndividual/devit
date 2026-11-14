@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Site } from "@/blocks/Site";
 import type { SiteSpec } from "@/lib/spec";
+import { AgentCursor } from "./AgentCursor";
 
 // Runs inside the builder's iframe. In select mode it outlines what's under the cursor, turns clicks into
 // selections (shift-click adds or removes one, so a comment can cover several), lets a press-and-drag box select whole
@@ -16,7 +17,10 @@ export type FromBuilder =
   | { type: "ss:markers"; items: Array<{ blockId: string; n: number }> }
   | { type: "ss:selected"; items: Sel[] }
   /** Scroll to a block (or one element in it); flash: outline it for a moment so the person sees what they asked about. */
-  | { type: "ss:focus"; blockId: string; element?: string; smooth?: boolean; flash?: boolean };
+  | { type: "ss:focus"; blockId: string; element?: string; smooth?: boolean; flash?: boolean }
+  /** The agent at work: its cursor moves over what it's on (focus), labelled with what it's doing. follow: false
+   *  leaves the scrolling to the builder. */
+  | { type: "ss:agent"; on: boolean; label?: string; focus?: Array<{ blockId: string; element?: string }>; follow?: boolean };
 
 export type FromPreview =
   | { type: "ss:ready" }
@@ -107,6 +111,8 @@ export function PreviewClient({ initial, walletconnect, credit }: { initial: Sit
   const pointer = useRef<{ x: number; y: number; alt: boolean } | null>(null);
 
   const post = useCallback((m: FromPreview) => window.parent?.postMessage(m, window.location.origin), []);
+  const cursor = useRef<AgentCursor | null>(null);
+  useEffect(() => () => { cursor.current?.destroy(); cursor.current = null; }, []);
   // Typing over words in place: a textarea laid over the element (React keeps its own nodes untouched).
   const [editing, setEditing] = useState<{ el: HTMLElement; blockId: string; before: string; value: string; style: React.CSSProperties } | null>(null);
   const editingRef = useRef(editing);
@@ -165,6 +171,7 @@ export function PreviewClient({ initial, walletconnect, credit }: { initial: Sit
         el.scrollIntoView({ block: el === block ? "start" : "center", behavior: m.smooth ? "smooth" : "auto" });
         if (m.flash) flash(el);
       }
+      else if (m?.type === "ss:agent") (cursor.current ??= new AgentCursor()).set(m.on ? { label: m.label ?? "Working", focus: m.focus ?? [], follow: m.follow !== false } : null);
     };
     // The builder may not be listening yet when this mounts (its ref or listener attaches later), so keep saying ready
     // until it answers; the builder also asks with ss:hello on the iframe's load.

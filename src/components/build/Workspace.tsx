@@ -46,6 +46,17 @@ const MODES: Array<{ id: Mode; label: string; hint: string }> = [
 ];
 
 /** A message sent from the composer that isn't in the saved chat yet. */
+interface AgentFocusView { blockId: string; element?: string }
+interface AgentJobView { id: string; kind: "chat" | "apply"; stage: string; focus: AgentFocusView[]; startedAt: number; done: boolean; result?: unknown }
+
+/** Seconds since the agent started, shown once a change takes a while. */
+function Elapsed({ since }: { since?: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const h = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(h); }, []);
+  const s = since ? Math.round((now - since) / 1000) : 0;
+  return s >= 8 ? <span className="ml-auto shrink-0 tabular-nums text-[11px] text-zinc-500">{s}s</span> : null;
+}
+
 interface Outgoing { id: string; kind: "chat" | "apply"; text: string; images: string[]; mode?: Mode; body?: unknown; comments?: PendingComment[]; targets?: Array<{ blockId: string; label: string; element?: string; text: string }>; replyTo?: { id: string; text: string; context: string } }
 
 export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, canEdit = true, viewNote, share }: { initial: PublicProject; heliusOnServer: boolean; alchemyOnServer?: boolean; canEdit?: boolean; viewNote?: string; share?: string }) {
@@ -86,6 +97,8 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
   const [enhancing, setEnhancing] = useState(false);
   const [beforeEnhance, setBeforeEnhance] = useState<string | null>(null);
   const [busy, setBusy] = useState<null | "apply" | "chat" | "undo" | "patch">(null);
+  // What the agent is on during an edit (from the job it runs on the server).
+  const [agent, setAgent] = useState<{ stage: string; focus: AgentFocusView[]; startedAt: number } | null>(null);
   const [dialog, setDialog] = useState<null | "integrations" | "rpc" | "publish" | "export" | "database" | "knowledge">(null);
   // Back from connecting GitHub (?export=1): reopen the export dialog where it left off.
   useEffect(() => {
@@ -210,6 +223,38 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
     const h = setTimeout(() => send({ type: "ss:focus", blockId: lastBlock, smooth: true }), 250);
     return () => clearTimeout(h);
   }, [frameReady, building, follow, lastBlock, viewing, p.steps, send]);
+  // The agent's cursor in the preview: during an edit it goes to what the server says it's working on; while a build
+  // writes sections it sits on the newest one.
+  const designing = building && p.steps.find((s) => s.id === "design")?.state === "running";
+  const lastLabel = p.spec?.blocks[p.spec.blocks.length - 1]?.props.label;
+  const agentKey = agent ? `${agent.stage}|${agent.focus.map((f) => `${f.blockId}:${f.element ?? ""}`).join()}` : busy === "apply" || busy === "chat" ? "start" : designing && lastBlock ? `build|${lastBlock}` : "";
+  useEffect(() => {
+    if (!frameReady || viewing !== null) return;
+    if (agent) send({ type: "ss:agent", on: true, label: agent.stage, focus: agent.focus });
+    else if (busy === "apply" || busy === "chat") send({ type: "ss:agent", on: true, label: busy === "apply" ? "Looking at what you picked" : "Reading the page", focus: busy === "apply" ? outbox[0]?.targets?.map((t) => ({ blockId: t.blockId, element: t.element })) ?? [] : [] });
+    else if (designing && lastBlock) send({ type: "ss:agent", on: true, label: `Designing ${typeof lastLabel === "string" ? lastLabel.toLowerCase() : "the page"}`, focus: [{ blockId: lastBlock }], follow: false });
+    else send({ type: "ss:agent", on: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frameReady, agentKey, viewing, send]);
+
+  // Opened (or reloaded) while an edit is still running on the server: pick it up and wait for it.
+  useEffect(() => {
+    if (!canEdit) return;
+    let live = true;
+    void (async () => {
+      const r = await fetch(`/api/projects/${p.id}/agent`, { cache: "no-store" }).catch(() => null);
+      const j = r?.ok ? ((await r.json().catch(() => null)) as { job: AgentJobView | null } | null) : null;
+      if (!live || !j?.job || j.job.done) return;
+      setBusy(j.job.kind);
+      await waitJob(j.job.id);
+      const pr = await fetch(`/api/projects/${p.id}${q}`, { cache: "no-store" }).catch(() => null);
+      if (live && pr?.ok) setP((await pr.json()) as PublicProject);
+      setBusy(null);
+    })();
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.id, canEdit]);
+
   // A change from anywhere drops the History preview: the numbering moved.
   useEffect(() => { setViewing(null); }, [p.version]);
   useEffect(() => { if (frameReady) send({ type: "ss:select", on: selectOn }); }, [frameReady, selectOn, send]);
@@ -299,16 +344,44 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
     setBusy(kind);
     let ok = false;
     try {
-      const r = await fetch(`/api/projects/${p.id}${path}`, { method, headers: { "content-type": "application/json", ...modelHeader() }, body: JSON.stringify(body) });
-      const j = await r.json().catch(() => null);
-      if (r.ok && j?.id) setP(j as PublicProject);
+      // Edits (chat, apply) run as a background job on the server and are polled: a slow model can take minutes, and
+      // a request left waiting that long gets cut off by the proxy in front of the server.
+      const job = path === "/chat" || path === "/apply";
+      let r: { ok: boolean; status: number } | null = await fetch(`/api/projects/${p.id}${path}`, { method, headers: { "content-type": "application/json", ...modelHeader(), ...(job ? { "x-devit-async": "1" } : {}) }, body: JSON.stringify(body) }).catch(() => null);
+      let j = r ? await (r as Response).json().catch(() => null) : null;
+      if (r?.status === 202 && j?.job) {
+        const res = await waitJob(j.job as string);
+        r = res ? { ok: res.status < 400, status: res.status } : null;
+        j = res?.body ?? { error: "The change was interrupted (the server restarted). Send it again." };
+      }
+      if (r?.ok && j?.id) setP(j as PublicProject);
       // Refusals (out of AI credits, the hourly cap) say why, with a way to top up when that's the fix.
-      if (!r.ok) { setNotice(j?.error ?? "That didn't go through. Try again."); setNoticeTopup(!!j?.topup); }
-      ok = r.ok;
-      return r.ok;
+      if (!r?.ok) { setNotice(j?.error ?? "That didn't go through. Try again."); setNoticeTopup(!!j?.topup); }
+      ok = !!r?.ok;
+      return ok;
     } finally {
       after?.(ok);
       setBusy(null);
+    }
+  }
+
+  // Polls an edit job until it's done; meanwhile `agent` says what it's on, which drives its cursor in the preview.
+  async function waitJob(jobId: string): Promise<{ status: number; body: { id?: string; error?: string; topup?: boolean } } | null> {
+    let misses = 0;
+    try {
+      for (;;) {
+        await new Promise((ok) => setTimeout(ok, 700));
+        const r = await fetch(`/api/projects/${p.id}/agent?job=${encodeURIComponent(jobId)}`, { cache: "no-store" }).catch(() => null);
+        const j = r?.ok ? ((await r.json().catch(() => null)) as { job: AgentJobView | null } | null) : null;
+        // A blip in the connection isn't the end of the job; a job the server no longer knows is.
+        if (!j) { if (++misses > 40) return null; continue; }
+        misses = 0;
+        if (!j.job) return null;
+        if (j.job.done) return (j.job.result as { status: number; body: { id?: string; error?: string; topup?: boolean } }) ?? null;
+        setAgent({ stage: j.job.stage, focus: j.job.focus, startedAt: j.job.startedAt });
+      }
+    } finally {
+      setAgent(null);
     }
   }
 
@@ -557,7 +630,7 @@ export function Workspace({ initial, heliusOnServer, alchemyOnServer = false, ca
             ))}
             {outbox.map((o, k) => (k === 0 && busy ? <div key={o.id} className="animate-rise">{userBubble({ text: o.text, mode: o.mode, targets: o.targets, assets: o.images, replyTo: o.replyTo })}</div> : null))}
             {busy === "apply" || busy === "chat" ? (
-              <div className="flex items-center gap-2.5 text-[13px] text-zinc-400"><Loader2 size={14} className="animate-spin text-sel" /> {busy === "apply" ? `Applying ${applying} change${applying === 1 ? "" : "s"}…` : mode === "plan" ? "Drafting a plan…" : mode === "ask" ? "Thinking…" : "Working on it…"}</div>
+              <div className="flex items-center gap-2.5 text-[13px] text-zinc-400"><Loader2 size={14} className="animate-spin text-sel" /> {busy === "apply" ? `Applying ${applying} change${applying === 1 ? "" : "s"}…` : mode === "plan" ? "Drafting a plan…" : mode === "ask" ? "Thinking…" : "Working on it…"}{agent && agent.stage !== "Done" && <span className="truncate text-zinc-500">· {agent.stage}</span>}<Elapsed since={agent?.startedAt} /></div>
             ) : null}
             {outbox.map((o, k) => (k === 0 && busy ? null : <div key={o.id} className="animate-rise">{userBubble({ text: o.text, mode: o.mode, targets: o.targets, assets: o.images, replyTo: o.replyTo }, busy ? "Queued, goes when this one's done" : undefined)}</div>))}
             {canEdit && p.published && p.publishedIsCurrent === false && !busy && !building && p.messages[p.messages.length - 1]?.role === "agent" && (

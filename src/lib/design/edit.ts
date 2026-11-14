@@ -1,4 +1,4 @@
-import { askRich, type LocalImage } from "../llm";
+import { askJson, askRich, type LocalImage } from "../llm";
 import { priorityModels } from "../keyscope";
 import { sanitizeCss, sanitizeSection } from "../sanitize";
 import type { Asset, Block, PendingComment, Project, SiteSpec } from "../spec";
@@ -6,6 +6,7 @@ import { WIDGET_DOC } from "./principles";
 import { normalizeSection, openAttr, parseSite } from "./stream";
 import { repair } from "./codegen";
 import { inspect, staticPage } from "./review";
+import { agentFocus, agentStage } from "../agent-jobs";
 
 // Edits on a generated-code site. The editor sees the brief, the facts it may use, the stylesheet and the sections
 // the comments are about (every section for a whole-page request), and answers in the same tag format the site was
@@ -150,8 +151,19 @@ ${o.review ? o.review.request : ""}${requestsText(comments)}${o.note ? `\n\n${o.
   const lane = o.quick
     ? { tier: priorityModels() ? ("heavy" as const) : ("light" as const), maxOut: 4000, timeoutMs: 45_000, think: "off" as const }
     : { tier: "heavy" as const, maxOut: o.review ? 24000 : 16000, timeoutMs: o.review ? 240_000 : 180_000, think: o.review ? ("medium" as const) : ("low" as const) };
+  // The agent's cursor in the preview follows the section the model is writing as its answer streams in.
+  const known = new Set(spec.blocks.map((b) => b.id));
+  let seen = 0;
+  const onText = (soFar: string) => {
+    if (seen === 0) agentStage(o.review ? "Fixing what the check found" : "Writing the change");
+    const tail = soFar.slice(Math.max(0, seen - 60));
+    seen = soFar.length;
+    let last: string | null = null;
+    for (const m of tail.matchAll(/(?:<patch\s+target|data-block-id)\s*=\s*["']([a-z0-9-]+)["']/gi)) if (known.has(m[1].toLowerCase())) last = m[1].toLowerCase();
+    if (last) agentFocus([{ blockId: last }]);
+  };
   const res = await askRich(
-    { system: system(spec, project.knowledge, o.quick), user, images: pics.map((a) => a.url), files: o.review?.shots, ...lane },
+    { system: system(spec, project.knowledge, o.quick), user, images: pics.map((a) => a.url), files: o.review?.shots, onText, ...lane },
     (t) => /<\/edit>/i.test(t) || /<\/patch>/i.test(t) || (/<section\b/i.test(t) && /<\/section>/i.test(t)) || /<css\b[\s\S]*<\/css>/i.test(t),
   );
   if (!res) return null;
@@ -235,6 +247,35 @@ ${o.review ? o.review.request : ""}${requestsText(comments)}${o.note ? `\n\n${o.
   return { spec: next, message: summary, via: res.via, failed, changed };
 }
 
+/** Requests about the whole look, which no single section answers. */
+const GLOBAL = /\b(colou?rs?|palette|fonts?|typeface|typography|theme|vibe|redesign|restyle|everything|whole|entire|every section|all (the )?sections|animations?|motion|dark mode|light mode)\b/i;
+
+/**
+ * A whole-page chat message is usually about one or two places ("the pfp in the hero"). A quick call finds them, so
+ * the editor reads and rewrites only those sections instead of the whole page: far less to read and write, so far
+ * faster. Null when it's page-wide, unclear, or the call is slow (then the whole page goes, as before).
+ */
+async function scopeOf(spec: SiteSpec, text: string): Promise<Set<string> | null> {
+  if (GLOBAL.test(text)) return null;
+  const html = spec.blocks.filter((b) => b.type === "html");
+  if (html.length < 3) return null;
+  const words = (h: string) => h.replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180);
+  const list = html.map((b, i) => `${b.id} (${i === 0 ? "first, top of the page" : i === html.length - 1 ? "last" : `#${i + 1}`}) "${String(b.props.label ?? "Section")}": ${words(String(b.props.html))}`).join("\n");
+  const ids = new Set(html.map((b) => b.id));
+  const ask = askJson(
+    "You route an edit request on a one-page website to the sections it is about. The landing page / top / header / hero / logo / pfp area means the first section unless another section clearly holds it.",
+    `SECTIONS (id, position, label, start of its text):\n${list}\n\nREQUEST: ${text.slice(0, 900)}\n\nReply {"ids": [the 1-3 section ids this request changes], "whole": true only if it changes the look of the whole page or you can't tell}.`,
+    (v) => {
+      const o = v as { ids?: unknown; whole?: unknown };
+      return o && Array.isArray(o.ids) ? { ids: o.ids.filter((x): x is string => typeof x === "string" && ids.has(x)), whole: o.whole === true } : null;
+    },
+    "light", "edit",
+  ).catch(() => null);
+  const r = await Promise.race([ask, new Promise<null>((ok) => setTimeout(() => ok(null), 15_000))]);
+  if (!r || r.value.whole || !r.value.ids.length || r.value.ids.length > 3) return null;
+  return new Set(r.value.ids);
+}
+
 /** Whether a set of comments is small enough for the fast lane. */
 export function isQuick(comments: PendingComment[], wholePage: boolean, hasPictures: boolean): boolean {
   if (hasPictures || !comments.length || comments.length > 3) return false;
@@ -260,13 +301,25 @@ export async function editCode(project: Project, comments: PendingComment[], who
   let done: Attempt | null = null;
   let lane = "";
 
+  // A whole-page message about one place: work on just that place.
+  let only: Set<string> | null = null;
+  if (wholePage && comments.length === 1 && !hasPics) {
+    agentStage("Finding the part of the page you mean");
+    only = await scopeOf(spec, comments[0].text);
+    if (only) agentFocus([...only].map((blockId) => ({ blockId })));
+    agentStage("Writing the change");
+  }
+  const scope = only ? { whole: false, only } : { whole };
+
   if (isQuick(comments, wholePage, hasPics)) {
-    const q = await attempt(project, spec, comments, { whole, quick: true });
+    const q = await attempt(project, spec, comments, { ...scope, quick: true });
     if (q?.none) return { spec, message: q.message, via: `${q.via} · no change` };
     if (q && q.changed && !q.failed.length) { done = q; lane = " · quick edit"; }
   }
   if (!done) {
-    const full = await attempt(project, spec, comments, { whole, quick: false });
+    let full = await attempt(project, spec, comments, { ...scope, quick: false });
+    // Scoped and it changed nothing: the request reached further than we thought, so the whole page goes.
+    if (only && (!full || (!full.changed && !full.none))) full = await attempt(project, spec, comments, { whole, quick: false });
     if (!full) return null;
     if (full.none) return { spec, message: full.message, via: `${full.via} · no change` };
     done = full;
@@ -284,6 +337,7 @@ export async function editCode(project: Project, comments: PendingComment[], who
   }
 
   const tModel = Date.now() - t0;
+  agentStage("Checking it in a real browser");
   // The check: measure the edited page; if the edit added layout faults, one fix pass with screenshots.
   const before = await beforeP;
   let after = await inspect(staticPage(done.spec.code!, done.spec.blocks), { shots: false }).catch(() => null);
@@ -292,8 +346,9 @@ export async function editCode(project: Project, comments: PendingComment[], who
   const lost = (a: typeof after) => (before && a ? lostWidgets(before.widgets, a.widgets) : []).filter((k) => !asksToRemove(comments, k));
   if (lost(after).length) {
     const gone = lost(after);
+    agentStage("Redoing it without hiding anything");
     const again = await attempt(project, spec, comments, {
-      whole, quick: false,
+      ...scope, quick: false,
       note: `Your previous answer hid or replaced the ${gone.join(", ")} widget${gone.length > 1 ? "s" : ""} (no longer visible on the page), which the request didn't ask for. Answer again: keep every widget visible where it is, unwrapped and unhidden, and change only what was asked. If the request is about what a widget does inside itself, answer with <nochange/> and say what it already does.`,
     });
     if (again?.none) return { spec, message: again.message, via: `${again.via} · no change` };
@@ -306,6 +361,7 @@ export async function editCode(project: Project, comments: PendingComment[], who
   }
   if (before && after && after.issues.length > before.issues.length) {
     const fresh = after.issues.filter((x) => !before.issues.includes(x));
+    agentStage("Fixing a layout problem the change caused");
     const seen = await inspect(staticPage(done.spec.code!, done.spec.blocks), { full: false }).catch(() => null);
     const fix = await attempt(project, done.spec, [], {
       whole: true, quick: false,
