@@ -96,10 +96,25 @@ async function listed(token: string) {
   return { list, hit: list.find((x) => x.blockchain === "near" && x.assetId === `nep141:${token}`) ?? null };
 }
 
-/** What a NEAR account holds for finishing a buy: its wNEAR, and whether the token needs the swap at all. */
-export async function legState(account: string, token: string): Promise<{ account: string; wnear: string; direct: boolean; decimals: number }> {
+/** NEAR (yocto) a 0x account can put into a swap: its balance less storage and 0.05 NEAR kept for gas and selling later. */
+const KEEP = 5n * 10n ** 22n;
+async function spendableNear(account: string): Promise<bigint> {
+  if (!isEthAccount(account)) return 0n; // a NEAR wallet's own NEAR is never swapped from here
+  const r = await nearRpc<{ amount?: string; storage_usage?: number }>("query", { request_type: "view_account", finality: "final", account_id: account });
+  if (!r?.amount) return 0n;
+  const free = BigInt(r.amount) - BigInt(r.storage_usage ?? 0) * 10n ** 19n - KEEP;
+  return free > 10n ** 22n ? free : 0n;
+}
+
+/**
+ * What a NEAR account holds for finishing a buy, and whether the token needs the swap at all. The bridge delivers
+ * wNEAR as wNEAR to an account registered with wrap.near, but as plain NEAR to one that isn't (1-Click unwraps it),
+ * so a 0x account's spendable NEAR counts too. `wnear` is the amount ready to swap, whichever form it came in.
+ */
+export async function legState(account: string, token: string): Promise<{ account: string; wnear: string; native: boolean; direct: boolean; decimals: number }> {
   const [{ hit }, wn, decimals] = await Promise.all([listed(token), ftBalance(WNEAR, account), ftDecimals(token)]);
-  return { account, wnear: wn.toString(), direct: !!hit, decimals: hit?.decimals ?? decimals };
+  const nat = wn > 0n ? 0n : await spendableNear(account);
+  return { account, wnear: (wn > 0n ? wn : nat).toString(), native: wn <= 0n && nat > 0n, direct: !!hit, decimals: hit?.decimals ?? decimals };
 }
 
 export async function xState(evm: string, token: string): Promise<XState> {
@@ -279,14 +294,20 @@ export async function xQuote(o: { side: "buy" | "sell"; pay: string; amount: str
 export async function xSwapLeg(evm: string, token: string): Promise<{ transactions: NearTx[]; out: number } | { error: string }> {
   const account = evm.toLowerCase();
   const w = await ftBalance(WNEAR, account);
-  if (w <= 0n) return { error: "The bridged wNEAR hasn't arrived yet." };
-  // Starter NEAR fronted for this buy is paid back first, out of the bridged wNEAR.
+  // Arrived as plain NEAR (the account isn't registered with wrap.near): swap that, wrapping it first.
+  const native = w > 0n ? 0n : await spendableNear(account);
+  const have = w > 0n ? w : native;
+  if (have <= 0n) return { error: "The bridged NEAR hasn't arrived yet." };
+  // Starter NEAR fronted for this buy is paid back first, out of what arrived.
   const owed = isEthAccount(account) ? await takeOwed(account) : 0n;
-  if (w <= owed) { await restoreOwed(account, owed); return { error: "Too little wNEAR arrived to swap." }; }
-  const nt = await ntQuote(token, "buy", (w - owed).toString(), account);
+  if (have <= owed) { await restoreOwed(account, owed); return { error: "Too little NEAR arrived to swap." }; }
+  const nt = await ntQuote(token, "buy", (have - owed).toString(), account);
   if ("error" in nt) { await restoreOwed(account, owed); return nt; }
-  // Already wrapped: skip neartrade's wrap step.
-  const transactions = await prune([...repayTxs(owed), ...nt.transactions], account, ["near_deposit"]);
+  const repay: NearTx[] = native > 0n
+    ? (owed > 0n && sponsorAccount() ? [{ receiverId: sponsorAccount()!, actions: [{ type: "Transfer", params: { deposit: owed.toString() } }] }] : [])
+    : repayTxs(owed);
+  // wNEAR: already wrapped, skip neartrade's wrap step. Plain NEAR: keep it.
+  const transactions = await prune([...repay, ...nt.transactions], account, native > 0n ? [] : ["near_deposit"]);
   return { transactions, out: fromUnits(nt.expectedOut, nt.tokenDecimals ?? (await ftDecimals(token))) };
 }
 
