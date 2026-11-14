@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "next dev -p 3100",
-    "build": "next build",
+    "build": "node scripts/check-site-api.mjs && next build",
     "start": "next start -p 3100",
     "style-refs": "node --import ./scripts/ts-loader.mjs --experimental-strip-types scripts/collect-style-refs.ts",
     "grant-plan": "node --import ./scripts/ts-loader.mjs --experimental-strip-types scripts/grant-plan.ts",
