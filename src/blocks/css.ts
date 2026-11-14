@@ -224,7 +224,7 @@ export const SITE_CSS = `
 .ss-sh-top{flex:none;touch-action:none}
 .ss-sh-grab{display:none}
 .ss-sh-head{display:grid;grid-template-columns:36px minmax(0,1fr) 36px;align-items:center;gap:8px;padding:14px 14px 6px}
-.ss-sh-title{margin:0!important;padding:0!important;text-align:center;font-family:var(--font-display);font-size:16px!important;font-weight:700;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;animation:ssFade .2s ease-out both}
+.ss-sh-title{margin:0!important;padding:0!important;text-align:center;font-family:var(--font-body)!important;font-size:16px!important;font-weight:600!important;letter-spacing:normal!important;text-transform:none!important;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;animation:ssFade .2s ease-out both}
 .ss-sh-ic{width:36px;height:36px;display:grid;place-items:center;border:0;border-radius:50%;background:transparent;color:var(--muted);cursor:pointer;padding:0}
 button.ss-sh-ic:hover{color:var(--text);background:color-mix(in srgb,var(--text) 7%,transparent)}
 button.ss-sh-ic:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -259,6 +259,8 @@ button.ss-sh-ic:focus-visible{outline:2px solid var(--accent);outline-offset:1px
 .ss-sh-skel b{width:44%;height:11px}.ss-sh-skel em{width:28%;height:9px}
 @keyframes ssShimmer{to{background-position:-200% 0}}
 .ss-sh-state{display:flex;flex-direction:column;align-items:center;text-align:center;padding:10px 0 4px;gap:6px}
+/* Popup text stays plain (the site's body font), whatever display face the page uses: the popup is a tool, not a poster. */
+.ss-sh-state b,.ss-sh h3,.ss-sh h4{font-family:var(--font-body)!important;font-size:17px!important;font-weight:600!important;letter-spacing:normal!important;text-transform:none!important;line-height:1.35!important}
 .ss-sh-state>b{font-family:var(--font-display);font-size:18px;margin-top:10px;overflow-wrap:anywhere}
 .ss-sh-state>p{margin:0;max-width:300px;font-size:13px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere}
 .ss-sh-state .ss-btn{width:100%;margin-top:14px}
