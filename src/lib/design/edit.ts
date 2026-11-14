@@ -149,8 +149,8 @@ ${o.review ? o.review.request : ""}${requestsText(comments)}${o.note ? `\n\n${o.
   // The fast lane runs the small model unless the owner's plan buys the big one for everything; either way it skips
   // thinking and answers in a few lines.
   const lane = o.quick
-    ? { tier: priorityModels() ? ("heavy" as const) : ("light" as const), maxOut: 4000, timeoutMs: 45_000, think: "off" as const }
-    : { tier: "heavy" as const, maxOut: o.review ? 24000 : 16000, timeoutMs: o.review ? 240_000 : 180_000, think: o.review ? ("medium" as const) : ("low" as const) };
+    ? { tier: priorityModels() ? ("heavy" as const) : ("light" as const), maxOut: 4000, timeoutMs: 45_000, think: "off" as const, noThinking: true }
+    : { tier: "heavy" as const, maxOut: o.review ? 24000 : 16000, timeoutMs: o.review ? 240_000 : 180_000, think: o.review ? ("medium" as const) : ("low" as const), noThinking: !o.review };
   // The agent's cursor in the preview follows the section the model is writing as its answer streams in.
   const known = new Set(spec.blocks.map((b) => b.id));
   let seen = 0;

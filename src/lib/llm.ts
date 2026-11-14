@@ -254,6 +254,8 @@ export interface RichAsk {
    * effort level for calls that analyse. Thinking counts toward maxOut, so analysing calls get room for both.
    */
   think?: "off" | "low" | "medium" | "high";
+  /** Reasoning models (GLM) answer straight away instead of thinking first: for edits, where the answer is short. */
+  noThinking?: boolean;
   /** "light" runs each provider's small, fast model (quick edits); a model the person picked still wins. */
   tier?: Tier;
 }
@@ -352,7 +354,7 @@ async function richClaude(a: RichAsk, key: string, model: string, withImages: bo
   return text ? { text, via: `Claude · ${model}`, model, usage: anthUsage(usage) } : null;
 }
 
-async function richOpenAiShape(a: RichAsk, url: string, key: string, model: string, label: string, opts: { images: boolean; reasoning?: boolean }): Promise<LlmResult | null> {
+async function richOpenAiShape(a: RichAsk, url: string, key: string, model: string, label: string, opts: { images: boolean; reasoning?: boolean; thinkOff?: boolean }): Promise<LlmResult | null> {
   const listed = (a.images ?? []).length ? `\n\nPictures of the token (URLs, you can't open them; use them as <img src> where the brief says):\n${a.images!.join("\n")}` : "";
   const user = opts.images && (a.images?.length || a.files?.length)
     ? [
@@ -368,6 +370,8 @@ async function richOpenAiShape(a: RichAsk, url: string, key: string, model: stri
       model, stream: true, stream_options: { include_usage: true },
       messages: [{ role: "system", content: a.system }, { role: "user", content: user }],
       ...(opts.reasoning ? { max_completion_tokens: a.maxOut * 2 } : { max_tokens: a.maxOut, temperature: a.temperature ?? 0.8 }),
+      // GLM thinks in a separate stream before answering; on an edit that can eat the whole budget and leave no answer.
+      ...(opts.thinkOff ? { chat_template_kwargs: { enable_thinking: false } } : {}),
     }),
     signal: jobTimeout(a.timeoutMs),
   });
@@ -376,16 +380,23 @@ async function richOpenAiShape(a: RichAsk, url: string, key: string, model: stri
     return null;
   }
   let text = "";
+  let thought = 0;
+  let finish = "";
+  const t0 = Date.now();
   let usage: { in: number; out: number } | undefined;
   await sse(r.body, (d) => {
     if (d === "[DONE]") return;
     try {
-      const j = JSON.parse(d) as { choices?: { delta?: { content?: string } }[]; usage?: OaiUsage };
-      const piece = j.choices?.[0]?.delta?.content;
+      const j = JSON.parse(d) as { choices?: { delta?: { content?: string; reasoning_content?: string }; finish_reason?: string }[]; usage?: OaiUsage };
+      const c = j.choices?.[0];
+      const piece = c?.delta?.content;
+      thought += c?.delta?.reasoning_content?.length ?? 0;
+      if (c?.finish_reason) finish = c.finish_reason;
       if (piece) { text += piece; a.onText?.(text); }
       if (j.usage) usage = oaiUsage(j.usage);
     } catch { /* partial */ }
   });
+  if (!text) console.warn(`[llm] ${label} ${model} gave no answer after ${Date.now() - t0}ms (finish ${finish || "none"}, ${thought} chars of thinking)`);
   return text ? { text, via: `${label} · ${model.split("/").pop()}`, model, usage } : null;
 }
 
@@ -408,7 +419,7 @@ export async function askRich(a: RichAsk, accept: (text: string) => boolean = (t
       if (p.id === "anthropic") {
         const model = p.model ?? MODELS.claude[t];
         res = (await richClaude(a, p.key, model, true)) ?? (a.images?.length || a.files?.length ? await richClaude(a, p.key, model, false) : null);
-      } else if (p.id === "nearai") res = await richOpenAiShape(a, NEAR_AI_URL, p.key, p.model ?? MODELS.nearAi[t], "NEAR AI Cloud", { images: false });
+      } else if (p.id === "nearai") res = await richOpenAiShape(a, NEAR_AI_URL, p.key, p.model ?? MODELS.nearAi[t], "NEAR AI Cloud", { images: false, thinkOff: !!a.noThinking });
       else if (p.id === "openai") res = await richOpenAiShape(a, OPENAI_URL, p.key, p.model ?? MODELS.openai[t], "OpenAI", { images: true, reasoning: true });
       else if (isCompat(p.id)) res = p.model ? await richOpenAiShape(a, COMPAT[p.id].base, p.key, p.model, COMPAT[p.id].name, { images: COMPAT[p.id].images }) : null;
       else res = await richOpenAiShape(a, "https://openrouter.ai/api/v1", p.key, p.model ?? MODELS.openrouter[t], "OpenRouter", { images: false });
