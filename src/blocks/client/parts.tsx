@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRightLeft, ArrowUp, Check, ChevronDown, Copy, Globe2, Loader2, Shield } from "lucide-react";
+import { ArrowRightLeft, ArrowUp, Check, ChevronDown, Copy, ExternalLink, Globe2, Loader2, Search, Shield } from "lucide-react";
 import { CHAINS, isEvm, type Chain, type TokenInfo } from "@/lib/spec";
 import { venue } from "@/lib/venues";
 import { explorerTx, familyOf, nearInstalled, sendEvm, sendNear, sendSolana, short, useWallets, waitEvm } from "./wallet";
@@ -9,6 +9,7 @@ import { XCOINS, fromUnits, xcoin } from "@/lib/xpay";
 import { WalletButton } from "./connect";
 import { CoinMark, FinishSwap, WalletTrade, bestCoin, markPending, useXState } from "./xbuy";
 import type { BuiltTx } from "@/lib/swap";
+import { AddressQR, Result, Review, Sheet, SheetError, SkeletonRows, Stages, StepList, useFlow, Working } from "./sheet";
 import { ago, num, pct, usd } from "../format";
 
 /** $0.0₅3057 with the zero count as a real subscript, since display fonts rarely carry the ₀-₉ glyphs. */
@@ -390,16 +391,18 @@ export function BuyBox({ chain, token, ticker, presets }: { chain: Chain; token:
   const [intentsList, setIntentsList] = useState<PayOption[]>([]);
   const [picked, setPicked] = useState<string | null>(null);
   const [side, setSide] = useState<"buy" | "sell">("buy");
-  const [open, setOpen] = useState(false);
-  const [all, setAll] = useState(false);
+  // The coin list is a popup screen of its own, searchable; the box keeps only the chip that opens it.
+  const coinFlow = useFlow<"coins">();
+  const [find, setFind] = useState("");
+  const [intentsReady, setIntentsReady] = useState(false);
   // A deposit buy whose wNEAR is on its way to this account; the box finishes it with one swap (FinishSwap).
   const [landing, setLanding] = useState<string | null>(null);
   const native = CHAINS[chain].native;
   const myNear = fam === "evm" ? evmAddr!.toLowerCase() : fam === "near" ? connected!.address : null;
 
   useEffect(() => {
-    if (!token || token.demo) { setIntentsList([{ key: "sol:SOL", label: "SOL", chain: "Solana" }, { key: "btc:BTC", label: "BTC", chain: "Bitcoin" }, { key: "eth:ETH", label: "ETH", chain: "Ethereum" }]); return; }
-    void fetch("/api/intents").then((r) => r.json()).then((j: { payWith: PayOption[] }) => setIntentsList(j.payWith ?? [])).catch(() => undefined);
+    if (!token || token.demo) { setIntentsList([{ key: "sol:SOL", label: "SOL", chain: "Solana" }, { key: "btc:BTC", label: "BTC", chain: "Bitcoin" }, { key: "eth:ETH", label: "ETH", chain: "Ethereum" }]); setIntentsReady(true); return; }
+    void fetch("/api/intents").then((r) => r.json()).then((j: { payWith: PayOption[] }) => setIntentsList(j.payWith ?? [])).catch(() => undefined).finally(() => setIntentsReady(true));
   }, [token]);
 
   const coins = useMemo<PayCoin[]>(() => {
@@ -449,16 +452,18 @@ export function BuyBox({ chain, token, ticker, presets }: { chain: Chain; token:
   const list = coins.filter((c) => (sideNow === "sell" ? c.how === "evm" : true));
   const held = list.filter((c) => usdOf(c) >= 0.5).sort((a, b) => usdOf(b) - usdOf(a));
   const restList = list.filter((c) => !held.includes(c));
-  // Grouped by the wallet each needs, so the list says what will happen. Collapsed, each group shows its first few.
-  const groups: Array<[string, PayCoin[], number]> = [
-    ["In your wallet", held, 6],
-    [`${CHAINS[chain].name} wallet`, restList.filter((c) => c.how === "native"), 1],
-    ["Ethereum wallet, no NEAR wallet needed", restList.filter((c) => c.how === "evm"), 4],
-    ["Deposit from any wallet or exchange", restList.filter((c) => c.how === "intents"), 4],
+  // Grouped by the wallet each needs, so the list says what will happen.
+  const f = find.trim().toLowerCase();
+  const hit = (c: PayCoin) => !f || c.symbol.toLowerCase().includes(f) || c.chain.toLowerCase().includes(f);
+  const groups: Array<[string, PayCoin[]]> = [
+    ["In your wallet", held.filter(hit)],
+    [`${CHAINS[chain].name} wallet`, restList.filter((c) => c.how === "native" && hit(c))],
+    ["Ethereum wallet, no NEAR wallet needed", restList.filter((c) => c.how === "evm" && hit(c))],
+    ["Deposit from any wallet or exchange", restList.filter((c) => c.how === "intents" && hit(c))],
   ];
-  const hiddenCount = groups.reduce((n, [, cs, max]) => n + Math.max(0, cs.length - max), 0);
+  const found = groups.reduce((n, [, cs]) => n + cs.length, 0);
 
-  const pick = (c: PayCoin) => { setPicked(c.key); setOpen(false); setAll(false); };
+  const pick = (c: PayCoin) => { setPicked(c.key); coinFlow.close(); };
   const sub = (c: PayCoin) => (c.how === "intents" ? `on ${c.chain}, by deposit` : `on ${c.chain}`);
 
   return (
@@ -473,36 +478,47 @@ export function BuyBox({ chain, token, ticker, presets }: { chain: Chain; token:
           <button type="button" role="tab" aria-selected={sideNow === "sell"} onClick={() => setSide("sell")}>Sell</button>
         </div>
       )}
-      <span className="ss-label" style={{ marginTop: 0 }}>{sideNow === "buy" ? "Pay with" : "Get back"}</span>
-      <button type="button" className="ss-coin" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <CoinMark symbol={coin.symbol} chain={coin.chain} />
-        <span className="ss-coin-name"><b>{coin.symbol}</b><span>{sub(coin)}</span></span>
-        {bal(coin) != null && <span className="ss-coin-bal">{num(bal(coin)!)}</span>}
-        <ChevronDown size={16} aria-hidden style={{ transform: open ? "rotate(180deg)" : undefined }} />
-      </button>
-      {open && (
-        <div className="ss-coins" role="listbox" aria-label="Pay with" data-all={all || undefined}>
-          {groups.map(([title, cs, max]) => {
-            const room = all ? cs : cs.slice(0, max);
-            if (!room.length) return null;
-            return (
+      <div className="ss-buy-pay">
+        <span>{sideNow === "buy" ? "Pay with" : "Get back"}</span>
+        <button type="button" className="ss-paywith" data-el="paywith" aria-haspopup="dialog" onClick={() => { setFind(""); coinFlow.open("coins"); }}>
+          <CoinMark symbol={coin.symbol} chain={coin.chain} size={26} />
+          <span>{coin.symbol} <small>{sub(coin)}</small></span>
+          <ChevronDown size={16} aria-hidden />
+        </button>
+      </div>
+      {coinFlow.screen && (
+        <Sheet screen="coins" dir={coinFlow.dir} closing={coinFlow.closing} title={sideNow === "buy" ? "Pay with" : "Get back"} onClose={coinFlow.close}>
+          {list.length > 6 && (
+            <label className="ss-sh-search">
+              <Search size={16} aria-hidden />
+              <input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Search a coin or chain" aria-label="Search coins" autoComplete="off" spellCheck={false} />
+            </label>
+          )}
+          <div className="ss-coins" role="listbox" aria-label={sideNow === "buy" ? "Pay with" : "Get back"}>
+            {groups.map(([title, cs]) => cs.length > 0 && (
               <div key={title} className="ss-coin-group">
                 <div className="ss-wsep">{title}</div>
-                {room.map((c) => (
+                {cs.map((c) => (
                   <button key={c.key} type="button" role="option" aria-selected={c.key === coin.key} className="ss-coin" onClick={() => pick(c)}>
-                    <CoinMark symbol={c.symbol} chain={c.chain} size={24} />
+                    <CoinMark symbol={c.symbol} chain={c.chain} size={32} />
                     <span className="ss-coin-name"><b>{c.symbol}</b><span>{sub(c)}</span></span>
                     {bal(c) != null && bal(c)! > 0 && <span className="ss-coin-bal">{num(bal(c)!)}</span>}
+                    {c.key === coin.key && <Check size={16} aria-hidden style={{ flex: "none", color: "var(--accent)" }} />}
                   </button>
                 ))}
               </div>
-            );
-          })}
-          {!all && hiddenCount > 0 && <button type="button" className="ss-link-btn" style={{ marginTop: 6 }} onClick={() => setAll(true)}>Show all {list.length} coins</button>}
-        </div>
+            ))}
+            {!intentsReady && sideNow === "buy" && !f && (
+              <div className="ss-coin-group">
+                <div className="ss-wsep">Deposit from any wallet or exchange</div>
+                <SkeletonRows n={3} />
+              </div>
+            )}
+            {found === 0 && intentsReady && <div className="ss-sh-empty">No coin matches “{find.trim()}”.</div>}
+          </div>
+        </Sheet>
       )}
-      {/* Hidden, not unmounted, while the list is open: what was typed (amount, addresses) survives a look at the list. */}
-      <div hidden={open}>
+      <div>
         {coin.how === "native" ? <SameChain chain={chain} token={token} ticker={ticker} presets={presets} onUseEvm={nearToken ? () => setPicked(bestCoin(st, connected?.chainId)) : undefined} />
           : coin.how === "evm" ? (evmAddr || token?.demo
             ? <WalletTrade token={token!} ticker={ticker} side={sideNow} coinKey={coin.key} st={st} reload={reload} />
@@ -533,6 +549,9 @@ function SameChain({ chain, token, ticker, presets, onUseEvm }: { chain: Chain; 
   const [tx, setTx] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tries, setTries] = useState(0);
+  const flow = useFlow<"review" | "run" | "end">();
+  const openRef = useRef(false);
+  openRef.current = !!flow.screen && !flow.closing;
   const native = CHAINS[chain].native;
   // Still on a launchpad curve: its own page is the way in when our router can't fill the curve (four.meme).
   const tv = token?.venue;
@@ -590,6 +609,8 @@ function SameChain({ chain, token, ticker, presets, onUseEvm }: { chain: Chain; 
       setErr((e as { code?: number }).code === 4001 || /reject|denied|cancel/i.test(m) ? "You cancelled in the wallet." : m || "The swap didn't go through.");
       setStep("idle");
     }
+    // A buy that ends after the popup was closed shows its result in the box only.
+    if (openRef.current) flow.replace("end");
   }
 
   return (
@@ -621,10 +642,42 @@ function SameChain({ chain, token, ticker, presets, onUseEvm }: { chain: Chain; 
       {/* Connect never waits on a quote: a busy router mustn't hide the way in. */}
       {!connected && !token.demo && !viaPad && <div style={{ marginTop: 14 }}><WalletButton chain={chain} token={token} block prefer={chain === "near" ? "near" : undefined} /></div>}
       {canSwap && (
-        <button type="button" className="ss-btn" style={{ width: "100%", marginTop: 14 }} disabled={step === "building" || step === "signing" || !(Number(amount) > 0) || q?.out == null} onClick={() => void buy()}>
+        <button type="button" className="ss-btn" style={{ width: "100%", marginTop: 14 }} disabled={step === "idle" || step === "sent" ? !(Number(amount) > 0) || q?.out == null : false} onClick={() => { if (step === "building" || step === "signing") flow.open("run"); else { setErr(null); flow.open("review"); } }}>
           {step === "building" || step === "signing" ? <Loader2 size={16} className="ss-spin" /> : <ArrowRightLeft size={16} />}
           {step === "building" ? "Preparing…" : step === "signing" ? "Confirm in your wallet" : `Buy $${ticker}`}
         </button>
+      )}
+      {flow.screen && connected && (
+        <Sheet screen={flow.screen} dir={flow.dir} closing={flow.closing} onClose={flow.close}
+          onBack={flow.screen === "end" && !tx ? () => { setErr(null); flow.back(); } : undefined}
+          title={flow.screen === "review" ? `Buy $${ticker}` : flow.screen === "run" ? (step === "building" ? "Preparing" : "Confirm in your wallet") : `Buy $${ticker}`}>
+          {flow.screen === "review" && (
+            <>
+              <Review rows={[
+                ["You pay", `${amount} ${native}`],
+                q?.out != null && ["You get about", `${num(q.out)} $${ticker}`],
+                q?.venue && ["Route", q.venue],
+                q?.impactPct != null && ["Price impact", `${q.impactPct.toFixed(2)}%`],
+                ["Wallet", <span className="ss-mono">{connected.wallet.name} · {short(connected.address)}</span>],
+              ]} />
+              <div className="ss-sh-actions">
+                <button type="button" className="ss-btn" disabled={q?.out == null} onClick={() => { flow.go("run"); void buy(); }}><ArrowRightLeft size={16} /> Confirm buy</button>
+              </div>
+            </>
+          )}
+          {flow.screen === "run" && (
+            <Working icon={<CoinMark symbol={native} chain={CHAINS[chain].name} size={40} />} title={step === "signing" ? `Confirm in ${connected.wallet.name}` : "Preparing the swap"} sub={step === "signing" ? "Your wallet shows the swap. Nothing is sent until you approve it." : "Getting a fresh route for this amount."} />
+          )}
+          {flow.screen === "end" && (
+            <>
+              <Result ok={!!tx} title={tx ? "Swap sent" : err === "You cancelled in the wallet." ? "Cancelled" : "Didn't go through"} sub={tx ? `About ${q?.out != null ? num(q.out) : ""} $${ticker} is on its way to ${short(connected.address)}.` : err ?? undefined} />
+              <div className="ss-sh-actions">
+                {tx ? <button type="button" className="ss-btn" onClick={flow.close}>Done</button> : <button type="button" className="ss-btn" onClick={() => { setErr(null); flow.back(); }}>Try again</button>}
+                {tx && <a className="ss-sh-link" href={explorerTx(chain, tx)} target="_blank" rel="noreferrer">View the transaction <ExternalLink size={13} /></a>}
+              </div>
+            </>
+          )}
+        </Sheet>
       )}
       {wrongWallet && (chain === "near" && familyOf(connected!.wallet) === "evm" && onUseEvm ? (
         <div style={{ marginTop: 14 }}>
@@ -654,7 +707,7 @@ const RELAY_CHAINS: Chain[] = ["ethereum", "base", "bsc", "robinhood", "solana"]
 const DEMO_USD: Record<string, number> = { ETH: 3400, SOL: 160, USDC: 1, USDT: 1, BNB: 600, BTC: 98000, NEAR: 3.2 };
 
 function AnyChain({ chain, token, ticker, payKey, onLanding, onUseNative }: { chain: Chain; token: TokenInfo | null; ticker: string; payKey?: string; onLanding?: (account: string) => void; onUseNative?: () => void }) {
-  const relayOk = RELAY_CHAINS.includes(chain) && !!token;
+  const relayOk = RELAY_CHAINS.includes(chain) && !!token && (!payKey || RELAY_PAYS.some((p) => p.key === payKey));
   const [route, setRoute] = useState<"intents" | "relay">("intents");
   return (
     <>
@@ -667,7 +720,7 @@ function AnyChain({ chain, token, ticker, payKey, onLanding, onUseNative }: { ch
           ))}
         </div>
       )}
-      {route === "relay" && relayOk ? <RelayRoute chain={chain} token={token!} ticker={ticker} /> : <IntentsRoute key={payKey} chain={chain} token={token} ticker={ticker} payKey={payKey} onLanding={onLanding} onUseNative={onUseNative} />}
+      {route === "relay" && relayOk ? <RelayRoute chain={chain} token={token!} ticker={ticker} payKey={payKey} /> : <IntentsRoute key={payKey} chain={chain} token={token} ticker={ticker} payKey={payKey} onLanding={onLanding} onUseNative={onUseNative} />}
     </>
   );
 }
@@ -686,7 +739,11 @@ function IntentsRoute({ chain, token, ticker, payKey, onLanding, onUseNative }: 
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [code, setCode] = useState<string | null>(null);
   const [landed, setLanded] = useState(false);
+  const flow = useFlow<"deposit" | "done">();
+  const openRef = useRef(false);
+  openRef.current = !!flow.screen && !flow.closing;
 
   useEffect(() => {
     if (token?.demo) { setPays([{ key: "eth:ETH", label: "ETH", chain: "Ethereum" }, { key: "sol:SOL", label: "SOL", chain: "Solana" }, { key: "btc:BTC", label: "BTC", chain: "Bitcoin" }, { key: "base:USDC", label: "USDC", chain: "Base" }]); setCanPrivate(true); return; }
@@ -729,7 +786,8 @@ function IntentsRoute({ chain, token, ticker, payKey, onLanding, onUseNative }: 
       if (!r?.ok) return;
       const j = (await r.json()) as { status?: string; code?: string };
       setStatus(j.status ?? null);
-      if (j.code === "SUCCESS") setLanded(true);
+      setCode(j.code ?? null);
+      if (j.code === "SUCCESS") { setLanded(true); if (openRef.current) flow.replace("done"); }
     }, 6000);
     return () => clearInterval(h);
   }, [q?.depositAddress, q?.dry]);
@@ -742,6 +800,9 @@ function IntentsRoute({ chain, token, ticker, payKey, onLanding, onUseNative }: 
     setBusy(false);
     if ("error" in j) { setErr(sayErr(j.error).text); return; }
     setQ(j);
+    setStatus(null);
+    setCode(null);
+    flow.open("deposit");
     // Not deliverable as the token: wNEAR lands, and the box swaps it with one signature from that account.
     if (chain === "near" && token && !(j as IntentQuote).deliver.direct) {
       const to = recipient.trim().toLowerCase();
@@ -811,11 +872,46 @@ function IntentsRoute({ chain, token, ticker, payKey, onLanding, onUseNative }: 
         </>
       )}
       {live && (
-        <div className="ss-quote" style={{ borderColor: "var(--accent)" }}>
-          Send exactly <b>{q.amountIn} {payLabel?.label}</b> on {payLabel?.chain} to:
-          <div style={{ marginTop: 10 }}><CopyCA address={q.depositAddress!} /></div>
-          <div className="ss-note">Status: {status ?? "waiting for your deposit"}. This address is for this quote only.</div>
+        // The deposit address lives in the popup; the box keeps a line that says where things are and reopens it.
+        <div className="ss-quote" style={{ borderColor: "var(--accent)", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          {landed ? <Check size={15} /> : <Loader2 size={15} className="ss-spin" />}
+          <span style={{ flex: "1 1 180px", minWidth: 0 }}>{landed ? "Arrived." : `Send ${q.amountIn} ${payLabel?.label ?? ""} · ${status ?? "waiting for your deposit"}`}</span>
+          <button type="button" className="ss-link-btn" style={{ marginLeft: "auto" }} onClick={() => flow.open(landed ? "done" : "deposit")}>{landed ? "Details" : "Show deposit address"}</button>
         </div>
+      )}
+      {flow.screen && live && (
+        <Sheet screen={flow.screen} dir={flow.dir} closing={flow.closing} onClose={flow.close}
+          title={q.private ? "Private deposit" : "Deposit"}>
+          {flow.screen === "deposit" && (
+            <>
+              <Stages names={["Details", "Send", "Swap", "Arrives"]} at={code === "SUCCESS" ? 3 : code === "KNOWN_DEPOSIT_TX" || code === "PROCESSING" ? 2 : 1} />
+              <p className="ss-sh-sub">Send exactly <b style={{ color: "var(--text)" }}>{q.amountIn} {payLabel?.label}</b> on {payLabel?.chain} to this address.</p>
+              <AddressQR address={q.depositAddress!} logo={<CoinMark symbol={payLabel?.label ?? "ETH"} chain={payLabel?.chain} size={34} />} />
+              {code === "REFUNDED" || code === "FAILED" || code === "INCOMPLETE_DEPOSIT"
+                ? <SheetError msg={`NEAR Intents: ${status}. ${code === "INCOMPLETE_DEPOSIT" ? "Send the rest to the same address, or wait for the refund." : `It goes back to ${short(refund.trim())}.`}`} />
+                : <div className="ss-sh-wait" role="status"><Loader2 size={14} className="ss-spin" />{status ? `${status[0].toUpperCase()}${status.slice(1)}` : "Waiting for your deposit"}</div>}
+              <Review rows={[
+                ["You get about", q.then ? `${num(q.then.out)} $${ticker}` : `${amt(q.amountOut)} ${q.deliver.symbol}`],
+                ["Lands in", <span className="ss-mono">{short(recipient.trim())}</span>],
+                ["Refunds to", <span className="ss-mono">{short(refund.trim())}</span>],
+                q.timeEstimate ? ["Takes about", q.timeEstimate < 90 ? `${Math.max(5, Math.round(q.timeEstimate / 5) * 5)} s` : `${Math.round(q.timeEstimate / 60)} min`] : null,
+                ["Route", q.private ? "NEAR Intents, private" : "NEAR Intents"],
+              ]} />
+              <p className="ss-sh-sub" style={{ margin: "10px 0 0" }}>This address is for this quote only. You can close this; the box keeps watching.</p>
+            </>
+          )}
+          {flow.screen === "done" && (
+            <>
+              <Result ok title={q.deliver.direct ? `$${ticker} arrived` : `${q.deliver.symbol} arrived`}
+                sub={q.deliver.direct ? `${amt(q.amountOut)} ${q.deliver.symbol} is in ${short(recipient.trim())}.` : chain === "near" ? `It landed as wNEAR. One signature in the box swaps it for $${ticker}.` : `It landed as ${q.deliver.symbol}. Buy $${ticker} with it in one tap.`} />
+              <div className="ss-sh-actions">
+                {!q.deliver.direct && chain !== "near" && onUseNative
+                  ? <button type="button" className="ss-btn" onClick={() => { flow.close(); onUseNative(); }}><ArrowRightLeft size={16} /> Buy ${ticker} with your {q.deliver.symbol}</button>
+                  : <button type="button" className="ss-btn" onClick={flow.close}>Done</button>}
+              </div>
+            </>
+          )}
+        </Sheet>
       )}
       {live && landed && !q.deliver.direct && chain !== "near" && onUseNative && (
         <button type="button" className="ss-btn" style={{ width: "100%", marginTop: 12 }} onClick={onUseNative}>
@@ -834,9 +930,13 @@ const RELAY_PAYS: PayOption[] = [
 ];
 const hex = (v: string | null) => (v == null ? null : v.startsWith("0x") ? v : `0x${BigInt(v || "0").toString(16)}`);
 
-function RelayRoute({ chain, token, ticker }: { chain: Chain; token: TokenInfo; ticker: string }) {
+function RelayRoute({ chain, token, ticker, payKey }: { chain: Chain; token: TokenInfo; ticker: string; payKey?: string }) {
   const { connected } = useWallets();
-  const [pay, setPay] = useState(chain === "bsc" ? "bsc:BNB" : chain === "base" ? "base:ETH" : "eth:ETH");
+  // The coin picked in the box's Pay with list; this route keeps its own small list only when used on its own.
+  const [pay, setPay] = useState(payKey ?? (chain === "bsc" ? "bsc:BNB" : chain === "base" ? "base:ETH" : "eth:ETH"));
+  const flow = useFlow<"review" | "run" | "end">();
+  const openRef = useRef(false);
+  openRef.current = !!flow.screen && !flow.closing;
   const [amount, setAmount] = useState("0.01");
   const [recipient, setRecipient] = useState("");
   const [q, setQ] = useState<RelayQ | null>(null);
@@ -878,6 +978,7 @@ function RelayRoute({ chain, token, ticker }: { chain: Chain; token: TokenInfo; 
     }, 4000);
     return () => clearInterval(h);
   }, [step, q?.requestId, status?.done, status?.failed]);
+  useEffect(() => { if ((status?.done || status?.failed) && openRef.current) flow.replace("end"); }, [status?.done, status?.failed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function buy() {
     if (!evmOn || !connected) return;
@@ -905,6 +1006,7 @@ function RelayRoute({ chain, token, ticker }: { chain: Chain; token: TokenInfo; 
       const m = (e as { message?: string }).message ?? "";
       setErr((e as { code?: number }).code === 4001 || /reject|denied|cancel/i.test(m) ? "You cancelled in the wallet." : m || "The buy didn't go through.");
       setStep("idle");
+      if (openRef.current) flow.replace("end");
     } finally {
       setN(null);
     }
@@ -914,12 +1016,14 @@ function RelayRoute({ chain, token, ticker }: { chain: Chain; token: TokenInfo; 
   const locked = step === "quoting" || step === "signing" || step === "sent";
   return (
     <>
-      <label className="ss-label" htmlFor="ss-rpay">Pay with</label>
+      <label className="ss-label" htmlFor="ss-ramt">{payKey ? `Amount (${payLabel?.label ?? "ETH"})` : "Pay with"}</label>
       <div className="ss-row">
-        <select id="ss-rpay" className="ss-select" value={pay} onChange={(e) => setPay(e.target.value)} disabled={locked}>
-          {RELAY_PAYS.map((p) => <option key={p.key} value={p.key}>{p.label} on {p.chain}</option>)}
-        </select>
-        <input className="ss-input" inputMode="decimal" aria-label="Amount" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} disabled={locked} />
+        {!payKey && (
+          <select id="ss-rpay" className="ss-select" value={pay} onChange={(e) => setPay(e.target.value)} disabled={locked}>
+            {RELAY_PAYS.map((p) => <option key={p.key} value={p.key}>{p.label} on {p.chain}</option>)}
+          </select>
+        )}
+        <input id="ss-ramt" className="ss-input" style={{ flex: 1, minWidth: 0 }} inputMode="decimal" aria-label="Amount" value={amount} onChange={(e) => setAmount(cleanAmt(e.target.value))} disabled={locked} />
       </div>
       {q && (
         <div className="ss-quote">
@@ -950,10 +1054,55 @@ function RelayRoute({ chain, token, ticker }: { chain: Chain; token: TokenInfo; 
           <div className="ss-note" style={{ marginTop: 8 }}>Connect the wallet that holds your {payLabel?.label} on {payLabel?.chain}.</div>
         </div>
       ) : (
-        <button type="button" className="ss-btn" style={{ width: "100%", marginTop: 14 }} disabled={locked || !q || !(Number(amount) > 0) || !recipient.trim()} onClick={() => void buy()}>
+        <button type="button" className="ss-btn" style={{ width: "100%", marginTop: 14 }} disabled={!locked && (!q || !(Number(amount) > 0) || !recipient.trim())} onClick={() => (locked ? flow.open("run") : (setErr(null), flow.open("review")))}>
           {locked ? <Loader2 size={16} className="ss-spin" /> : <ArrowRightLeft size={16} />}
           {step === "quoting" ? "Preparing…" : step === "signing" ? `Confirm in your wallet${n && n.of > 1 ? ` (${n.at} of ${n.of})` : ""}` : `Buy $${ticker} with ${payLabel?.label}`}
         </button>
+      )}
+      {flow.screen && q && (
+        <Sheet screen={flow.screen} dir={flow.dir} closing={flow.closing} onClose={flow.close}
+          onBack={flow.screen === "end" && step === "idle" ? () => { setErr(null); flow.back(); } : undefined}
+          title={flow.screen === "review" ? `Buy $${ticker}` : flow.screen === "run" ? (step === "sent" ? "On its way" : step === "signing" ? "Confirm in your wallet" : "Preparing") : `Buy $${ticker}`}>
+          {flow.screen === "review" && (
+            <>
+              <Review rows={[
+                ["You pay", `${amount} ${payLabel?.label ?? ""} on ${payLabel?.chain ?? ""}`],
+                ["You get about", <>{q.amountOut} ${ticker}{q.amountOutUsd ? <span className="ss-muted" style={{ fontWeight: 400 }}> · ${Number(q.amountOutUsd).toFixed(2)}</span> : null}</>],
+                q.feesUsd ? ["Fees", `$${q.feesUsd.toFixed(2)}`] : null,
+                q.impactPct != null && q.impactPct <= -0.1 && ["Price impact", `${Math.abs(q.impactPct).toFixed(2)}%`],
+                q.timeEstimate ? ["Takes about", `${Math.max(2, q.timeEstimate)} s`] : null,
+                recipient.trim() && ["Lands in", <span className="ss-mono">{short(recipient.trim())}</span>],
+                ["Route", "Relay"],
+              ]} />
+              <div className="ss-sh-actions">
+                <button type="button" className="ss-btn" onClick={() => { flow.go("run"); void buy(); }}><ArrowRightLeft size={16} /> Confirm buy</button>
+              </div>
+            </>
+          )}
+          {flow.screen === "run" && (
+            <>
+              <Working icon={<CoinMark symbol={payLabel?.label ?? "ETH"} chain={payLabel?.chain} size={40} />}
+                title={step === "quoting" ? "Getting a route for your wallet" : step === "signing" ? `Confirm in your wallet${n && n.of > 1 ? ` (${n.at} of ${n.of})` : ""}` : `$${ticker} is on its way`}
+                sub={step === "signing" ? (n && n.of > 1 && n.at === 1 ? `First approve ${payLabel?.label}, then the buy itself.` : "Nothing is sent until you approve it there.") : step === "sent" ? (status?.text ? `Relay: ${status.text}.` : "Usually a few seconds.") : "Relay builds the transaction for this exact wallet."} />
+              <div style={{ marginTop: 14 }}>
+                <StepList steps={[
+                  { text: "Route for this wallet", state: step === "quoting" ? "now" : "done" },
+                  { text: q.txs.length > 1 ? `Approve and send (${q.txs.length} signatures)` : "Send from your wallet", state: step === "quoting" ? "todo" : step === "signing" ? "now" : "done", sub: n && n.of > 1 ? `${n.at} of ${n.of}` : tx ? short(tx.hash) : undefined },
+                  { text: `$${ticker} arrives`, state: step !== "sent" ? "todo" : status?.done ? "done" : status?.failed ? "fail" : "now", sub: step === "sent" ? status?.text ?? undefined : undefined },
+                ]} />
+              </div>
+            </>
+          )}
+          {flow.screen === "end" && (
+            <>
+              <Result ok={!!status?.done} title={status?.done ? `$${ticker} arrived` : err === "You cancelled in the wallet." ? "Cancelled" : "Didn't go through"} sub={status?.done ? `About ${q.amountOut} $${ticker} is in ${short(recipient.trim() || connected?.address || "")}.` : err ?? (status?.text ? `Relay: ${status.text}.` : undefined)} />
+              <div className="ss-sh-actions">
+                {step === "idle" ? <button type="button" className="ss-btn" onClick={() => { setErr(null); flow.back(); }}>Try again</button> : <button type="button" className="ss-btn" onClick={flow.close}>Done</button>}
+                {tx && <a className="ss-sh-link" href={explorerTx(tx.chain, tx.hash)} target="_blank" rel="noreferrer">View the transaction <ExternalLink size={13} /></a>}
+              </div>
+            </>
+          )}
+        </Sheet>
       )}
       {err && <div className="ss-err">{err}</div>}
     </>

@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDownUp, ArrowRightLeft, Check, Copy, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDownUp, ArrowRightLeft, Check, Copy, ExternalLink, Loader2 } from "lucide-react";
 import type { TokenInfo } from "@/lib/spec";
 import type { NearTx } from "@/lib/swap";
 import { NEAR_EVM, onboardTx, toEthTxs } from "@/lib/ethnear";
 import { XCOINS, addChainParams, chainOfCoin, xcoin, fromUnits, toUnits, unitsToInput } from "@/lib/xpay";
 import { evmSession, familyOf, sendNear, short, switchEvm, useWallets } from "./wallet";
 import { num } from "../format";
+import { Result, Review, Sheet, StepList, useFlow, Working, type Step, type StepState } from "./sheet";
 
 // "Your wallet" on a NEAR token's site: buy or sell with ETH/USDC already in a connected Ethereum wallet, without
 // leaving the page or making a NEAR wallet. The coins land in the visitor's own 0x account on NEAR (same address as
@@ -22,8 +23,6 @@ export interface XState {
   sponsor: boolean;
 }
 interface Quote { route: "direct" | "swap"; depositAddress: string | null; out: number; outUsd: number | null; timeEstimate: number | null; transactions: NearTx[] }
-type StepState = "todo" | "now" | "done" | "fail";
-interface Step { text: string; state: StepState; sub?: string }
 
 // Each coin's own brand colour behind its ticker sign or letters.
 const MARKS: Record<string, [string, string, number]> = {
@@ -204,6 +203,12 @@ export function WalletTrade({ token, ticker, side, coinKey, st, reload }: { toke
   const [needNear, setNeedNear] = useState(false);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
+  // The popup: review what's about to happen, watch the steps, see how it ended.
+  const flow = useFlow<"review" | "run" | "end">();
+  // A trade that ends after the popup was closed shows its result inline only: no popup the buyer didn't ask for.
+  const openRef = useRef(false);
+  openRef.current = !!flow.screen && !flow.closing;
+  const toEnd = () => { if (openRef.current) flow.replace("end"); };
   useEffect(() => { setAmount(""); setInUsd(false); setSteps(null); setErr(null); setDone(null); setNeedNear(false); }, [side]);
 
   const coin = coinKey ? xcoin(coinKey) : null;
@@ -296,10 +301,12 @@ export function WalletTrade({ token, ticker, side, coinKey, st, reload }: { toke
         p.set(3, "done");
       }
       setDone(`$${ticker} is in your NEAR account ${short(st.account)}, the same address as your Ethereum wallet. Sell it from here any time.`);
+      toEnd();
       void load();
     } catch (e) {
       p.failNow();
       setErr(cancelled(e) ? "You cancelled in the wallet." : (e as Error).message || "That didn't go through.");
+      toEnd();
       void load();
     } finally {
       setBusy(false);
@@ -327,10 +334,12 @@ export function WalletTrade({ token, ticker, side, coinKey, st, reload }: { toke
       await bridged(fresh.depositAddress, (t) => p.set(2, "now", t));
       p.set(2, "done");
       setDone(`${coin.symbol} is on its way to ${short(s.address)} on ${coin.chain}.`);
+      toEnd();
       void load();
     } catch (e) {
       p.failNow();
       setErr(cancelled(e) ? "You cancelled in the wallet." : (e as Error).message || "That didn't go through.");
+      toEnd();
       void load();
     } finally {
       setBusy(false);
@@ -375,16 +384,6 @@ export function WalletTrade({ token, ticker, side, coinKey, st, reload }: { toke
       {qErr && !steps && <div className="ss-err">{qErr}</div>}
       {tooMuch && <div className="ss-err">More than you hold.</div>}
 
-      {steps && (
-        <ol className="ss-steps">
-          {steps.map((s, i) => (
-            <li key={i} data-state={s.state}>
-              <span className="ss-step-ic" aria-hidden>{s.state === "done" ? <Check size={13} /> : s.state === "now" ? <Loader2 size={13} className="ss-spin" /> : i + 1}</span>
-              <span className="ss-step-tx">{s.text}{s.sub && <span>{s.sub}</span>}</span>
-            </li>
-          ))}
-        </ol>
-      )}
       {done && (
         <div className="ss-quote" style={{ borderColor: "var(--accent)" }}>
           <Check size={15} style={{ display: "inline", verticalAlign: -2, marginRight: 6 }} />{done}
@@ -403,13 +402,56 @@ export function WalletTrade({ token, ticker, side, coinKey, st, reload }: { toke
         type="button"
         className="ss-btn"
         style={{ width: "100%", marginTop: 14 }}
-        disabled={!!token.demo || busy || raw <= 0n || !q || !!tooMuch}
+        disabled={!!token.demo || (!busy && (raw <= 0n || !q || !!tooMuch))}
         title={token.demo ? "This is a sample site with a made-up token" : undefined}
-        onClick={() => void (side === "buy" ? buy() : sell())}
+        onClick={() => (busy ? flow.open("run") : flow.open("review"))}
       >
         {busy ? <Loader2 size={16} className="ss-spin" /> : <ArrowRightLeft size={16} />}
-        {busy ? "Working…" : side === "buy" ? `Buy $${ticker}` : `Sell $${ticker}`}
+        {busy ? "Working… show progress" : side === "buy" ? `Buy $${ticker}` : `Sell $${ticker}`}
       </button>
+      {flow.screen && coin && (
+        <Sheet
+          screen={flow.screen} dir={flow.dir} closing={flow.closing} onClose={flow.close}
+          onBack={flow.screen === "end" && err ? () => { reset(); flow.back(); } : undefined}
+          title={flow.screen === "review" ? (side === "buy" ? `Buy $${ticker}` : `Sell $${ticker}`) : flow.screen === "run" ? (side === "buy" ? `Buying $${ticker}` : `Selling $${ticker}`) : side === "buy" ? `Buy $${ticker}` : `Sell $${ticker}`}
+        >
+          {flow.screen === "review" && (
+            <>
+              <Review rows={[
+                ["You pay", <>{num(fromUnits(raw, unitDec))} {unitSym}{other && !inUsd ? <span className="ss-muted" style={{ fontWeight: 400 }}> · {other}</span> : null}</>],
+                q && ["You get about", <>{num(q.out)} {outSym}</>],
+                side === "buy" && ["From", `${coin.symbol} on ${coin.chain}`],
+                st && ["Your NEAR account", <span className="ss-mono">{short(st.account)}</span>],
+                q?.timeEstimate ? ["Takes about", q.timeEstimate < 90 ? `${Math.max(10, Math.round(q.timeEstimate / 5) * 5)} s` : `${Math.round(q.timeEstimate / 60)} min`] : null,
+                ["Route", q?.route === "direct" ? "NEAR Intents" : "NEAR Intents, then neartrade on NEAR"],
+              ]} />
+              <p className="ss-sh-sub" style={{ margin: "12px 0 0" }}>Every step is signed in your own wallet. Nothing moves until you approve it there.</p>
+              <div className="ss-sh-actions">
+                <button type="button" className="ss-btn" onClick={() => { flow.go("run"); void (side === "buy" ? buy() : sell()); }}>
+                  <ArrowRightLeft size={16} /> {side === "buy" ? "Confirm buy" : "Confirm sell"}
+                </button>
+              </div>
+            </>
+          )}
+          {flow.screen === "run" && (
+            <>
+              <Working icon={<CoinMark symbol={side === "buy" ? coin.symbol : ticker} chain={side === "buy" ? coin.chain : undefined} size={40} />} title={steps?.find((x) => x.state === "now")?.text ?? "Starting"} sub={steps?.find((x) => x.state === "now")?.sub ?? "Keep this page open."} />
+              {steps && <div style={{ marginTop: 14 }}><StepList steps={steps} /></div>}
+            </>
+          )}
+          {flow.screen === "end" && (
+            <>
+              <Result ok={!!done} title={done ? (side === "buy" ? `$${ticker} bought` : "Sold") : "Didn't go through"} sub={done ?? err ?? undefined} />
+              {!done && steps && <div style={{ marginTop: 14 }}><StepList steps={steps} /></div>}
+              {needNear && st && <div className="ss-quote">Your NEAR address (the same as your Ethereum one):<CopyAddr address={st.account} /></div>}
+              <div className="ss-sh-actions">
+                {done ? <button type="button" className="ss-btn" onClick={flow.close}>Done</button> : <button type="button" className="ss-btn" onClick={() => { reset(); flow.back(); }}>Try again</button>}
+                {done && st && <a className="ss-sh-link" href={`https://nearblocks.io/address/${st.account}`} target="_blank" rel="noreferrer">See your NEAR account <ExternalLink size={13} /></a>}
+              </div>
+            </>
+          )}
+        </Sheet>
+      )}
       {!token.demo && <div className="ss-note">Every step is signed in your own wallet. The coins stay in your account.</div>}
     </>
   );
