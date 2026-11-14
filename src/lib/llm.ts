@@ -371,7 +371,8 @@ async function richOpenAiShape(a: RichAsk, url: string, key: string, model: stri
       messages: [{ role: "system", content: a.system }, { role: "user", content: user }],
       ...(opts.reasoning ? { max_completion_tokens: a.maxOut * 2 } : { max_tokens: a.maxOut, temperature: a.temperature ?? 0.8 }),
       // GLM thinks in a separate stream before answering; on an edit that can eat the whole budget and leave no answer.
-      ...(opts.thinkOff ? { chat_template_kwargs: { enable_thinking: false } } : {}),
+      // reasoning_effort "low" skips it. (enable_thinking: false doesn't: GLM then thinks out loud inside the answer.)
+      ...(opts.thinkOff ? { reasoning_effort: "low" } : {}),
     }),
     signal: jobTimeout(a.timeoutMs),
   });

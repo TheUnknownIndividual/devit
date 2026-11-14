@@ -33,7 +33,15 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
     throw new SwapError("The router didn't answer in time.");
   });
   const j = (await r.json().catch(() => ({}))) as T & { error?: string; message?: string };
-  if (!r.ok) throw new SwapError(j.error || j.message || "No route right now.");
+  if (!r.ok) {
+    const said = j.error || j.message || "";
+    // A machine code ("key_required", "rate_limited") is ours to fix, never the buyer's: log it, show plain words.
+    if (!said || /^[a-z0-9_.-]+$/i.test(said.trim())) {
+      console.warn(`[swap] ${new URL(url).host} ${r.status} ${said || "no error text"}${j.message && j.message !== said ? `: ${j.message.slice(0, 160)}` : ""}`);
+      throw new SwapError(r.status === 401 || r.status === 403 || /key/i.test(said) ? "Buying here isn't switched on yet. Try again soon." : "No route right now.");
+    }
+    throw new SwapError(said);
+  }
   return j;
 }
 

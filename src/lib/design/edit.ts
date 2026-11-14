@@ -30,6 +30,9 @@ import { agentFocus, agentStage, jobCancelled } from "../agent-jobs";
 //   breaking mid-word, panels misaligned…), one fix pass runs with screenshots before the person sees it.
 
 const WHOLE = /\b(whole|entire|every|all|site|page|overall|everything|darker|lighter|colou?rs?|palette|fonts?|type(face)?|style|vibe|look|feel|theme|redesign|restyle|animation|motion)\b/i;
+/** Several asks in one message (a new line, a second sentence, "and also"): the fast lane would do the first and drop the rest. */
+const SEVERAL = /\n|[.!?]\s+\S.{8,}|\b(also|plus|as well)\b|,\s*and\b|\band (make|put|change|fix|move|the)\b/i;
+
 /** Requests that are too big for the fast lane: structure, several places, the overall look, new pictures. */
 const BIG = /\b(add|new|another|insert|remove|delete|drop|move|reorder|rearrange|swap|redesign|rebuild|redo|restyle|rewrite|layout|section|animat\w*|motion|gallery|carousel|grid|columns?|whole|entire|every|all|site|page|overall|everything|darker|lighter|palette|fonts?|typeface|vibe|look|feel|theme|style)\b/i;
 
@@ -63,6 +66,8 @@ Read the request for the smallest thing it names and why. "Make connect wallet a
 
 ${WIDGET_BEHAVIOUR}
 
+When the request asks about an error or message shown inside a widget (the buy box, wallet, chart…), never guess its cause: say in the summary that it comes from devit's widget, not the page, so it's devit's to fix, and change nothing for that part.
+
 When the request is already true, or only devit's widget code could change it, change nothing and answer <edit><summary>what the widget already does, or that this lives inside the widget and can't be changed from the site, in plain words</summary><nochange/></edit>. Never imitate a widget's behaviour with your own HTML/CSS (no :target or checkbox modals, no hiding a widget behind your own button, no copies of its parts).
 
 How to change things, smallest first:
@@ -89,6 +94,9 @@ interface AttemptOpts {
   /** Only these sections are shown (a retry). */
   only?: Set<string>;
 }
+
+/** "No change" counts only with a reason: a bare <nochange/> with "..." is a model copying the template, not an answer. */
+const reasoned = (t: string) => (/<summary>([\s\S]*?)<\/summary>/i.exec(t)?.[1] ?? "").split(/\s+/).filter((w) => /\w/.test(w)).length >= 4;
 
 const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const trimNl = (s: string) => s.replace(/^\r?\n/, "").replace(/\r?\n[ \t]*$/, "");
@@ -170,7 +178,8 @@ ${o.review ? o.review.request : ""}${requestsText(comments)}${o.note ? `\n\n${o.
   };
   const res = await askRich(
     { system: system(spec, project.knowledge, o.quick), user, images: pics.map((a) => a.url), files: o.review?.shots, onText, ...lane },
-    (t) => /<\/edit>/i.test(t) || /<\/patch>/i.test(t) || (/<section\b/i.test(t) && /<\/section>/i.test(t)) || /<css\b[\s\S]*<\/css>/i.test(t),
+    // A usable answer has a change in it, or a "no change" with a reason; anything else goes to the next model.
+    (t) => /<\/patch>/i.test(t) || (/<section\b/i.test(t) && /<\/section>/i.test(t)) || /<css\b[\s\S]*<\/css>/i.test(t) || (/<nochange\s*\/?>/i.test(t) && reasoned(t)),
   );
   if (!res) return null;
   const text = res.text;
@@ -249,7 +258,7 @@ ${o.review ? o.review.request : ""}${requestsText(comments)}${o.note ? `\n\n${o.
   if (failed.length) console.warn(`[edit] ${failed.length} patch(es) didn't match (${[...new Set(failed.map((f) => f.target))].join(", ")}) via ${res.via}`);
   if (process.env.DEVIT_EDIT_DEBUG) console.log(`[edit] ${o.quick ? "quick" : "full"} reply:\n${text}`);
   const summary = /<summary>([\s\S]*?)<\/summary>/i.exec(text)?.[1]?.trim() || "Done.";
-  if (/<nochange\s*\/?>/i.test(text)) return { spec, message: summary, via: res.via, failed: [], changed: 0, none: true };
+  if (/<nochange\s*\/?>/i.test(text) && !changed && reasoned(text)) return { spec, message: summary, via: res.via, failed: [], changed: 0, none: true };
   return { spec: next, message: summary, via: res.via, failed, changed };
 }
 
@@ -266,7 +275,20 @@ async function scopeOf(spec: SiteSpec, text: string): Promise<Set<string> | null
   const html = spec.blocks.filter((b) => b.type === "html");
   if (html.length < 3) return null;
   const words = (h: string) => h.replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180);
-  const list = html.map((b, i) => `${b.id} (${i === 0 ? "first, top of the page" : i === html.length - 1 ? "last" : `#${i + 1}`}) "${String(b.props.label ?? "Section")}": ${words(String(b.props.html))}`).join("\n");
+  // Pictures are how people name places ("the banner", "the pfp"), and a section's text doesn't mention them.
+  const pics = (h: string) => {
+    const out: string[] = [];
+    for (const m of h.matchAll(/<img\b[^>]*>/gi)) {
+      const tag = m[0].replace(/&amp;/g, "&");
+      const num = (k: string) => Number(new RegExp(`\\b${k}\\s*=\\s*["']?(\\d+)`, "i").exec(tag)?.[1] ?? 0);
+      const w = num("width"), hh = num("height");
+      const alt = /\balt\s*=\s*"([^"]*)"/i.exec(tag)?.[1]?.slice(0, 40);
+      const shape = w && hh ? (w / hh >= 2 ? "wide banner image" : w / hh <= 0.8 ? "tall image" : "square image") : "image";
+      out.push(`${shape}${alt ? ` "${alt}"` : ""}${/logo/i.test(tag) ? " (logo)" : ""}`);
+    }
+    return out.length ? ` [pictures: ${out.slice(0, 4).join("; ")}]` : "";
+  };
+  const list = html.map((b, i) => `${b.id} (${i === 0 ? "first, top of the page" : i === html.length - 1 ? "last" : `#${i + 1}`}) "${String(b.props.label ?? "Section")}"${pics(String(b.props.html))}: ${words(String(b.props.html))}`).join("\n");
   const ids = new Set(html.map((b) => b.id));
   const ask = askJson(
     "You route an edit request on a one-page website to the sections it is about. The landing page / top / header / hero / logo / pfp area means the first section unless another section clearly holds it.",
@@ -285,7 +307,7 @@ async function scopeOf(spec: SiteSpec, text: string): Promise<Set<string> | null
 /** Whether a set of comments is small enough for the fast lane. */
 export function isQuick(comments: PendingComment[], wholePage: boolean, hasPictures: boolean): boolean {
   if (hasPictures || !comments.length || comments.length > 3) return false;
-  return comments.every((c) => !c.context && c.text.length <= 200 && !BIG.test(c.text) && !(wholePage && WHOLE.test(c.text)));
+  return comments.every((c) => !c.context && c.text.length <= 200 && !BIG.test(c.text) && !SEVERAL.test(c.text.trim()) && !(wholePage && WHOLE.test(c.text)));
 }
 
 /**
